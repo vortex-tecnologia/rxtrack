@@ -1,0 +1,12 @@
+# dados sensíveis
+.env
+mysql/
+*.log
+
+# arquivos temporários
+*.tmp
+*.swp
+
+# proxy configs
+proxy/conf/*
+!proxy/conf/quicktrack.conf
