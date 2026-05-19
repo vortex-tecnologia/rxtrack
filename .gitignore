@@ -1,12 +1,23 @@
-# dados sensíveis
+# ambiente
 .env
-mysql/
+.env.*
+
+# python
+__pycache__/
+*.pyc
+
+# logs
 *.log
 
-# arquivos temporários
-*.tmp
-*.swp
+# banco
+*.db
 
-# proxy configs
-proxy/conf/*
-!proxy/conf/quicktrack.conf
+# docker
+*.pid
+
+# arquivos do sistema
+.DS_Store
+Thumbs.db
+
+# media uploads
+/media
