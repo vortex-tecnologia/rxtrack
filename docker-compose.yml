@@ -1,36 +1,42 @@
-version: '3.8'
-
 services:
 
   db:
     image: mysql:8.0
-    container_name: db-homolog-1
     restart: always
+
     environment:
       MYSQL_ROOT_PASSWORD: root123
       MYSQL_DATABASE: quicktrack_homolog
       MYSQL_USER: quicktrack
       MYSQL_PASSWORD: quicktrack123
+
     volumes:
-      - db_data:/var/lib/mysql
+      - db_data_homolog:/var/lib/mysql
+
     ports:
       - "127.0.0.1:3307:3306"
+
     networks:
       - qt-network
 
   backend:
     build: ./backend
-    container_name: homolog-backend-1
     restart: always
+
     env_file:
       - .env
+
     volumes:
       - ./media:/media
+
     depends_on:
       - db
-    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+
+    command: gunicorn core.wsgi:application --bind 0.0.0.0:8000
+
     ports:
       - "8001:8000"
+
     networks:
       - qt-network
 
@@ -38,4 +44,4 @@ networks:
   qt-network:
 
 volumes:
-  db_data:
+  db_data_homolog:
