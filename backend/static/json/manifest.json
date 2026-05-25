@@ -1,0 +1,21 @@
+{
+  "name": "Fluxo Logística",
+  "short_name": "Fluxo",
+  "start_url": "/app/",
+  "scope": "/app/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0A1AFF",
+  "icons": [
+    {
+      "src": "/static/images/icon-160x160.png",
+      "sizes": "160x160",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/images/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

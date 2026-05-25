@@ -1,0 +1,8 @@
+# Forçar LF para arquivos críticos do Docker/Linux
+*.sh text eol=lf
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+requirements.txt text eol=lf
+manage.py text eol=lf
+*.py text eol=lf
+.env text eol=lf

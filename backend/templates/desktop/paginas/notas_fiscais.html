@@ -1,0 +1,629 @@
+{% extends "desktop/base.html" %}
+{% load static %}
+
+{% block title %}{{ titulo }}{% endblock %}
+{% block usuario %}{{ usuario_nome }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold">Monitoramento de NF-e</h3>
+        <div class="d-flex gap-2">
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalImportarNfe">
+    <i class="bi bi-plus-circle"></i> Importar NF-e
+</button>
+        </div>
+    </div>
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="GET" action="." class="row g-3">
+            <div class="col-md-2">
+                <label class="small fw-bold text-muted">Filial</label>
+                <select name="filial" class="form-select">
+                    <option value="todas">Todas as Filiais</option>
+                    {% for f in filiais %}
+                    <option value="{{ f.id }}" {% if request.GET.filial == f.id|stringformat:"i" %}selected{% endif %}>
+                        {{ f.nome }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <label class="small fw-bold text-muted">NF-e ou Chave</label>
+                <input type="text" name="q" class="form-control form-control-sm" placeholder="Ex: 5564" value="{{ request.GET.q }}">
+            </div>
+            
+            <div class="col-md-2">
+                <label class="small fw-bold text-muted">Motorista</label>
+                <input type="text" name="motorista" class="form-control form-control-sm" placeholder="Nome..." value="{{ request.GET.motorista }}">
+            </div>
+
+            <div class="col-md-2">
+                <label class="small fw-bold text-muted">Nº Manifesto</label>
+                <input type="text" name="manifesto" class="form-control form-control-sm" placeholder="Ex: 988" value="{{ request.GET.manifesto }}">
+            </div>
+
+            <div class="col-md-2">
+                <label class="small fw-bold text-muted">Status Integração</label>
+                <select name="integrado" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    <option value="sim" {% if request.GET.integrado == 'sim' %}selected{% endif %}>Integrado</option>
+                    <option value="nao" {% if request.GET.integrado == 'nao' %}selected{% endif %}>Pendente/Erro</option>
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <label class="small fw-bold text-muted">Data</label>
+                <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ request.GET.data_inicio }}">
+            </div>
+
+            <div class="col-md-1 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-filter"></i></button>
+            </div>
+        </form>
+    </div>
+</div>
+    <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>NF-e / Chave</th>
+                        <th>Manifesto / Motorista</th>
+                        <th>Status Atual</th>
+                        <th>Canhoto</th>
+                        <th>Leitura</th>
+                        <th>Integração TMS</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for nota in notas %}
+                    {% with ultima_baixa=nota.ultima_baixa %}
+                    <tr>
+                        <td>
+                            <span class="fw-bold text-primary">
+                                {% if nota.tipo_operacao == 'COLETA' %}
+                                    <i class="bi bi-box-seam me-1"></i>{{ nota.numero_coleta|default:nota.numero_nota }}
+                                {% else %}
+                                    {{ nota.numero_nota }}
+                                {% endif %}
+                            </span>
+                            <br><small class="text-muted" style="font-size: 0.7rem;">{{ nota.chave_acesso|default:nota.tipo_operacao|truncatechars:20 }}</small>
+                        </td>
+                        <td>
+                            <span class="small fw-bold">#{{ nota.manifesto.numero_manifesto }}</span>
+                            <br><small class="text-muted">{{ nota.manifesto.motorista.nome_completo|default:"Não atribuído" }}</small>
+                        </td>
+                        <td>
+                            {% if nota.status == 'BAIXADA' %}
+                                {% if nota.tipo_operacao == 'COLETA' %}
+                                    <span class="badge bg-success">Coletado</span>
+                                {% else %}
+                                    <span class="badge bg-success">Entregue</span>
+                                {% endif %}
+                            {% elif nota.status == 'OCORRENCIA' %}
+                                <span class="badge bg-danger">{{ ultima_baixa.ocorrencia.descricao|default:"Ocorrência" }}</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">Pendente</span>
+                            {% endif %}
+                        </td>
+                        <td class="small">
+                            {% if nota.status != 'PENDENTE' %}
+                                {% if ultima_baixa.ia_yolo_status %}
+                                    <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>OK</span>
+                                {% else %}
+                                    <span class="text-danger"><i class="bi bi-x-circle-fill me-1"></i>Falhou</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="small">
+                            {% if nota.status != 'PENDENTE' %}
+                                {% if ultima_baixa.ia_ocr_status %}
+                                    <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>OK</span>
+                                {% else %}
+                                    <span class="text-danger"><i class="bi bi-x-circle-fill me-1"></i>Ruim</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if ultima_baixa.integrado_tms %}
+                                <span class="text-success small"><i class="bi bi-check-circle-fill me-1"></i>Integrado</span>
+                            {% elif ultima_baixa.log_erro_tms %}
+                                <span class="text-danger small" title="{{ ultima_baixa.log_erro_tms }}">
+                                    <i class="bi bi-x-circle-fill me-1"></i>Erro
+                                </span>
+                            {% else %}
+                                <span class="text-muted small"><i class="bi bi-clock me-1"></i>Aguardando</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-secondary" onclick="abrirDetalhes('{{ nota.id }}')" title="Ver Foto/Histórico">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                
+                                {% if nota.status == 'PENDENTE' %}
+                                <button class="btn btn-sm btn-warning" onclick="abrirModalBaixa('{{ nota.id }}', '{{ nota.numero_nota }}')" title="Registrar Baixa Manual">
+                                    <i class="bi bi-journal-plus"></i>
+                                </button>
+                                {% endif %}
+                                
+                                {% with baixa=nota.ultima_baixa %}
+        
+        {# CASO 1: Já está integrado com sucesso - Mostra Ícone Positivo #}
+        {% if baixa.integrado_tms %}
+            <span class="text-success btn btn-sm btn-outline-secondary fw-bold" title="Integrado com Sucesso">
+                <i class="bi bi-check-circle-fill fs-5"></i>
+            </span>
+
+        {# CASO 2: Nota ainda está Pendente - Botão Desabilitado #}
+        {% elif nota.status == 'PENDENTE' %}
+            <button class="btn btn-sm btn-outline-secondary opacity-50" 
+                    style="cursor: not-allowed;" 
+                    title="Aguardando motorista realizar a baixa" 
+                    disabled>
+                <i class="bi bi-cloud-arrow-up"></i>
+            </button>
+
+        {# CASO 3: Já foi baixada (ou ocorrência) mas não integrou - Botão Clicável #}
+        {% else %}
+            <button class="btn btn-sm btn-primary shadow-sm" 
+                    onclick="sincronizarTMS('{{ nota.id }}')" 
+                    title="Enviar para o TMS agora">
+                <i class="bi bi-cloud-arrow-up-fill"></i> Reenviar
+            </button>
+        {% endif %}
+
+    {% endwith %}
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endwith %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Paginação -->
+        {% if is_paginated %}
+        <div class="card-footer bg-white border-0 py-3">
+            <nav aria-label="Navegação de notas">
+                <ul class="pagination pagination-sm justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page=1{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" title="Primeira Página">
+                                <i class="bi bi-chevron-double-left"></i>
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                                Anterior
+                            </a>
+                        </li>
+                    {% endif %}
+
+                    <li class="page-item disabled">
+                        <span class="page-link text-dark fw-bold">
+                            Página {{ page_obj.number }} de {{ paginator.num_pages }}
+                        </span>
+                    </li>
+
+                    {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                                Próxima
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ paginator.num_pages }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" title="Última Página">
+                                <i class="bi bi-chevron-double-right"></i>
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+                <div class="text-center mt-2 small text-muted">
+                    Total de {{ paginator.count }} notas encontradas
+                </div>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+</div>
+
+<!-- Modal Detalhes Nota -->
+<div class="modal fade " id="modalNota" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-light border-bottom-0">
+                <h5 class="modal-title fw-bold text-dark">
+                    <i class="bi bi-search me-2 text-primary"></i>Detalhes da Entrega / Rastreio
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0" id="conteudoModal"></div>
+            <div class="modal-footer border-top-0">
+                <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Registrar Baixa Manual -->
+<div class="modal fade" id="modalRegistrarBaixa" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-journal-plus me-2"></i>Registrar Baixa Manual
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="formBaixaManual">
+                    <input type="hidden" id="baixaNotaId">
+                    
+                    <div class="mb-3 bg-light p-2 rounded border text-center">
+                        <small class="text-muted d-block uppercase fw-bold">NF-e Selecionada</small>
+                        <span class="fs-5 fw-bold text-primary" id="baixaNumeroNfe"></span>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">Data e Hora da Entrega</label>
+                            <input type="datetime-local" id="baixaData" class="form-control" required>
+                            <div class="form-text mt-0" style="font-size: 0.75rem;">Informe a data real em que o motorista realizou a entrega.</div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Tipo de Ocorrência</label>
+                        <select id="baixaOcorrencia" class="form-select" required>
+                            <option value="">-- Selecione --</option>
+                            {% for oc in ocorrencias %}
+                                <option value="{{ oc.codigo_tms }}">{{ oc.descricao }} ({{ oc.codigo_tms }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Nome do Recebedor (Opcional)</label>
+                        <input type="text" id="baixaRecebedor" class="form-control" placeholder="Quem recebeu a mercadoria?">
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label small fw-bold">Comprovante / Foto</label>
+                        <input type="file" id="baixaArquivo" class="form-control" accept="image/*" capture="environment">
+                        <div class="form-text" style="font-size: 0.75rem;">Anexe a foto do canhoto assinado.</div>
+                    </div>
+
+                    <div id="baixaFeedback" class="alert alert-danger d-none py-2 small"></div>
+
+                    <button type="button" class="btn btn-primary w-100 py-2 fw-bold" onclick="enviarBaixaManual()">
+                        <i class="bi bi-check-circle me-2"></i>CONFIRMAR REGISTRO
+                    </button>
+                </form>
+
+                <div id="baixaLoading" class="text-center py-4 d-none">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 mb-0 fw-bold">Processando registro...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div class="modal fade" id="modalImportarNfe" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-cloud-download me-2"></i>Importar NF-e</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" id="btnCloseModal"></button>
+            </div>
+            
+            <div class="modal-body p-4" id="corpoModalImportar">
+                <div id="step-busca">
+                    <p class="text-muted small mb-4">Informe os dados abaixo para localizar a nota no TMS ESL.</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Número da NF-e</label>
+                        <input type="text" id="importNumero" class="form-control form-control-lg" placeholder="Apenas números">
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">CNPJ do Emissor</label>
+                        <input type="text" id="importCnpj" class="form-control form-control-lg" placeholder="00.000.000/0000-00">
+                    </div>
+                    <button class="btn btn-primary w-100 py-3 fw-bold" onclick="processarBuscaNfe()">
+                        <i class="bi bi-search me-2"></i>LOCALIZAR NOTA
+                    </button>
+                </div>
+
+                <div id="step-loading" style="display: none;" class="text-center py-5">
+                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status"></div>
+                    <h5 class="mt-4 fw-bold text-primary" id="loading-text">Consultando TMS...</h5>
+                    <p class="text-muted">Isso levará apenas alguns segundos.</p>
+                </div>
+
+                <div id="step-resultado" style="display: none;">
+                    <div class="alert alert-success border-0 mb-4">
+                        <h6 class="fw-bold mb-1"><i class="bi bi-check-circle-fill me-2"></i>Nota Localizada!</h6>
+                        <small>Confira os dados antes de salvar no manifesto.</small>
+                    </div>
+                    
+                    <div class="bg-light p-3 rounded mb-4 border">
+                        <div class="row g-2">
+                            <div class="col-6"><small class="text-muted d-block">NF-E</small><strong id="resNfe"></strong></div>
+                            <div class="col-6"><small class="text-muted d-block">EMISSOR</small><strong id="resEmissor"></strong></div>
+                            <div class="col-12 mt-2"><small class="text-muted d-block">DESTINATÁRIO</small><strong id="resDest"></strong></div>
+                            <div class="col-12 mt-2"><small class="text-muted d-block">ENDEREÇO</small><strong id="resEnd"></strong></div>
+                            <div class="col-12 mt-2"><small class="text-muted d-block">CHAVE</small><code class="small text-break" id="resChave"></code></div>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+    <label class="form-label fw-bold text-primary">Vincular ao Manifesto</label>
+    
+    <div class="input-group input-group-sm mb-2">
+        <span class="input-group-text bg-white border-end-0"><i class="bi bi-filter"></i></span>
+        <input type="text" id="filtroManifesto" class="form-control border-start-0" 
+               placeholder="Filtrar por número ou motorista..." onkeyup="filtrarManifestos()">
+    </div>
+
+    <select class="form-select form-select-lg border-primary" id="selectManifesto" size="5">
+        <option value="">-- Carregando manifestos... --</option>
+    </select>
+    <div class="form-text">Selecione o manifesto na lista acima para habilitar a confirmação.</div>
+</div>
+
+                    <button class="btn btn-success w-100 py-3 fw-bold" onclick="processarInclusaoFinal()">
+                        <i class="bi bi-box-arrow-in-down me-2"></i>CONFIRMAR INCLUSÃO
+                    </button>
+                    <button class="btn btn-link w-100 mt-2 text-muted btn-sm" onclick="voltarParaBusca()">Fazer nova busca</button>
+                </div>
+
+                <div id="step-sucesso" style="display: none;" class="text-center py-4">
+                    <div class="mb-3">
+                        <i class="bi bi-check-circle-fill text-success" style="font-size: 5rem;"></i>
+                    </div>
+                    <h4 class="fw-bold">Tudo Certo!</h4>
+                    <p class="text-muted">A NF-e foi vinculada ao manifesto com sucesso.</p>
+                    <button class="btn btn-dark px-5" data-bs-dismiss="modal">FECHAR</button>
+                </div>
+                <div class="modal-body p-4" id="corpoModalImportar">
+    <div id="modal-feedback" class="mb-3" style="display: none;">
+        <div class="alert alert-danger d-flex align-items-center border-0 shadow-sm py-2">
+            <i class="bi bi-exclamation-circle-fill me-2"></i>
+            <div id="feedback-text" class="small fw-bold"></div>
+        </div>
+    </div>
+
+    </div>
+{% csrf_token %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalSincronizar" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-cloud-upload me-2"></i>Integração TMS</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" id="btnFecharSincronismo"></button>
+            </div>
+            <div class="modal-body p-4 text-center" id="corpoSincronismo">
+                <div id="sync-confirmacao">
+                    <i class="bi bi-question-circle text-warning" style="font-size: 3rem;"></i>
+                    <h5 class="mt-3 fw-bold">Confirmar Reenvio?</h5>
+                    <p class="text-muted">A baixa será transmitida novamente para o sistema TMS ESL.</p>
+                    <button class="btn btn-primary w-100 py-2 fw-bold" id="btnIniciarSync">SIM, ENVIAR AGORA</button>
+                </div>
+
+                <div id="sync-loading" style="display: none;">
+                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status"></div>
+                    <h5 class="mt-4 fw-bold text-primary">Sincronizando...</h5>
+                    <p class="text-muted">Aguardando resposta do servidor TMS.</p>
+                </div>
+
+                <div id="sync-resultado" style="display: none;">
+                    <div id="sync-icon"></div>
+                    <h5 class="mt-3 fw-bold" id="sync-titulo"></h5>
+                    <p class="text-muted" id="sync-mensagem"></p>
+                    <button class="btn btn-dark px-4" data-bs-dismiss="modal">FECHAR</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function sincronizarTMS(notaId) {
+    const modalSync = new bootstrap.Modal(document.getElementById('modalSincronizar'));
+    const stepConf = document.getElementById('sync-confirmacao');
+    const stepLoad = document.getElementById('sync-loading');
+    const stepRes = document.getElementById('sync-resultado');
+    const btnIniciar = document.getElementById('btnIniciarSync');
+
+    // Reseta o estado do modal antes de abrir
+    stepConf.style.display = 'block';
+    stepLoad.style.display = 'none';
+    stepRes.style.display = 'none';
+
+    modalSync.show();
+
+    // Ação do botão "SIM"
+    btnIniciar.onclick = function() {
+        stepConf.style.display = 'none';
+        stepLoad.style.display = 'block';
+
+        fetch(`/api/manifesto/sincronizar-nota/${notaId}/`, {
+            method: 'POST',
+            headers: { 
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            stepLoad.style.display = 'none';
+            stepRes.style.display = 'block';
+
+            const iconDiv = document.getElementById('sync-icon');
+            const titulo = document.getElementById('sync-titulo');
+            const mensagem = document.getElementById('sync-mensagem');
+
+            if (data.sucesso) {
+                iconDiv.innerHTML = '<i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>';
+                titulo.innerText = "Sucesso!";
+                titulo.className = "mt-3 fw-bold text-success";
+                mensagem.innerText = data.mensagem || "Baixa integrada com sucesso.";
+                
+                // Recarrega a página após 2 segundos para atualizar os badges na tabela
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                iconDiv.innerHTML = '<i class="bi bi-x-circle-fill text-danger" style="font-size: 3rem;"></i>';
+                titulo.innerText = "Falha na Integração";
+                titulo.className = "mt-3 fw-bold text-danger";
+                mensagem.innerText = data.mensagem || "Ocorreu um erro ao comunicar com o TMS.";
+            }
+        })
+        .catch(error => {
+            stepLoad.style.display = 'none';
+            stepRes.style.display = 'block';
+            document.getElementById('sync-icon').innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning" style="font-size: 3rem;"></i>';
+            document.getElementById('sync-titulo').innerText = "Erro de Conexão";
+            document.getElementById('sync-mensagem').innerText = "Não foi possível contatar o servidor local.";
+        });
+    };
+}
+
+/**
+ * Abre o modal de rastreio e carrega o histórico da nota pela chave
+ * @param {number} notaId - O ID da nota específica clicada
+ */
+function abrirDetalhes(notaId) {
+    const modalElement = document.getElementById('modalNota');
+    const container = document.getElementById('conteudoModal');
+    
+    // Inicia o Modal do Bootstrap
+    const bsModal = new bootstrap.Modal(modalElement);
+    
+    // Mostra estado de carregamento profissional
+    container.innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+            <p class="mt-3 text-muted fw-bold">Rastreando movimentações da nota...</p>
+        </div>
+    `;
+    bsModal.show();
+
+    // Busca o fragmento HTML renderizado pela View detalhes_nota_fiscal_view
+    fetch(`/api/manifesto/detalhes-nota/${notaId}/`)
+    .then(response => {
+        if (!response.ok) throw new Error('Falha ao obter histórico');
+        return response.text();
+    })
+    .then(html => {
+        // Injeta o HTML retornado no corpo do modal
+        container.innerHTML = html;
+    })
+    .catch(error => {
+        container.innerHTML = `
+            <div class="p-5 text-center text-danger">
+                <i class="bi bi-exclamation-triangle fs-1 d-block mb-3"></i>
+                <h6 class="fw-bold">Erro ao carregar rastreio</h6>
+                <p class="small text-muted">${error.message}</p>
+                <button class="btn btn-outline-danger btn-sm mt-2" onclick="abrirDetalhes(${notaId})">Tentar Novamente</button>
+            </div>
+        `;
+    });
+}
+
+/**
+ * Funções para Registro de Baixa Manual
+ */
+function abrirModalBaixa(notaId, numeroNfe) {
+    document.getElementById('baixaNotaId').value = notaId;
+    document.getElementById('baixaNumeroNfe').innerText = `NF: ${numeroNfe}`;
+    
+    // Define a data/hora atual no campo como padrão
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    document.getElementById('baixaData').value = now.toISOString().slice(0, 16);
+    
+    // Reseta form
+    document.getElementById('formBaixaManual').classList.remove('d-none');
+    document.getElementById('baixaLoading').classList.add('d-none');
+    document.getElementById('baixaFeedback').classList.add('d-none');
+    
+    const modal = new bootstrap.Modal(document.getElementById('modalRegistrarBaixa'));
+    modal.show();
+}
+
+function enviarBaixaManual() {
+    const notaId = document.getElementById('baixaNotaId').value;
+    const dataOcorrencia = document.getElementById('baixaData').value;
+    const ocorrenciaCodigo = document.getElementById('baixaOcorrencia').value;
+    const recebedor = document.getElementById('baixaRecebedor').value;
+    const foto = document.getElementById('baixaArquivo').files[0];
+    const feedback = document.getElementById('baixaFeedback');
+
+    if (!dataOcorrencia || !ocorrenciaCodigo) {
+        feedback.innerText = "Data e Tipo de Ocorrência são obrigatórios.";
+        feedback.classList.remove('d-none');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('nota_id', notaId); // Mandamos o ID da nota
+    formData.append('data_baixa', dataOcorrencia);
+    formData.append('ocorrencia_codigo', ocorrenciaCodigo);
+    formData.append('recebedor', recebedor);
+    if (foto) formData.append('foto', foto);
+
+    // O RegistrarBaixaView do PWA usa 'chave_acesso', mas vamos adaptar para aceitar 'nota_id' se preferir, 
+    // ou apenas buscar a chave antes de mandar. 
+    // Como a RegistrarBaixaView (manifesto/rotas/baixa.py) busca por filtros, 
+    // vou garantir que ela suporte o que mandarmos.
+
+    document.getElementById('formBaixaManual').classList.add('d-none');
+    document.getElementById('baixaLoading').classList.remove('d-none');
+
+    fetch('/api/manifesto/registrar-baixa/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'sucesso') {
+            location.reload();
+        } else {
+            document.getElementById('formBaixaManual').classList.remove('d-none');
+            document.getElementById('baixaLoading').classList.add('d-none');
+            feedback.innerText = data.erro || "Erro ao registrar.";
+            feedback.classList.remove('d-none');
+        }
+    })
+    .catch(error => {
+        document.getElementById('formBaixaManual').classList.remove('d-none');
+        document.getElementById('baixaLoading').classList.add('d-none');
+        feedback.innerText = "Erro de conexão.";
+        feedback.classList.remove('d-none');
+    });
+}
+</script>
+
+<script src="{% static 'desktop/js/nota_fiscal.js' %}"></script>
+
+{% endblock %}

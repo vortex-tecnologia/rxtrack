@@ -1,0 +1,106 @@
+{% extends 'desktop/base.html' %}
+
+{% block title %}Central de Ajuda - Tickets{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h3 class="fw-bold text-dark mb-1">Meus Chamados</h3>
+        <p class="text-muted">Gerencie seus pedidos de suporte e solicitações técnicas.</p>
+    </div>
+    <div class="col-md-4 text-md-end">
+        <button class="btn btn-primary d-flex align-items-center gap-2 ms-auto px-4 shadow-sm" style="border-radius: 10px;">
+            <i class="bi bi-plus-lg"></i> Abrir Novo Ticket
+        </button>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3 border-start border-primary border-4">
+            <small class="text-muted fw-bold">TOTAL DE TICKETS</small>
+            <h2 class="mb-0 fw-bold">12</h2>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3 border-start border-warning border-4">
+            <small class="text-muted fw-bold">EM ANÁLISE</small>
+            <h2 class="mb-0 fw-bold">3</h2>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3 border-start border-success border-4">
+            <small class="text-muted fw-bold">RESOLVIDOS</small>
+            <h2 class="mb-0 fw-bold">9</h2>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm overflow-hidden" style="border-radius: 15px;">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="bg-light text-muted">
+                <tr>
+                    <th class="ps-4">ID</th>
+                    <th>ASSUNTO</th>
+                    <th>DATA DE ABERTURA</th>
+                    <th>STATUS</th>
+                    <th>PRIORIDADE</th>
+                    <th class="text-end pe-4">AÇÕES</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="ps-4 fw-bold text-primary">#TK-8025</td>
+                    <td>
+                        <div class="fw-bold text-dark">Erro na sincronização de NFe</div>
+                        <small class="text-muted">A nota nº 123456 não está subindo para o TMS...</small>
+                    </td>
+                    <td>10 Mar 2026, 09:24</td>
+                    <td><span class="badge rounded-pill bg-warning text-dark px-3 mt-1">EM ANÁLISE</span></td>
+                    <td><span class="text-danger fw-bold"><i class="bi bi-fire"></i> URGENTE</span></td>
+                    <td class="text-end pe-4">
+                        <button class="btn btn-sm btn-light border"><i class="bi bi-eye"></i></button>
+                        <button class="btn btn-sm btn-light border"><i class="bi bi-chat-dots"></i></button>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="ps-4 fw-bold text-primary">#TK-7954</td>
+                    <td>
+                        <div class="fw-bold text-dark">Dúvida sobre permissões de motorista</div>
+                        <small class="text-muted">Como altero a filial de um motorista já cadastrado?</small>
+                    </td>
+                    <td>08 Mar 2026, 14:12</td>
+                    <td><span class="badge rounded-pill bg-success px-3 mt-1">RESOLVIDO</span></td>
+                    <td><span class="text-muted">MÉDIA</span></td>
+                    <td class="text-end pe-4">
+                        <button class="btn btn-sm btn-light border"><i class="bi bi-eye"></i></button>
+                        <button class="btn btn-sm btn-light border"><i class="bi bi-chat-dots"></i></button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="mt-4 p-4 card border-0 bg-light text-center" style="border-radius: 15px; border: 2px dashed #dee2e6 !important;">
+    <div class="mb-2"><i class="bi bi-info-circle fs-3 text-muted"></i></div>
+    <h6 class="fw-bold text-muted">Precisa de resposta imediata?</h6>
+    <p class="small text-muted mb-3">Nossos tickets são respondidos em até 24 horas. Para urgências, utilize nosso Chat Online.</p>
+    <a href="{% url 'operacional:suporte' %}" class="btn btn-outline-primary btn-sm rounded-pill px-4">Ir para Chat</a>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.addEventListener('load', () => {
+        Swal.fire({
+            title: 'Central de Ajuda',
+            text: 'O sistema de tickets está em fase de testes internos. Utilize os canais oficiais de comunicação para suporte imediato.',
+            icon: 'warning',
+            confirmButtonText: 'Entendido',
+            confirmButtonColor: '#0d6efd'
+        });
+    });
+</script>
+{% endblock %}

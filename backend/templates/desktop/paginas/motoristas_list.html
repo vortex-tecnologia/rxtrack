@@ -1,0 +1,362 @@
+{% extends 'desktop/base.html' %}
+{% load static %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block usuario %}{{ usuario_nome }}{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12 d-flex justify-content-between align-items-center">
+            <div>
+                <h3 class="fw-bold mb-0">
+                    {{ titulo }}
+                    <button class="btn btn-link p-0 ms-2 text-primary border-0" 
+                            type="button" 
+                            data-bs-toggle="collapse" 
+                            data-bs-target="#explicaPerformance" 
+                            style="vertical-align: middle;">
+                        <i class="bi bi-question-circle-fill" style="font-size: 1.3rem;"></i>
+                    </button>
+                </h3>
+                <p class="text-muted mb-0">Análise de reputação e eficiência operacional</p>
+            </div>
+            <button class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#modalCadastro">
+                <i class="bi bi-person-plus me-1"></i> Novo Motorista
+            </button>
+        </div>
+
+        <div class="col-12 mt-3">
+            <div class="collapse" id="explicaPerformance">
+                <div class="card card-body border-0 shadow-sm mb-4 position-relative" style="border-left: 5px solid #0d6efd !important; background-color: #f8faff;">
+                    <button type="button" class="btn-close position-absolute" style="right: 15px; top: 15px;" data-bs-toggle="collapse" data-bs-target="#explicaPerformance" aria-label="Close"></button>
+                    
+                    <h6 class="fw-bold text-primary"><i class="bi bi-bar-chart-line me-2"></i>Como o Score é calculado?</h6>
+                    <hr class="my-2">
+                    <p class="small mb-2 text-dark">
+                        O <strong>Score de Reputação</strong> é uma métrica de eficiência baseada nos manifestos criados no período selecionado.
+                    </p>
+                    <ul class="small text-muted mb-3">
+                        <li><strong>Sucessos:</strong> Notas entregues e baixadas corretamente.</li>
+                        <li><strong>Falta de Tempo (20):</strong> Penaliza o score, pois indica que a rota planejada não foi concluída.</li>
+                        <li><strong>Notas Pendentes:</strong> Notas sem interação também reduzem a performance (falha de compromisso).</li>
+                    </ul>
+                    <div class="bg-white p-2 rounded border d-inline-block">
+                        <code class="text-primary fw-bold">Fórmula: (Notas Entregues ÷ Total de Notas do Manifesto) × 100</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Filial</label>
+                    <select name="filial" class="form-select">
+                        <option value="todas">Todas as Filiais</option>
+                        {% for f in filiais %}
+                        <option value="{{ f.id }}" {% if request.GET.filial == f.id|stringformat:"i" %}selected{% endif %}>
+                            {{ f.nome }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Data Início</label>
+                    <input type="date" name="data_inicio" class="form-control" value="{{ data_inicio }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Data Fim</label>
+                    <input type="date" name="data_fim" class="form-control" value="{{ data_fim }}">
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-filter"></i> Filtrar Analise
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4 align-items-end">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm p-3 text-center" style="border-bottom: 4px solid #adb5bd !important;">
+                <small class="text-muted fw-bold text-uppercase d-block mb-2" style="font-size: 0.7rem;">2º Lugar</small>
+                <h6 class="fw-bold mb-1 text-truncate">{{ motoristas.1.nome_completo|default:"---" }}</h6>
+                <span class="badge bg-secondary-subtle text-secondary">{{ motoristas.1.reputacao|default:"0" }}% Score</span>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm p-4 text-center bg-primary text-white position-relative overflow-hidden">
+                <i class="bi bi-trophy position-absolute" style="font-size: 5rem; right: -10px; bottom: -10px; opacity: 0.2;"></i>
+                <small class="fw-bold text-uppercase d-block mb-2" style="font-size: 0.8rem; letter-spacing: 1px;">Top Performance - 1º Lugar</small>
+                <h3 class="fw-bold mb-2">{{ motoristas.0.nome_completo|default:"Nenhum Motorista" }}</h3>
+                <div class="d-flex justify-content-center align-items-center">
+                    <span class="badge bg-white text-primary px-3 py-2 fw-bold" style="font-size: 1rem;">
+                        {{ motoristas.0.reputacao|default:"0" }}% Score
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm p-3 text-center" style="border-bottom: 4px solid #cd7f32 !important;">
+                <small class="text-muted fw-bold text-uppercase d-block mb-2" style="font-size: 0.7rem;">3º Lugar</small>
+                <h6 class="fw-bold mb-1 text-truncate">{{ motoristas.2.nome_completo|default:"---" }}</h6>
+                <span class="badge bg-warning-subtle text-warning">{{ motoristas.2.reputacao|default:"0" }}% Score</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="ps-4">Motorista</th>
+                        <th class="text-center">Manifestos</th>
+                        <th class="text-center">Sucessos</th>
+                        <th class="text-center">Pendentes</th>
+                        <th class="text-center">Falta de Tempo (20)</th>
+                        <th>Reputação / Score</th>
+                        <th class="text-end pe-4">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in motoristas %}
+                    <tr>
+                        <td class="ps-4">
+                            <div class="d-flex align-items-center">
+                                <div class="avatar-circle me-3">
+                                    {% if m.foto_perfil %}
+                                        <img src="{{ m.foto_perfil.url }}" class="rounded-circle" width="40" height="40" style="object-fit: cover;">
+                                    {% else %}
+                                        <div class="bg-secondary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                            {{ m.nome_completo|slice:":1" }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <h6 class="mb-0 fw-bold">{{ m.nome_completo }}</h6>
+                                    <small class="text-muted">CPF: {{ m.cpf }}</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="text-center fw-bold text-dark">{{ m.total_mfts }}</td>
+                        <td class="text-center">
+                            <span class="badge bg-success-subtle text-success px-3">
+                                <i class="bi bi-check-circle me-1"></i> {{ m.baixas_sucesso }}</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-warning-subtle text-warning px-3">
+                                <i class="bi bi-exclamation-triangle me-1"></i> {{ m.baixas_pendentes }}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            {% if m.ocorrencias_20 > 0 %}
+                                <span class="badge bg-danger-subtle text-danger px-3">
+                                    <i class="bi bi-clock-history me-1"></i> {{ m.ocorrencias_20 }}
+                                </span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td style="width: 200px;">
+                            <div class="d-flex align-items-center">
+                                <div class="progress flex-grow-1 me-3" style="height: 8px;">
+                                    <div class="progress-bar {% if m.reputacao > 80 %}bg-success{% elif m.reputacao > 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                         role="progressbar" style="width: {{ m.reputacao }}%"></div>
+                                </div>
+                                <span class="fw-bold small">{{ m.reputacao }}%</span>
+                            </div>
+                        </td>
+                        <td class="text-end pe-4">
+                            <button onclick="abrirDetalhes('{{ m.id }}', '{{ m.nome_completo }}', '{{ m.cpf }}', '{% if m.foto_perfil %}{{ m.foto_perfil.url }}{% endif %}')" 
+                                    class="btn btn-sm btn-outline-primary border-0">
+                                <i class="bi bi-pencil-square"></i> Editar
+                            </button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center py-5">Nenhum dado no período.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalCadastro" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold">Novo Motorista</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formCadastro">
+                <div class="modal-body">
+                    <div class="modal-body">
+    <div class="alert d-none" id="msgFeedbackCadastro"></div> 
+    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Nome Completo</label>
+                        <input type="text" name="nome_completo" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">CPF</label>
+                        <input type="text" name="cpf" class="form-control cpf-mask" required placeholder="000.000.000-00">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Foto de Perfil</label>
+                        <input type="file" name="foto_perfil" class="form-control" accept="image/*">
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="submit" class="btn btn-primary px-4" id="btnSalvar">
+                        <span class="spinner-border spinner-border-sm d-none" id="loaderBtn"></span>
+                        Cadastrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalDetalhes" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title fw-bold">Editar Motorista</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formEdicao">
+                <input type="hidden" name="motorista_id" id="edit_id">
+                <div class="modal-body">
+                    <div class="modal-body">
+    <div class="alert d-none" id="msgFeedbackEdicao"></div> 
+    </div>
+                    <div class="text-center mb-4">
+                        <img id="view_foto" src="" class="rounded-circle shadow" width="100" height="100" style="object-fit: cover; border: 3px solid #eee;">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Nome Completo</label>
+                        <input type="text" name="nome_completo" id="edit_nome" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">CPF</label>
+                        <input type="text" name="cpf" id="edit_cpf" class="form-control cpf-mask">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Trocar Foto</label>
+                        <input type="file" name="foto_perfil" class="form-control" accept="image/*">
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="submit" class="btn btn-success px-4" id="btnSalvarEdicao">
+                        <span class="spinner-border spinner-border-sm d-none" id="loaderBtnEdicao"></span>
+                        Salvar Alterações
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .progress { background-color: #e9ecef; border-radius: 10px; }
+    .bg-success-subtle { background-color: rgba(25, 135, 84, 0.1) !important; }
+    .bg-danger-subtle { background-color: rgba(220, 53, 69, 0.1) !important; }
+    .bg-warning-subtle { background-color: rgba(255, 193, 7, 0.1) !important; }
+    .bg-secondary-subtle { background-color: rgba(108, 117, 125, 0.1) !important; }
+    .btn-link {
+    text-decoration: none;
+    transition: transform 0.2s;
+}
+.btn-link:hover {
+    transform: scale(1.2);
+}
+#explicaPerformance .card {
+    background-color: #f8faff;
+    border-left: 5px solid #0d6efd !important;
+}
+</style>
+
+<script>
+// Máscara de CPF
+document.querySelectorAll('.cpf-mask').forEach(input => {
+    input.addEventListener('input', e => {
+        let v = e.target.value.replace(/\D/g, '');
+        v = v.replace(/(\d{3})(\d)/, '$1.$2');
+        v = v.replace(/(\d{3})(\d)/, '$1.$2');
+        v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+        e.target.value = v;
+    });
+});
+
+async function enviarFormulario(idForm, url, idBtn, idLoader, idMsg) {
+    const form = document.getElementById(idForm);
+    const btn = document.getElementById(idBtn);
+    const loader = document.getElementById(idLoader);
+    const feedback = document.getElementById(idMsg); // Div de mensagem
+    const formData = new FormData(form);
+
+    // Reset de estado
+    btn.disabled = true;
+    loader.classList.remove('d-none');
+    feedback.classList.add('d-none');
+    feedback.classList.remove('alert-success', 'alert-danger');
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            feedback.textContent = data.message;
+            feedback.classList.add('alert-success');
+            feedback.classList.remove('d-none');
+            
+            // Aguarda 1.5s para o usuário ler e recarrega
+            setTimeout(() => { location.reload(); }, 1500);
+        } else {
+            feedback.textContent = data.message;
+            feedback.classList.add('alert-danger');
+            feedback.classList.remove('d-none');
+            btn.disabled = false;
+            loader.classList.add('d-none');
+        }
+    } catch (e) {
+        feedback.textContent = "Erro de conexão com o servidor.";
+        feedback.classList.add('alert-danger');
+        feedback.classList.remove('d-none');
+        btn.disabled = false;
+        loader.classList.add('d-none');
+    }
+}
+
+// Eventos atualizados com o novo parâmetro de ID da mensagem
+document.getElementById('formCadastro').addEventListener('submit', e => {
+    e.preventDefault();
+    enviarFormulario('formCadastro', "{% url 'operacional:motorista_cadastrar' %}", 'btnSalvar', 'loaderBtn', 'msgFeedbackCadastro');
+});
+
+document.getElementById('formEdicao').addEventListener('submit', e => {
+    e.preventDefault();
+    enviarFormulario('formEdicao', "{% url 'operacional:motorista_editar' %}", 'btnSalvarEdicao', 'loaderBtnEdicao', 'msgFeedbackEdicao'); // Crie essa ID no modal de edição também
+});
+
+function abrirDetalhes(id, nome, cpf, foto) {
+    document.getElementById('edit_id').value = id;
+    document.getElementById('edit_nome').value = nome;
+    document.getElementById('edit_cpf').value = cpf;
+    const img = document.getElementById('view_foto');
+    if(foto) { img.src = foto; img.style.display = 'inline-block'; } 
+    else { img.style.display = 'none'; }
+    new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
+}
+</script>
+{% endblock %}

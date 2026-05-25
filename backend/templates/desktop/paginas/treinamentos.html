@@ -1,0 +1,125 @@
+{% extends 'desktop/base.html' %}
+
+{% block title %}Treinamentos e Dicas - Quick Track{% endblock %}
+
+{% block content %}
+<div class="row mb-4 animate__animated animate__fadeIn">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm p-4 bg-primary text-white" style="border-radius: 15px; background: linear-gradient(45deg, #0d6efd, #004bb5) !important;">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h2 class="fw-bold mb-2">Central de Treinamentos</h2>
+                    <p class="mb-0 opacity-75">Aprenda a dominar todas as ferramentas do sistema com nossos tutoriais rápidos e práticos.</p>
+                </div>
+                <div class="col-md-4 text-md-end mt-3 mt-md-0">
+                    <div class="input-group">
+                        <input type="text" class="form-control border-0 shadow-none" placeholder="O que você quer aprender hoje?">
+                        <button class="btn btn-dark border-0"><i class="bi bi-search"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Categoria: Operacional -->
+    <div class="col-12">
+        <h5 class="fw-bold mb-3 d-flex align-items-center gap-2">
+            <i class="bi bi-display text-primary"></i> Painel Operacional
+        </h5>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100 overflow-hidden" style="border-radius: 12px; transition: transform 0.2s;">
+            <div class="position-relative bg-dark" style="height: 180px;">
+                <img src="https://img.youtube.com/vi/placeholder/0.jpg" class="w-100 h-100 object-fit-cover opacity-50" alt="Thumbnail">
+                <div class="position-absolute top-50 left-50 translate-middle">
+                    <i class="bi bi-play-circle-fill text-white fs-1 shadow-sm"></i>
+                </div>
+                <span class="position-absolute bottom-0 right-0 m-2 badge bg-dark opacity-75">10:45</span>
+            </div>
+            <div class="p-3">
+                <span class="badge bg-primary-subtle text-primary mb-2">OPERACIONAL</span>
+                <h6 class="fw-bold mb-2 text-dark">Como importar Manifestos em massa via API ou XML</h6>
+                <p class="small text-muted mb-3">Aprenda o fluxo completo desde o TMS até o acompanhamento em tempo real.</p>
+                <div class="d-flex justify-content-between align-items-center border-top pt-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-eye text-muted"></i>
+                        <small class="text-muted">1.2k visualizações</small>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary rounded-pill px-3">Assistir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100 overflow-hidden" style="border-radius: 12px;">
+            <div class="position-relative bg-dark" style="height: 180px;">
+                <img src="#" class="w-100 h-100 object-fit-cover opacity-50" alt="">
+                <div class="position-absolute top-50 left-50 translate-middle">
+                    <i class="bi bi-play-circle-fill text-white fs-1"></i>
+                </div>
+            </div>
+            <div class="p-3">
+                <span class="badge bg-primary-subtle text-primary mb-2">DICA RÁPIDA</span>
+                <h6 class="fw-bold mb-2">Configurando alertas de atraso de motoristas</h6>
+                <p class="small text-muted mb-3">Receba notificações instantâneas quando uma entrega exceder o tempo limite.</p>
+                <div class="d-flex justify-content-between align-items-center border-top pt-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-eye text-muted"></i>
+                        <small class="text-muted">856 visualizações</small>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary rounded-pill px-3">Assistir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Categoria: Mobile App -->
+    <div class="col-12 mt-5">
+        <h5 class="fw-bold mb-3 d-flex align-items-center gap-2">
+            <i class="bi bi-phone text-success"></i> Aplicativo PWA (Motoristas)
+        </h5>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100 overflow-hidden" style="border-radius: 12px;">
+            <div class="position-relative bg-success" style="height: 180px;">
+                <div class="position-absolute top-50 left-50 translate-middle text-center">
+                    <i class="bi bi-camera-fill text-white fs-1 mb-2"></i>
+                    <h6 class="text-white">Vídeo Em Breve</h6>
+                </div>
+            </div>
+            <div class="p-3">
+                <span class="badge bg-success-subtle text-success mb-2">MOTORISTA</span>
+                <h6 class="fw-bold mb-2">Como tirar fotos de canhotos perfeitas para o OCR</h6>
+                <p class="small text-muted mb-3">Dicas de iluminação e enquadramento para garantir o envio automático ao TMS.</p>
+                <button class="btn btn-sm btn-success w-100 rounded-pill">Ver Tutorial em PDF</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.addEventListener('load', () => {
+        Swal.fire({
+            title: 'Módulo de Treinamento',
+            text: 'Esta página está em fase de alimentação. Em breve teremos vídeos reais e tutoriais passo-a-passo atualizados.',
+            icon: 'info',
+            confirmButtonText: 'Entendido',
+            confirmButtonColor: '#0d6efd'
+        });
+    });
+</script>
+{% endblock %}

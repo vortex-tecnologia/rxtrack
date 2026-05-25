@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{% endblock %}</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+        --sidebar-width: 260px;
+        --sidebar-collapsed-width: 75px;
+        --primary-color: #0d6efd;
+        --dark-bg: #11111d; /* Tom mais escuro para destaque */
+    }
+
+    body {
+        font-family: 'Inter', sans-serif;
+        background-color: #f8f9fa;
+        transition: all 0.3s;
+    }
+
+    /* Sidebar inicia colapsada */
+    #sidebar {
+        width: var(--sidebar-collapsed-width);
+        height: 100vh;
+        position: fixed;
+        background: var(--dark-bg);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 1050;
+        overflow: hidden;
+    }
+
+    /* Quando a classe .active é adicionada, ela expande */
+    #sidebar.active {
+        width: var(--sidebar-width);
+    }
+
+    #sidebar .nav-link {
+        color: #aeb7c2;
+        padding: 15px 22px;
+        display: flex;
+        align-items: center;
+        white-space: nowrap;
+        text-decoration: none;
+        transition: 0.2s;
+    }
+
+    #sidebar .nav-link:hover, #sidebar .nav-link.active-menu {
+        background: rgba(255,255,255,0.08);
+        color: #fff;
+    }
+
+    #sidebar .nav-link i {
+        min-width: 45px;
+        font-size: 1.4rem;
+    }
+
+    /* Texto do menu oculto por padrão */
+    #sidebar .menu-text {
+        opacity: 0;
+        display: none;
+        transition: opacity 0.3s;
+    }
+
+    /* Exibe texto quando expandido */
+    #sidebar.active .menu-text {
+        display: inline-block;
+        opacity: 1;
+    }
+
+    /* Ajuste do conteúdo principal */
+    #main-content {
+        margin-left: var(--sidebar-collapsed-width);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #main-content.expanded {
+        margin-left: var(--sidebar-width);
+    }
+
+    .navbar {
+        background: #fff;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+        .btn-toggle-menu {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+
+    <nav id="sidebar" class="d-flex flex-column vh-100">
+    <div class="p-3 text-white d-flex align-items-center">
+        <i class="bi bi-box-seam fs-3 me-3"></i>
+        <span class="fw-bold menu-text">QUICK DELIVERY</span>
+    </div>
+    
+    <div class="nav flex-column mt-2 flex-grow-1">
+        <a href="/dashboard/" class="nav-link {% if request.path == '/dashboard/' %}active-menu{% endif %}">
+            <i class="bi bi-grid-1x2"></i>
+            <span class="menu-text">Dashboard</span>
+        </a>
+        <a href="{% url 'operacional:notas_fiscais' %}" class="nav-link {% if request.path == '/notas-fiscais/' %}active-menu{% endif %}">
+            <i class="bi bi-file-earmark-bar-graph"></i>
+            <span class="menu-text">Notas Fiscais</span>
+        </a>
+        <a href="{% url 'operacional:manifesto_detalhes' %}" class="nav-link {% if request.path == '/manifesto/' %}active-menu{% endif %}">
+            <i class="bi bi-layers"></i>
+            <span class="menu-text">Manifestos</span>
+        </a>
+        <a href="{% url 'auditoria:dashboard' %}" class="nav-link {% if '/auditoria/' in request.path %}active-menu{% endif %}">
+            <i class="bi bi-shield-check"></i>
+            <span class="menu-text">Auditoria de Processos</span>
+        </a>
+        <a href="{% url 'operacional:motoristas' %}" class="nav-link {% if request.path == '/motoristas/' %}active-menu{% endif %}">
+            <i class="bi bi-people"></i>
+            <span class="menu-text">Motoristas</span>
+        </a>
+        <a href="#" class="nav-link">
+            <i class="bi bi-bank"></i>
+            <span class="menu-text">Financeiro</span>
+        </a>
+
+        <!-- Seção de Suporte -->
+        <div class="border-top border-secondary opacity-25 my-2"></div>
+        <small class="ms-4 menu-text d-block mb-1" style="font-size: 0.65rem; letter-spacing: 1px; color: #fff;">SUPORTE & AJUDA</small>
+        
+        <a href="{% url 'suporte:painel_sac' %}" class="nav-link {% if '/suporte/' in request.path %}active-menu{% endif %}">
+            <i class="bi bi-headset"></i>
+            <span class="menu-text">Suporte Online</span>
+        </a>
+
+        {% if request.user.motorista_perfil.cargo == 'GESTOR' or request.user.motorista_perfil.cargo == 'GERENTE' %}
+        <a href="{% url 'gestao:gestao_usuarios' %}" class="nav-link {% if '/gestao/' in request.path %}active-menu{% endif %}">
+            <i class="bi bi-person-gear"></i>
+            <span class="menu-text">Gestao de Usuarios</span>
+        </a>
+        {% endif %}
+        <a href="{% url 'operacional:treinamentos' %}" class="nav-link {% if '/treinamentos/' in request.path %}active-menu{% endif %}">
+            <i class="bi bi-play-circle"></i>
+            <span class="menu-text">Treinamentos</span>
+        </a>
+        <a href="{% url 'operacional:central_ajuda' %}" class="nav-link {% if '/central-ajuda/' in request.path %}active-menu{% endif %}">
+            <i class="bi bi-question-circle"></i>
+            <span class="menu-text">Central de Ajuda</span>
+        </a>
+    </div>
+
+    <div class="nav flex-column mb-3 border-top border-secondary pt-2">
+        <a href="{% url 'operacional:configuracao_sistema' %}" class="nav-link {% if '/configuracao/' in request.path %}active-menu{% endif %}">
+            <i class="bi bi-gear"></i>
+            <span class="menu-text">Configurações</span>
+        </a>
+        <a href="/logout/" class="nav-link text-danger-emphasis">
+            <i class="bi bi-box-arrow-right"></i>
+            <span class="menu-text">Sair do Sistema</span>
+        </a>
+    </div>
+</nav>
+
+<div id="main-content">
+    <nav class="navbar navbar-light px-4 py-2">
+        <button class="btn btn-light border-0" id="btn-toggle-sidebar">
+            <i class="bi bi-list fs-4"></i>
+        </button>
+        <span class="ms-3 fw-semibold text-muted d-none d-md-inline">Painel Operacional</span>
+        
+        <div class="ms-auto d-flex align-items-center">
+            <span class="me-3 small fw-bold">
+                {% block usuario %}{% endblock %}
+            </span>
+            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 35px; height: 35px;">
+                OP
+            </div>
+        </div>
+    </nav>
+
+        <div class="container-fluid p-4">
+            {% block content %}
+            <div class="row g-4">
+                <div class="col-md-3">
+                    <div class="card border-0 shadow-sm p-3">
+                        <small class="text-muted fw-bold">MANIFESTOS ATIVOS</small>
+                        <h2 class="mb-0">24</h2>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-0 shadow-sm p-3 border-start border-success border-4">
+                        <small class="text-muted fw-bold">ENTREGAS HOJE</small>
+                        <h2 class="mb-0">158</h2>
+                    </div>
+                </div>
+            </div>
+            {% endblock %}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            // Verifica se este cookie é o que estamos procurando
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+    document.getElementById('btn-toggle-sidebar').addEventListener('click', function() {
+        // Alterna a classe no sidebar para expandir/recolher
+        document.getElementById('sidebar').classList.toggle('active');
+        // Alterna a margem do conteúdo principal
+        document.getElementById('main-content').classList.toggle('expanded');
+    });
+
+    // Opcional: Fechar menu automaticamente se a tela for pequena ao carregar
+    window.addEventListener('load', () => {
+        if (window.innerWidth < 768) {
+            document.getElementById('sidebar').classList.remove('active');
+            document.getElementById('main-content').style.marginLeft = "0";
+        }
+    });
+</script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

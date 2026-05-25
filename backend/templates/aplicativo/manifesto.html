@@ -1,0 +1,1622 @@
+{% load static %}
+{% load pwa %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% progressive_web_app_meta %}
+    <link rel="apple-touch-icon" href="/static/images/icon-160x160.png">
+    <title>App Motorista - Rotas</title>
+    <link href="{% static 'css/app_v2.css' %}" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/bootstrap.min.css' %}">
+
+    <link rel="stylesheet" href="{% static 'css/bootstrap-icons.css' %}">
+
+    <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
+    <style>
+        /* Estilos Customizados para Mobile */
+        body {
+            background-color: #f4f4f9;
+        }
+
+        .card-manifesto {
+            border-left: 5px solid #dc3545;
+        }
+
+        .card-nf {
+            border-left: 3px solid #0d6efd;
+            margin-top: 15px;
+        }
+
+        .header-status {
+            background-color: #dc3545;
+            color: white;
+            padding: 10px;
+            border-radius: 5px 5px 0 0;
+        }
+
+        .loading-animation {
+            width: 50px;
+            height: 50px;
+        }
+
+        .card-sincronizando {
+            border-left: 5px solid #ffc107 !important;
+            /* Amarelo de atenção */
+            opacity: 0.8;
+            pointer-events: none;
+            /* Evita que o motorista clique de novo enquanto sobe */
+        }
+
+        /* Container que desce do topo */
+        #status-rede-toast {
+            position: fixed;
+            top: -100px;
+            /* Começa escondido */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10000;
+            transition: top 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+            min-width: 280px;
+        }
+
+        /* Classe que faz o Toast aparecer */
+        #status-rede-toast.show {
+            top: 25px;
+        }
+
+        .pilula-status {
+            padding: 10px 20px;
+            border-radius: 50px;
+            color: white;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            border: none;
+        }
+
+        /* Cores dos estados */
+        .bg-offline {
+            background-color: #dc3545;
+        }
+
+        /* Vermelho */
+        .bg-online {
+            background-color: #198754;
+        }
+
+        /* Verde */
+        .badge-sync {
+            background-color: #fff3cd;
+            color: #856404;
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            border: 1px solid #ffeeba;
+        }
+
+        /* Container do Card Esqueleto - Mantendo sua borda lateral padrão */
+        .skeleton-card-nf {
+            height: 145px;
+            background: white;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            padding: 15px;
+            border-left: 5px solid #e9ecef;
+            /* Cinza claro simulando a borda lateral */
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Linhas de texto fakes */
+        .skeleton-line {
+            background: #eff1f3;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        /* O brilho (shimmer) que corre a tela */
+        .shimmer-effect {
+            position: relative;
+            overflow: hidden;
+            background-color: #e2e5e7;
+        }
+
+        .shimmer-effect::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            transform: translateX(-100%);
+            background: linear-gradient(90deg,
+                    rgba(255, 255, 255, 0) 0,
+                    rgba(255, 255, 255, 0.4) 50%,
+                    rgba(255, 255, 255, 0) 100%);
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes shimmer {
+            100% {
+                transform: translateX(100%);
+            }
+        }
+
+        /* Correções de Responsividade 320px */
+        .app-header .brand-title {
+            font-size: 1rem;
+        }
+
+        .app-header .brand-subtitle {
+            font-size: 0.7rem;
+        }
+
+        .btn-user::after {
+            display: none !important;
+        }
+
+        /* Esconde a setinha que sobrepõe a foto no mobile */
+        .avatar-circle {
+            width: 35px;
+            height: 35px;
+            min-width: 35px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #6c757d;
+            border-radius: 50%;
+        }
+
+        /* Tela Inicial de Carregamento Centralizada */
+        #app-content {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .search-container-card {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: calc(100vh - 160px);
+        }
+
+        .search-container-card .card {
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="status-rede-toast">
+        <div id="conteudo-status" class="pilula-status">
+        </div>
+    </div>
+    <header class="app-header fixed-top bg-white shadow-sm">
+        <div class="container-fluid h-100 d-flex align-items-center justify-content-between px-3">
+
+            <!-- LADO ESQUERDO -->
+            <div class="d-flex align-items-center gap-3">
+                <button class="btn btn-menu" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebarMenu">
+                    <i class="bi bi-list"></i>
+                </button>
+
+                <div class="brand-area">
+                    <span class="brand-title">Quick Track</span>
+                    <span class="brand-subtitle">Operação Logística</span>
+                </div>
+            </div>
+
+            <!-- LADO DIREITO -->
+            <div class="d-flex align-items-center gap-3">
+
+                <!-- STATUS -->
+                <div id="status-sincronizacao" class="d-flex align-items-center ms-2">
+                    <div id="nuvem-status">
+                        <i class="bi bi-cloud-check-fill text-success" style="font-size: 1.5rem;"
+                            title="Tudo sincronizado"></i>
+                    </div>
+                </div>
+
+                <!-- USUÁRIO -->
+                <div class="dropdown">
+                    <button class="btn btn-user dropdown-toggle" data-bs-toggle="dropdown">
+                        <div class="user-info d-none d-sm-block text-end">
+                            <span class="user-name" id="header-nome-motorista">Motorista</span>
+                            <span class="user-role">Motorista</span>
+                        </div>
+                        <div class="avatar-circle">
+                            <i class="bi bi-person-fill" style="color: white; font-size: 1.5rem;"></i>
+                        </div>
+                    </button>
+
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <li>
+                            <a class="dropdown-item" href="#">
+                                <i class="bi bi-person me-2"></i> Meu Perfil
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="#">
+                                <i class="bi bi-gear me-2"></i> Configurações
+                            </a>
+                        </li>
+                        <li>
+                            <hr class="dropdown-divider">
+                        </li>
+                        <li>
+                            <a class="dropdown-item text-danger" href="#">
+                                <i class="bi bi-box-arrow-right me-2"></i> Sair
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+
+            </div>
+        </div>
+    </header>
+
+    <div class="offcanvas offcanvas-start shadow-lg" tabindex="-1" id="sidebarMenu" aria-labelledby="sidebarMenuLabel"
+        style="width: 280px;">
+        <div class="offcanvas-header border-bottom bg-light">
+            <h5 class="offcanvas-title fw-bold text-primary" id="sidebarMenuLabel">
+                <i class="bi bi-truck me-2"></i>Menu Operacional
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+
+        <!-- flex-column para permitir empurrar itens para o rodapé (mt-auto) -->
+        <div class="offcanvas-body p-0 d-flex flex-column">
+
+            <!-- SEÇÃO PRIMÁRIA: NAVEGAÇÃO -->
+            <div class="list-group list-group-flush mb-3">
+                <a href="#" class="list-group-item list-group-item-action py-3 fw-bold border-0"
+                    onclick="location.reload()">
+                    <i class="bi bi-house-door me-2 fs-5 text-secondary"></i> Início / Notas
+                </a>
+                <a href="javascript:void(0)" onclick="abrirHistorico()"
+                    class="list-group-item list-group-item-action py-3 fw-bold border-0">
+                    <i class="bi bi-clock-history me-2 fs-5 text-secondary"></i> Histórico de Entregas
+                </a>
+            </div>
+
+            <!-- SEÇÃO SECUNDÁRIA: SUPORTE -->
+            <div class="px-3 py-2 text-uppercase text-muted small fw-bold" style="background-color: #f8f9fa;">
+                Suporte ao Usuário
+            </div>
+            <div class="list-group list-group-flush mb-4">
+                <a href="#" class="list-group-item list-group-item-action py-3 fw-bold border-0" 
+                    data-bs-dismiss="offcanvas" onclick="abrirModalSidebar('#modalTutorial')">
+                    <i class="bi bi-journal-play me-2 fs-5 text-primary"></i> Como usar o APP
+                </a>
+                <a href="#" class="list-group-item list-group-item-action py-3 fw-bold border-0" 
+                    data-bs-dismiss="offcanvas" onclick="abrirModalSidebar('#modalAjuda')">
+                    <i class="bi bi-whatsapp me-2 fs-5 text-success"></i> Falar com Suporte
+                </a>
+            </div>
+
+            <!-- RODAPÉ FIXO DO MENU (mt-auto empurra para baixo) -->
+            <div class="list-group list-group-flush mt-auto border-top">
+                <a href="#" class="list-group-item list-group-item-action py-3 fw-bold border-0" 
+                    data-bs-dismiss="offcanvas" onclick="abrirModalSidebar('#modalSobre')">
+                    <i class="bi bi-info-circle-fill me-2 fs-5 text-info"></i> Sobre o APP
+                </a>
+                <a href="#" class="list-group-item list-group-item-action py-3 fw-bold border-0" 
+                    data-bs-dismiss="offcanvas" onclick="abrirModalSidebar('#modalConfiguracoes')">
+                    <i class="bi bi-gear-fill me-2 fs-5 text-secondary"></i> Configurações
+                </a>
+                <a href="#" class="list-group-item list-group-item-action py-3 fw-bold text-danger border-0 bg-light"
+                    onclick="logout()">
+                    <i class="bi bi-box-arrow-left me-2 fs-5"></i> Sair do App
+                </a>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="full-screen-camera"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999;">
+        <video id="video-full" autoplay playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+
+        <div style="position: absolute; bottom: 30px; left: 0; width: 100%; text-align: center;">
+            <button type="button" class="btn btn-light rounded-circle" onclick="capturarFotoFull()"
+                style="width: 70px; height: 70px; border: 5px solid rgba(0,0,0,0.2);">
+                <i class="bi bi-camera-fill fs-2"></i>
+            </button>
+            <button type="button" class="btn btn-danger rounded-pill ms-3" onclick="fecharCameraFull()"
+                style="position: absolute; top: 15px; right: 20px;">
+                Sair
+            </button>
+        </div>
+    </div>
+    <!-- Container Principal (Sem justify-content-center para a lista grudar no topo) -->
+    <div class="container pt-3 pb-5">
+        <div id="app-content" class="w-100">
+            <div class="p-3 animate__animated animate__fadeIn">
+                <div class="shimmer-effect mb-4" style="height: 55px; width: 100%; border-radius: 15px;"></div>
+
+                <div class="shimmer-effect mb-3" style="height: 25px; width: 140px; border-radius: 5px;"></div>
+
+                <div class="skeleton-card-nf">
+                    <div class="d-flex justify-content-between mb-3">
+                        <div class="skeleton-line shimmer-effect" style="width: 40%; height: 18px;"></div>
+                        <div class="skeleton-line shimmer-effect"
+                            style="width: 25px; height: 25px; border-radius: 50%;"></div>
+                    </div>
+                    <div class="skeleton-line shimmer-effect" style="width: 85%; height: 12px;"></div>
+                    <div class="skeleton-line shimmer-effect" style="width: 65%; height: 12px;"></div>
+                    <div class="skeleton-line shimmer-effect w-100"
+                        style="height: 38px; margin-top: 12px; border-radius: 8px;"></div>
+                </div>
+
+                <div class="skeleton-card-nf">
+                    <div class="d-flex justify-content-between mb-3">
+                        <div class="skeleton-line shimmer-effect" style="width: 40%; height: 18px;"></div>
+                        <div class="skeleton-line shimmer-effect"
+                            style="width: 25px; height: 25px; border-radius: 50%;"></div>
+                    </div>
+                    <div class="skeleton-line shimmer-effect" style="width: 85%; height: 12px;"></div>
+                    <div class="skeleton-line shimmer-effect" style="width: 65%; height: 12px;"></div>
+                    <div class="skeleton-line shimmer-effect w-100"
+                        style="height: 38px; margin-top: 12px; border-radius: 8px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer Modernizado e Limpo -->
+    <div class="fixed-bottom p-2 bg-light border-top d-flex justify-content-center align-items-center shadow-sm">
+        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-4 fw-bold" data-bs-toggle="modal"
+            data-bs-target="#modalAjuda">
+            <i class="bi bi-headset me-1"></i> Precisa de Ajuda?
+        </button>
+    </div>
+
+    <!-- MODAL DE AJUDA ESPECÍFICA -->
+    <div class="modal fade" id="modalAjuda" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow" style="border-radius: 20px;">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold text-primary w-100 text-center"><i
+                            class="bi bi-headset me-2"></i>Central de Ajuda</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 pt-3">
+                    <p class="text-center text-muted small mb-4">Escolha a opção que melhor descreve o seu problema para
+                        um atendimento mais rápido:</p>
+
+                    <!-- OPÇÃO 1: SAC / OPERACIONAL -->
+                    <a href="https://wa.me/552127559335" target="_blank" rel="noopener noreferrer"
+                        class="text-decoration-none">
+                        <div class="card mb-3 border-0 shadow-sm"
+                            style="background-color: #f8f9fa; border-left: 5px solid #0d6efd !important;">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-primary bg-opacity-10 p-3 rounded-circle me-3">
+                                        <i class="bi bi-box-seam text-primary fs-3"></i>
+                                    </div>
+                                    <div>
+                                        <h6 class="fw-bold text-dark mb-1">Dúvidas Operacionais / SAC</h6>
+                                        <p class="small text-muted mb-0">Problemas com endereço, NF-e, manifesto não
+                                            listado ou dúvidas sobre a rota.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </a>
+
+                    <!-- OPÇÃO 2: SUPORTE APP / DEV -->
+                    <a href="https://wa.me/5521980064787" target="_blank" rel="noopener noreferrer"
+                        class="text-decoration-none">
+                        <div class="card border-0 shadow-sm"
+                            style="background-color: #f8f9fa; border-left: 5px solid #198754 !important;">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-success bg-opacity-10 p-3 rounded-circle me-3">
+                                        <i class="bi bi-bug text-success fs-3"></i>
+                                    </div>
+                                    <div>
+                                        <h6 class="fw-bold text-dark mb-1">Suporte do Aplicativo (TI)</h6>
+                                        <p class="small text-muted mb-0">Erros, tela travada, falha na câmera ou
+                                            aplicativo fechando sozinho.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE TREINAMENTO (COMO USAR O APP) -->
+    <div class="modal fade" id="modalTutorial" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+            <div class="modal-content border-0 shadow" style="border-radius: 20px;">
+                <div class="modal-header border-bottom-0 pb-0 pt-4 px-4">
+                    <h4 class="modal-title fw-bold text-primary w-100 text-center">
+                        <i class="bi bi-journal-check me-2"></i>Guia Prático do Motorista
+                    </h4>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="text-center text-muted mb-4">Aprenda a realizar entregas no aplicativo de forma rápida e
+                        segura. Siga o passo a passo abaixo.</p>
+
+                    <!-- PASSO 1 -->
+                    <div class="card border-0 bg-light mb-4 shadow-sm" style="border-radius: 15px;">
+                        <div class="card-body p-4">
+                            <div class="d-flex align-items-center mb-3">
+                                <h3 class="fw-bold text-primary mb-0 me-3">1</h3>
+                                <h5 class="fw-bold mb-0">Como iniciar sua Rota</h5>
+                            </div>
+                            <p class="text-muted small mb-3">Na tela inicial, digite o número do seu Manifesto recebido
+                                da base e clique em "Carregar Rota" para sincronizar as notas no celular.</p>
+                            <div class="bg-dark rounded shadow-sm d-flex align-items-center justify-content-center position-relative cursor-pointer" 
+                                 style="height: 180px; cursor: pointer; border: 2px solid #0d6efd;"
+                                 onclick="abrirVideoTutorial('https://st63136.ispot.cc/uploads/TutorialAPP/CarregaNotasNoAPP.mp4', 'Como iniciar sua Rota')">
+                                <i class="bi bi-play-circle-fill text-white fs-1 shadow-sm" style="z-index: 2;"></i>
+                                <div class="position-absolute w-100 h-100 bg-black opacity-50 rounded"></div>
+                                <i class="bi bi-phone text-white position-absolute opacity-25" style="font-size: 8rem;"></i>
+                                <span class="position-absolute bottom-0 text-white small fw-bold mb-2 z-index-2">Clique para Assistir</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PASSO 2 -->
+                    <div class="card border-0 bg-light mb-4 shadow-sm" style="border-radius: 15px;">
+                        <div class="card-body p-4">
+                            <div class="d-flex align-items-center mb-3">
+                                <h3 class="fw-bold text-success mb-0 me-3">2</h3>
+                                <h5 class="fw-bold mb-0">Dar Baixa na Entrega Feita</h5>
+                            </div>
+                            <p class="text-muted small mb-3">Ao chegar no destino, clique em "Dar Baixa", capture o
+                                comprovante ou assinatura de forma legível e clique em Confirmar.</p>
+                            <div class="bg-dark rounded shadow-sm d-flex align-items-center justify-content-center position-relative cursor-pointer" 
+                                 style="height: 180px; cursor: pointer; border: 2px solid #198754;"
+                                 onclick="abrirVideoTutorial('https://st63136.ispot.cc/uploads/TutorialAPP/registrarbaixas.mp4', 'Dar Baixa na Entrega Feita')">
+                                <i class="bi bi-play-circle-fill text-white fs-1 shadow-sm" style="z-index: 2;"></i>
+                                <div class="position-absolute w-100 h-100 bg-black opacity-50 rounded"></div>
+                                <i class="bi bi-phone text-white position-absolute opacity-25" style="font-size: 8rem;"></i>
+                                <span class="position-absolute bottom-0 text-white small fw-bold mb-2 z-index-2">Clique para Assistir</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PASSO 3 -->
+                    <div class="card border-0 bg-light mb-4 shadow-sm" style="border-radius: 15px;">
+                        <div class="card-body p-4">
+                            <div class="d-flex align-items-center mb-3">
+                                <h3 class="fw-bold text-danger mb-0 me-3">3</h3>
+                                <h5 class="fw-bold mb-0">Registrar Insucesso / Avaria</h5>
+                            </div>
+                            <p class="text-muted small mb-3">Se o local estiver fechado ou houver problema com a carga,
+                                clique em "Dar Baixa", escolha o motivo (ex: Recebedor Ausente), tire uma foto da
+                                faixada e confirme.</p>
+                            <div class="bg-dark rounded shadow-sm d-flex align-items-center justify-content-center position-relative cursor-pointer" 
+                                 style="height: 180px; cursor: pointer; border: 2px solid #dc3545;"
+                                 onclick="abrirVideoTutorial('https://st63136.ispot.cc/uploads/TutorialAPP/registraocorrencia.mp4', 'Registrar Insucesso / Avaria')">
+                                <i class="bi bi-play-circle-fill text-white fs-1 shadow-sm" style="z-index: 2;"></i>
+                                <div class="position-absolute w-100 h-100 bg-black opacity-50 rounded"></div>
+                                <i class="bi bi-phone text-white position-absolute opacity-25" style="font-size: 8rem;"></i>
+                                <span class="position-absolute bottom-0 text-white small fw-bold mb-2 z-index-2">Clique para Assistir</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning border-0 shadow-sm mt-3 text-center">
+                        <i class="bi bi-info-circle-fill me-2"></i><strong>Lembrete:</strong> Ao dar baixa em todas as
+                        notas, o manifesto encerra automaticamente!
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0 d-flex justify-content-center pb-4 pt-0">
+                    <button type="button" class="btn btn-primary rounded-pill px-5 fw-bold"
+                        data-bs-dismiss="modal">Entendi, começar a trabalhar!</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL SOBRE O APP (VERSÕES E CACHE) -->
+    <div class="modal fade" id="modalSobre" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow" style="border-radius: 20px;">
+                <div
+                    class="modal-header border-bottom-0 pb-0 pt-4 px-4 text-center d-flex flex-column align-items-center">
+                    <div class="bg-info bg-opacity-10 p-3 rounded-circle mb-2">
+                        <i class="bi bi-info-circle text-info fs-1"></i>
+                    </div>
+                    <h4 class="modal-title fw-bold text-dark w-100">Informações do Aplicativo</h4>
+                    <button type="button" class="btn-close position-absolute top-0 end-0 m-3"
+                        data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 pt-2">
+                    <p class="text-center text-muted small mb-4">Essas informações ajudam a equipe de suporte a
+                        identificar se o seu aplicativo está atualizado na versão mais recente.</p>
+
+                    <ul class="list-group list-group-flush mb-3">
+                        <li
+                            class="list-group-item d-flex justify-content-between align-items-center bg-transparent border-bottom px-0">
+                            <div>
+                                <i class="bi bi-cloud-check text-primary me-2"></i>
+                                <strong>SW.Versão</strong> (Cache)
+                            </div>
+                            <span class="badge bg-primary rounded-pill fs-6" id="disp-sw-versao">v--</span>
+                        </li>
+                        <li
+                            class="list-group-item d-flex justify-content-between align-items-center bg-transparent border-bottom px-0">
+                            <div>
+                                <i class="bi bi-file-earmark-code text-success me-2"></i>
+                                <strong>APP.Versão</strong> (Lógica)
+                            </div>
+                            <span class="badge bg-success rounded-pill fs-6" id="disp-app-versao">--</span>
+                        </li>
+                        <li
+                            class="list-group-item d-flex justify-content-between align-items-center bg-transparent px-0">
+                            <div>
+                                <i class="bi bi-calendar-event text-secondary me-2"></i>
+                                <strong>Atualizado em</strong>
+                            </div>
+                            <span class="text-muted small fw-bold" id="disp-html-data">--/--/----</span>
+                        </li>
+                    </ul>
+
+                    <!-- BOTÃO FORÇAR ATUALIZAÇÃO -->
+                    <div class="card border-danger bg-danger bg-opacity-10 mt-4 shadow-sm" style="border-radius: 15px;">
+                        <div class="card-body p-3 text-center">
+                            <h6 class="fw-bold text-danger mb-2"><i
+                                    class="bi bi-exclamation-triangle-fill me-2"></i>Forçar Atualização Completa</h6>
+                            <p class="small text-muted mb-3">Este botão limpa toda a memória do aplicativo no seu
+                                celular para corrigir erros graves. Você será deslogado.</p>
+                            <button type="button" class="btn btn-danger rounded-pill px-4 fw-bold w-100 shadow-sm"
+                                onclick="forcarAtualizacaoApp()">
+                                <i class="bi bi-arrow-clockwise me-2"></i>Limpar e Atualizar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE CONFIGURAÇÕES (PERMISSÕES) -->
+    <div class="modal fade" id="modalConfiguracoes" tabindex="-1" aria-hidden="true" style="z-index: 1056;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
+                <div class="modal-header border-0 pb-0 flex-column align-items-center position-relative mt-3">
+                    <button type="button" class="btn-close position-absolute top-0 end-0 me-3 mt-1" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <div class="bg-secondary bg-opacity-10 p-3 rounded-circle mb-2">
+                        <i class="bi bi-gear-fill text-secondary fs-1"></i>
+                    </div>
+                    <h5 class="modal-title fw-bold text-dark fs-4">Configurações</h5>
+                </div>
+                <div class="modal-body px-4 py-3">
+                    <p class="text-center text-muted small mb-4">Gerencie as permissões do aplicativo para o funcionamento correto das entregas.</p>
+                    
+                    <!-- GPS -->
+                    <div class="card border-0 bg-light rounded-4 mb-3">
+                        <div class="card-body d-flex justify-content-between align-items-center py-3">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-geo-alt-fill text-danger fs-3 me-3"></i>
+                                <div>
+                                    <h6 class="fw-bold mb-0 text-dark">Localização (GPS)</h6>
+                                    <small class="text-muted" style="font-size: 0.75rem;">Para validar endereço</small>
+                                </div>
+                            </div>
+                            <div class="form-check form-switch fs-4 mb-0 pe-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="switchPermissaoGps">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CAMERA -->
+                    <div class="card border-0 bg-light rounded-4 mb-3">
+                        <div class="card-body d-flex justify-content-between align-items-center py-3">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-camera-video-fill text-primary fs-3 me-3"></i>
+                                <div>
+                                    <h6 class="fw-bold mb-0 text-dark">Câmera</h6>
+                                    <small class="text-muted" style="font-size: 0.75rem;">Para ler códigos</small>
+                                </div>
+                            </div>
+                            <div class="form-check form-switch fs-4 mb-0 pe-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="switchPermissaoCamera">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- MENSAGEM DE REVOGAÇÃO -->
+                    <div class="alert alert-warning small py-2 d-none rounded-3 shadow-sm align-items-center mb-0 mt-3" id="avisoRevogarPermissao">
+                        <i class="bi bi-exclamation-triangle-fill me-2 fs-5 flex-shrink-0"></i> 
+                        <span>Desativar de forma permanente exige acessar as <b>Configurações de Permissão</b> do seu navegador.</span>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0 pb-4 px-4">
+                    <button type="button" class="btn btn-secondary w-100 rounded-pill py-2 fw-bold shadow-sm" data-bs-dismiss="modal">
+                        Fechar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL PLAYER DE VÍDEO FULL SCREEN -->
+    <div class="modal fade" id="modalVideoPlayer" tabindex="-1" aria-hidden="true" style="z-index: 1060;">
+        <div class="modal-dialog modal-fullscreen">
+            <div class="modal-content bg-black">
+                <div class="modal-header border-0 position-absolute w-100 z-3" style="background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);">
+                    <h5 class="modal-title text-white fw-bold shrink-title ms-2" id="videoPlayerTitle">Tutorial</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" onclick="fecharVideoPayer()"></button>
+                </div>
+                <div class="modal-body p-0 d-flex justify-content-center align-items-center" style="height: 100vh;">
+                    <video id="playerPrincipal" controls playsinline style="max-height: 100vh; max-width: 100vw; object-fit: contain; width: 100%;">
+                        <source id="playerPrincipalSource" src="" type="video/mp4">
+                        Seu navegador não suporta a tag video.
+                    </video>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Lógica Player de Vídeo do Tutorial
+        function abrirVideoTutorial(videoUrl, titulo) {
+            // Oculta o modal de tutorial que estava aberto atrás
+            const myModalEl = document.getElementById('modalTutorial');
+            const modalInstance = bootstrap.Modal.getInstance(myModalEl);
+            if(modalInstance) modalInstance.hide();
+            
+            // Seta o titulo, o source e força o load/play
+            document.getElementById('videoPlayerTitle').innerText = titulo;
+            const player = document.getElementById('playerPrincipal');
+            document.getElementById('playerPrincipalSource').src = videoUrl;
+            
+            player.load();
+            
+            // Abre o player fullscreen
+            const playerModal = new bootstrap.Modal(document.getElementById('modalVideoPlayer'));
+            playerModal.show();
+            
+            // Corrige overlays duplicados do Bootstrap removendo backdrops excedentes
+            setTimeout(() => {
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                if(backdrops.length > 1) {
+                    for(let i=0; i < backdrops.length - 1; i++) {
+                        backdrops[i].remove();
+                    }
+                }
+            }, 100);
+
+            // Tenta dar play automaticamente quando abre fullscreen (Mobile exige interacao previa do click entao funciona)
+            setTimeout(() => {
+                player.play().catch(e => console.log('Autoplay prevent:', e));
+            }, 300);
+        }
+
+        // --- SISTEMA CORRETO DE ABERTURA DE MODAIS PELO MENU LATERAL ---
+        // Se abrir um Modal com o Sidebar aberto, as divs de fundo preto se multiplicam.
+        function abrirModalSidebar(modalIdSelecionado) {
+            // Como agora usamos data-bs-dismiss="offcanvas" no link, o Bootstrap limpa certinho o Menu e o Backdrop do Menu nativamente.
+            // Precisamos apenas esperar a animação do Offcanvas terminar (aprox 400ms) para mandar abrir o novo Modal.
+            setTimeout(() => {
+                const modalEl = document.querySelector(modalIdSelecionado);
+                if(modalEl) {
+                    const targetModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                    targetModal.show();
+                }
+            }, 400);
+        }
+
+        function fecharVideoPayer() {
+            const player = document.getElementById('playerPrincipal');
+            player.pause();
+            player.currentTime = 0;
+            
+            // Força a limpeza de qualquer backdrop travado no body ao fechar o video
+            setTimeout(() => {
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+                document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+            }, 300);
+        }
+
+        // --- SISTEMA GLOBAL DE LIMPEZA DE OVERLAYS (FUNDO CINZA TRAVADO) ---
+        // Resolve o bug do Bootstrap 5 onde fechar modais nascidos de Offcanvas 
+        // ou Modais sobrepostos deixam fundos presos (backdrops) na tela.
+        document.addEventListener('hidden.bs.modal', function (event) {
+            setTimeout(() => {
+                if(!document.querySelector('.modal.show')) {
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                }
+            }, 300);
+        });
+
+        document.getElementById('sidebarMenu').addEventListener('hidden.bs.offcanvas', function () {
+            setTimeout(() => {
+                if(!document.querySelector('.modal.show') && !document.querySelector('.offcanvas.show')) {
+                    document.body.classList.remove('modal-open'); // Prevenção
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                    document.querySelectorAll('.offcanvas-backdrop').forEach(el => el.remove());
+                }
+            }, 300);
+        });
+        // -------------------------------------------------------------------
+        
+        // SCRIPT PARA EXTRAIR E MOSTRAR AS VERSÕES DINAMICAMENTE NO MODAL
+        document.addEventListener('DOMContentLoaded', function () {
+            // Data da última atualização na interface HTML (pode ser hardcoded aqui sempre que houver update significativo)
+            const htmlLastUpdate = "19/03/2026";
+
+            const btnDispData = document.getElementById('disp-html-data');
+            if (btnDispData) btnDispData.textContent = htmlLastUpdate;
+
+            // Encontrar a versão do manifesto_vXX.js olhando as tags script na própria página
+            const scripts = document.getElementsByTagName('script');
+            let appVersionFound = "Desconhecido";
+            for (let i = 0; i < scripts.length; i++) {
+                const src = scripts[i].src;
+                if (src && src.includes('manifesto_v')) {
+                    // Extrai número após 'manifesto_v'
+                    const match = src.match(/manifesto_v(\d+)\.js/);
+                    if (match && match[1]) {
+                        appVersionFound = match[1];
+                        break;
+                    }
+                }
+            }
+            const btnDispApp = document.getElementById('disp-app-versao');
+            if (btnDispApp) btnDispApp.textContent = "v" + appVersionFound;
+
+            // Encontrar a versão do ServiceWorker listada no arquivo estaticamente
+            // (Para PWA, como o cacheName está no sw.js, o mais performático é hardcodar a versão paralela aqui 
+            // no HTML. Sempre recomendo alterar aqui com o SW)
+            const currentSwVersion = "1.34";
+            const btnDispSw = document.getElementById('disp-sw-versao');
+            if (btnDispSw) btnDispSw.textContent = "v" + currentSwVersion;
+        });
+
+        // FUNÇÃO BRUTA PARA LIMPAR CACHE TOTAL
+        // Hardcoded no HTML para sobreviver a falhas de arquivos JS corrompidos
+        async function forcarAtualizacaoApp() {
+            if (confirm('Atenção: Você será deslogado e todas as rotas não salvas poderão ser perdidas. Continuar?')) {
+
+                // 1. Limpa Storage padrão
+                localStorage.clear();
+                sessionStorage.clear();
+
+                // 2. Limpa IndexedDB (Deleta o banco inteiro)
+                try {
+                    const req = indexedDB.deleteDatabase('ManifestoDB');
+                    req.onsuccess = () => console.log('IndexedDB excluído com sucesso');
+                    req.onerror = () => console.log('Erro ao excluir IndexedDB');
+                    req.onblocked = () => console.log('IndexedDB bloqueado');
+                } catch (e) {
+                    console.error("Erro deletando IndexedDB", e);
+                }
+
+                // 3. Limpa caches locais (Files do PWA)
+                if ('caches' in window) {
+                    try {
+                        const nomesCaches = await caches.keys();
+                        await Promise.all(nomesCaches.map(nome => caches.delete(nome)));
+                        console.log('Todos os Caches PWA Limpos!');
+                    } catch (e) {
+                        console.error("Erro limpando Caches", e);
+                    }
+                }
+
+                // 4. Desregistra Service Workers
+                if ('serviceWorker' in navigator) {
+                    try {
+                        const registros = await navigator.serviceWorker.getRegistrations();
+                        for (let reg of registros) {
+                            await reg.unregister();
+                            console.log('Service Worker desregistrado');
+                        }
+                    } catch (e) {
+                        console.error('Erro ao desregistrar SW', e);
+                    }
+                }
+
+                // Espera um milisegundo e força recarregamento ignorando tudo (Hard Refresh equivalente a Ctrl+F5)
+                setTimeout(() => {
+                    alert('As memórias foram limpas com sucesso. O aplicativo irá recarregar...');
+                    window.location.reload(true);
+                }, 500);
+            }
+        }
+    </script>
+
+    <div class="modal fade" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true"
+        data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-body text-center">
+                    <div class="spinner-border text-primary loading-animation" role="status">
+                        <span class="visually-hidden">Processando...</span>
+                    </div>
+                    <h5 class="mt-3" id="loadingModalLabel">Buscando Manifesto...</h5>
+                    <p>Validando dados do manifesto...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="kmFinalModal" tabindex="-1" aria-labelledby="kmFinalModalLabel" aria-hidden="true"
+        data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title w-100 text-center fw-bold text-primary" id="kmFinalModalLabel">Finalizando
+                        Rota</h5>
+                </div>
+                <div class="modal-body text-center p-4">
+                    <div class="spinner-border text-primary loading-animation mb-3" role="status"
+                        style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Processando...</span>
+                    </div>
+                    <p class="text-muted fw-bold mb-1" id="finalizar-message">Fechando manifesto automaticamente...</p>
+                    <p class="small text-muted">Aguarde, por favor.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE FINALIZAÇÃO MANUAL -->
+    <div class="modal fade" id="modalFinalizacaoManual" tabindex="-1" aria-labelledby="modalFinalizacaoManualLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
+                <div id="conteudo-modal-finalizacao">
+                    <div class="modal-header border-0 flex-column align-items-center pt-4">
+                        <div class="bg-primary bg-opacity-10 p-3 rounded-circle mb-3">
+                            <i class="bi bi-flag-fill text-primary fs-1"></i>
+                        </div>
+                        <h4 class="modal-title fw-bold text-dark">Entregas Concluídas</h4>
+                    </div>
+                    <div class="modal-body text-center px-4 pb-4">
+                        <p class="text-muted">Parabéns! Você concluiu todas as entregas deste manifesto. Deseja finalizar a rota agora?</p>
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="button" class="btn btn-primary btn-lg rounded-pill fw-bold py-3 shadow-sm" onclick="executarFinalizacaoManual()">
+                                <i class="bi bi-check-circle-fill me-2"></i> FINALIZAR MANIFESTO
+                            </button>
+                            <button type="button" class="btn btn-link text-muted text-decoration-none fw-bold" data-bs-dismiss="modal">
+                                Voltar à Lista
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="ocorrenciaModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content p-3">
+
+                <div class="modal-header border-0">
+                    <h5 class="modal-title">
+                        <i class="bi bi-file-earmark-text"></i>
+                        Registrar Ocorrência
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+
+                    <div class="mb-3">
+                        <label class="form-label">Data da Ocorrência</label>
+                        <input type="date" id="ocorrencia-data" class="form-control">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Selecione a Ocorrência</label>
+                        <select id="ocorrencia-tipo" class="form-select">
+                            <option value="ENTREGA_REALIZADA">Entrega Realizada</option>
+                            <option value="DEVOLUCAO">Devolução</option>
+                            <option value="AVARIA">Avaria</option>
+                        </select>
+                    </div>
+
+                    <textarea id="ocorrencia-comentario" class="form-control mb-3"
+                        placeholder="Comentário (Opcional)"></textarea>
+
+                    <!-- 📸 ANEXO -->
+                    <div class="text-center mb-3">
+                        <label class="form-label d-block">Anexar Foto (Opcional)</label>
+
+                        <input type="file" id="foto-ocorrencia" accept="image/*" capture="environment" hidden>
+
+                        <button class="btn btn-outline-primary" onclick="abrirCamera()">
+                            <i class="bi bi-paperclip"></i>
+                        </button>
+                    </div>
+
+                    <!-- PREVIEW -->
+                    <div id="preview-container" class="text-center d-none">
+                        <img id="preview-img" class="img-thumbnail mb-2" style="max-width: 200px;">
+                        <div class="d-flex justify-content-center gap-2">
+                            <button class="btn btn-sm btn-secondary" onclick="visualizarImagem()">Visualizar</button>
+                            <button class="btn btn-sm btn-warning" onclick="tirarOutraFoto()">Tirar outra</button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="modal-footer border-0">
+                    <button class="btn btn-danger" data-bs-dismiss="modal">Cancelar</button>
+                    <button class="btn btn-primary" onclick="confirmarOcorrencia()">Confirmar</button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalBaixa" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
+                <div class="modal-header bg-primary text-white" style="border-radius: 15px 15px 0 0;">
+                    <h5 class="modal-title fw-bold" id="modal-titulo-nf">Registro Ocorrência</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body p-4">
+                    <input type="hidden" id="hidden-chave-nf">
+                    <input type="hidden" id="hidden-numero-nf">
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold"><i class="bi bi-list-check"></i> Selecione a
+                            Ocorrência:</label>
+                        <select class="form-select form-select-lg" id="select-ocorrencia">
+                            <optgroup label="ENTREGA (Obrigatório Foto)">
+                                {% for oc in sucesso %}
+                                <option value="{{ oc.codigo_tms }}">{{ oc.codigo_tms }} - {{ oc.descricao }}</option>
+                                {% endfor %}
+                            </optgroup>
+                            <optgroup label="NÃO ENTREGA (Foto Opcional)">
+                                {% for oc in problemas %}
+                                <option value="{{ oc.codigo_tms }}">{{ oc.codigo_tms }} - {{ oc.descricao }}</option>
+                                {% endfor %}
+                            </optgroup>
+                            <optgroup label="DESPACHO E REDESPACHO (Foto Opcional)">
+                                {% for oc in cia %}
+                                <option value="{{ oc.codigo_tms }}">{{ oc.codigo_tms }} - {{ oc.descricao }}</option>
+                                {% endfor %}
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div class="mb-3" id="campo-recebedor">
+                        <label class="form-label fw-bold"><i class="bi bi-person-fill"></i> Nome do Recebedor:</label>
+                        <input type="text" class="form-control form-control-lg" id="input-recebedor"
+                            placeholder="Quem recebeu a mercadoria?">
+                    </div>
+
+                    <hr>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="check-nota-retida"
+                            style="cursor: pointer; width: 3em; height: 1.5em;">
+                        <label class="form-check-label fw-bold text-danger ms-2" for="check-nota-retida">
+                            ⚠️ Nota Fiscal Retida ⚠️
+                        </label>
+                    </div>
+
+                    <div id="campo-observacao" class="mb-3" style="display: none;">
+                        <label class="form-label fw-bold text-primary">Motivo da Retenção (Obrigatório):</label>
+                        <textarea class="form-control" id="input-observacao" rows="3"
+                            placeholder="Ex: Nota ficou no setor de faturamento com o Sr. Marcos."></textarea>
+                    </div>
+
+                    <div class="camera-container border rounded bg-light text-center p-3 mb-3"
+                        style="min-height: 120px; border-style: dashed !important;">
+                        <canvas id="canvas-preview" style="display: none;"></canvas>
+
+                        <div id="placeholder-camera"
+                            class="d-flex flex-column align-items-center justify-content-center">
+                            <div id="wrapper-icone"
+                                class="rounded-circle bg-white shadow-sm d-flex align-items-center justify-content-center mb-2"
+                                style="width: 60px; height: 60px;">
+                                <i id="icone-camera" class="bi bi-camera text-secondary" style="font-size: 1.8rem;"></i>
+                            </div>
+                            <p id="texto-status-foto" class="text-muted small fw-bold mb-0">Nenhuma foto capturada</p>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <label for="camera-nativa" class="btn btn-dark btn-lg shadow-sm" id="label-camera">
+                            <i class="bi bi-camera-fill me-2"></i> Abrir Câmera
+                        </label>
+
+                        <input type="file" id="camera-nativa" accept="image/*" capture="camera" style="display: none;">
+
+                        <label for="camera-nativa" class="btn btn-warning btn-lg shadow-sm" id="btn-nova-foto"
+                            style="display: none;">
+                            <i class="bi bi-arrow-clockwise me-2"></i> Tirar outra foto
+                        </label>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light" style="border-radius: 0 0 15px 15px;">
+                    <button type="button" class="btn btn-link text-muted fw-bold text-decoration-none"
+                        data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-success btn-lg px-4 fw-bold shadow-sm"
+                        onclick="salvarRegistro()">
+                        Confirmar Registro <i class="bi bi-check-lg ms-1"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL ESPECÍFICO PARA COLETA (SIM/NÃO) -->
+    <div class="modal fade" id="modalColeta" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
+                <div class="modal-header bg-dark text-white" style="border-radius: 20px 20px 0 0;">
+                    <h5 class="modal-title fw-bold" id="modal-coleta-titulo">📦 Registro de Coleta</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 text-center">
+                    <div class="mb-4">
+                        <i class="bi bi-question-circle text-primary" style="font-size: 4rem;"></i>
+                    </div>
+                    <h4 class="fw-bold mb-3">A coleta foi realizada?</h4>
+                    <p class="text-muted mb-4">Confirme se os itens foram coletados com sucesso no cliente.</p>
+                    
+                    <div class="d-grid gap-3">
+                        <button type="button" id="btn-coleta-sim" class="btn btn-success btn-lg py-3 fw-bold shadow-sm">
+                            <i class="bi bi-check-circle me-2"></i> SIM, COLETEI
+                        </button>
+                        <button type="button" id="btn-coleta-nao" class="btn btn-outline-danger btn-lg py-3 fw-bold">
+                            <i class="bi bi-x-circle me-2"></i> NÃO COLETEI
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 justify-content-center pb-4">
+                    <button type="button" class="btn btn-link text-muted text-decoration-none fw-bold" data-bs-dismiss="modal">
+                        Cancelar e Voltar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="modal fade" id="modalDetalhes" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="bi bi-check-circle"></i> Detalhes da Entrega</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="modal-detalhes-body">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary w-100" data-bs-dismiss="modal">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="statusModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content text-center p-4">
+                <div id="status-icon" class="mb-3">
+                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
+                </div>
+                <h5 id="status-title">Enviando Registro...</h5>
+                <p id="status-message" class="text-muted">Aguarde, estamos salvando os dados e a foto.</p>
+
+                <div id="status-footer" style="display: none;" class="mt-3">
+                    <button type="button" class="btn btn-primary w-100 mb-2" data-bs-dismiss="modal">
+                        Entendido / Fechar
+                    </button>
+                    <button id="btn-reportar" type="button" class="btn btn-outline-success w-100"
+                        style="display: none;">
+                        Relatar no WhatsApp
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="modalUpdate" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content text-center p-4">
+                <div class="mb-3">
+                    <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+                </div>
+                <h5 class="fw-bold">Aplicativo Atualizado!</h5>
+                <p class="text-muted">As novas melhorias já foram baixadas. Clique em OK para aplicar as alterações.</p>
+                <div class="mt-3">
+                    <button type="button" class="btn btn-success w-100 fw-bold" onclick="recarregarPWA()">
+                        ENTENDI / OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="modalHistorico" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg modal-fullscreen-sm-down">
+            <div class="modal-content" style="border-radius: 20px;">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-clock-history me-2 text-primary"></i>Histórico de
+                        Manifestos</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="historico-content">
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <p class="mt-2 text-muted">Carregando histórico...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="modalSincronismo" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content text-center p-4">
+                <div class="modal-body" id="modal-sinc-conteudo">
+                    <div id="modal-sinc-status">
+                        <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status">
+                        </div>
+                    </div>
+
+                    <h5 class="fw-bold" id="modal-sinc-titulo">Sincronizando Notas</h5>
+
+                    <p class="text-muted" id="modal-sinc-mensagem">Estamos buscando novas notas no sistema da ESL. Por
+                        favor, aguarde alguns instantes.</p>
+
+                    <div class="progress mt-3" id="modal-sinc-progresso" style="height: 10px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
+                            style="width: 100%"></div>
+                    </div>
+
+                    <button type="button" class="btn btn-secondary mt-3 d-none" id="modal-sinc-btn-fechar"
+                        data-bs-dismiss="modal">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="scannerModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-fullscreen">
+            <div class="modal-content bg-dark">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title text-white">Escaneie o Código de Barras</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        onclick="pararScanner()"></button>
+                </div>
+
+                <div class="modal-body p-0 position-relative d-flex align-items-center justify-content-center">
+                    <video id="video-scanner" autoplay playsinline muted
+                        style="width:100%; height:100%; object-fit:cover;">
+                    </video>
+
+                    <div class="scanner-laser"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalSolicitarNotificacao" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content text-center p-3">
+
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <i class="bi bi-bell" style="font-size:40px;"></i>
+                    </div>
+
+                    <h5 id="tituloNotificacao">Ative as Notificações</h5>
+                    <p id="textoNotificacao">
+                        Receba alertas de novos manifestos e chamados em tempo real.
+                    </p>
+
+                    <button id="btnAtivarNotificacao" class="btn btn-primary w-100"
+                        onclick="ativarNotificacoesManual()">
+                        Sim, quero receber
+                    </button>
+
+                    <button class="btn btn-link mt-2" onclick="adiarNotificacao()">
+                        Agora não, me lembre amanhã
+                    </button>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+
+
+    <span id="manifesto-id-display" style="display: none;"></span>
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <script>
+        let modalUpdate;
+
+        // Garante que o Bootstrap carregou o modal antes de tentar usar
+        document.addEventListener('DOMContentLoaded', function () {
+            modalUpdate = new bootstrap.Modal(document.getElementById('modalUpdate'));
+        });
+
+        if ('serviceWorker' in navigator) {
+            // 1. Registra o SW
+            navigator.serviceWorker.register('/serviceworker.js', { scope: '/app/' }).then(reg => {
+
+                // 2. Monitora se o SW atualizou e assumiu o controle
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    // Isso dispara quando o novo SW ativa e toma o lugar do antigo
+                    if (modalUpdate) {
+                        // Muda o texto do modal dinamicamente antes de mostrar
+                        document.querySelector('#modalUpdate h5').innerText = "App Atualizado!";
+                        document.querySelector('#modalUpdate p').innerText = "Sua rota e sistema foram atualizados com sucesso.";
+                        modalUpdate.show();
+                    }
+                });
+
+                // 3. Caso o navegador detecte a mudança mas ainda esteja instalando
+                reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'activated' && !navigator.serviceWorker.controller) {
+                            // Primeiro acesso ou atualização forçada
+                            console.log('SW Ativado com sucesso');
+                        }
+                    });
+                });
+            });
+        }
+
+        // Função de Reinicialização Completa (Botão OK)
+        async function recarregarPWA() {
+            // Força a limpeza total e recarrega na raiz para garantir
+            if ('caches' in window) {
+                const names = await caches.keys();
+                await Promise.all(names.map(name => caches.delete(name)));
+            }
+            // O reload(true) força o navegador a ignorar o cache do disco
+            window.location.reload(true);
+        }
+
+        // Função de Logout
+        document.addEventListener("DOMContentLoaded", function () {
+            verificarStatusNotificacao();
+        });
+
+        function atualizarModalStatus(titulo, texto, esconderBotao = true) {
+            const tituloEl = document.getElementById("tituloNotificacao");
+            const textoEl = document.getElementById("textoNotificacao");
+            const btnEl = document.getElementById("btnAtivarNotificacao");
+
+            if (tituloEl) tituloEl.innerText = titulo;
+            if (textoEl) textoEl.innerText = texto;
+            if (btnEl && esconderBotao) btnEl.style.display = "none";
+        }
+
+        function fecharModalDepois(ms = 1500) {
+            setTimeout(() => {
+                fecharModal();
+            }, ms);
+        }
+        function verificarStatusNotificacao() {
+            if (localStorage.getItem("webpush_aceitou") === "true" || Notification.permission === "granted") {
+                return;
+            }
+
+            const dataAdiada = localStorage.getItem("webpush_data_adiada");
+            const agora = new Date().getTime();
+            const vinteQuatroHoras = 24 * 60 * 60 * 1000;
+
+            if (!dataAdiada || (agora - parseInt(dataAdiada)) > vinteQuatroHoras) {
+                setTimeout(() => {
+                    const modalElement = document.getElementById('modalSolicitarNotificacao');
+                    const modalInstance = new bootstrap.Modal(modalElement);
+                    modalInstance.show();
+                }, 5000);
+            }
+        }
+
+        function adiarNotificacao() {
+            localStorage.setItem("webpush_data_adiada", new Date().getTime().toString());
+            fecharModal();
+        }
+
+        function urlB64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding)
+                .replace(/\-/g, '+')
+                .replace(/_/g, '/');
+
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+
+        async function ativarNotificacoesManual() {
+            try {
+                // Mostra status inicial
+                atualizarModalStatus("Aguarde...", "Ativando notificações...");
+
+                const permission = await Notification.requestPermission();
+
+                if (permission !== 'granted') {
+                    atualizarModalStatus(
+                        "Permissão negada",
+                        "Você bloqueou as notificações no navegador.",
+                        false
+                    );
+                    return;
+                }
+
+                const registration = await navigator.serviceWorker.ready;
+
+                const vapidPublicKey = "BDBRd8eEkZHd6ZY_j3W4kaDZVuLr0MmrMqXJSox83EHT_re79BA01ViC3RzOy0P7J6UYcqOmhIyLqHJzdVUo8DQ";
+                const applicationServerKey = urlB64ToUint8Array(vapidPublicKey);
+
+                const subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: applicationServerKey
+                });
+
+                const subJSON = subscription.toJSON();
+
+                const payload = {
+                    subscription: subJSON,
+                    group: "motoristas"
+                };
+
+                console.log("Payload enviado:", payload);
+
+                const tokenJWT = localStorage.getItem('accessToken');
+
+                const response = await fetch('/app/api/v1/save-webpush/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${tokenJWT}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem("webpush_aceitou", "true");
+                    localStorage.removeItem("webpush_data_adiada");
+
+                    atualizarModalStatus(
+                        "Tudo pronto!",
+                        "Notificações ativadas com sucesso."
+                    );
+
+                    fecharModalDepois(1500);
+                } else {
+                    console.error(data);
+                    atualizarModalStatus(
+                        "Erro ao salvar",
+                        data.error || "Erro desconhecido.",
+                        false
+                    );
+                }
+
+            } catch (error) {
+                console.error("Erro no Push:", error);
+
+                atualizarModalStatus(
+                    "Erro",
+                    "Falha ao ativar notificações.",
+                    false
+                );
+            }
+        }
+
+
+        function fecharModal() {
+            const modalElement = document.getElementById('modalSolicitarNotificacao');
+            const modalInstance = bootstrap.Modal.getInstance(modalElement);
+            if (modalInstance) modalInstance.hide();
+        }
+
+        // --- GERENCIAMENTO DE PERMISSÕES (CONFIGURAÇÕES) ---
+        document.getElementById('modalConfiguracoes').addEventListener('show.bs.modal', async function () {
+            // Check GPS
+            try {
+                const gpsPerm = await navigator.permissions.query({name: 'geolocation'});
+                document.getElementById('switchPermissaoGps').checked = (gpsPerm.state === 'granted');
+                gpsPerm.onchange = function() {
+                    document.getElementById('switchPermissaoGps').checked = (this.state === 'granted');
+                };
+            } catch (e) {
+                console.log('API de permissão geo não suportada');
+            }
+
+            // Check Camera
+            try {
+                const camPerm = await navigator.permissions.query({name: 'camera'});
+                document.getElementById('switchPermissaoCamera').checked = (camPerm.state === 'granted');
+                camPerm.onchange = function() {
+                    document.getElementById('switchPermissaoCamera').checked = (this.state === 'granted');
+                };
+            } catch (e) {
+                console.log('API de permissão de câmera não suportada');
+            }
+        });
+
+        // Toggle GPS
+        document.getElementById('switchPermissaoGps').addEventListener('change', function(e) {
+            if (this.checked) {
+                // Solicitar permissão
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => { this.checked = true; },
+                        (err) => { 
+                            this.checked = false;
+                            alert('Permissão de GPS bloqueada. Acesse as permissões do site no seu navegador e permita a Localização.');
+                        }
+                    );
+                }
+            } else {
+                this.checked = true; // Web não deixa revogar permissões via código
+                mostrarAvisoRevogacao();
+            }
+        });
+
+        // Toggle CÂMERA
+        document.getElementById('switchPermissaoCamera').addEventListener('change', function(e) {
+            if (this.checked) {
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(stream => {
+                        stream.getTracks().forEach(track => track.stop()); // desliga o rec
+                        this.checked = true;
+                    })
+                    .catch(err => {
+                        this.checked = false;
+                        alert('Permissão de Câmera bloqueada. Acesse as permissões do site no seu navegador e permita a Câmera.');
+                    });
+            } else {
+                this.checked = true; // Web não deixa revogar permissões via código
+                mostrarAvisoRevogacao();
+            }
+        });
+
+        function mostrarAvisoRevogacao() {
+            const aviso = document.getElementById('avisoRevogarPermissao');
+            aviso.classList.remove('d-none');
+            aviso.classList.add('d-flex');
+            setTimeout(() => {
+                aviso.classList.remove('d-flex');
+                aviso.classList.add('d-none');
+            }, 6000);
+        }
+
+    </script>
+    {% if configuracao.habilitar_chat_sac %}
+    <!-- BOTÃO FLUTUANTE SAC -->
+    <button class="btn btn-primary rounded-circle shadow-lg d-flex align-items-center justify-content-center" 
+            style="position: fixed; bottom: 80px; right: 20px; width: 60px; height: 60px; z-index: 1050; border: 3px solid white;"
+            data-bs-toggle="modal" data-bs-target="#modalSuporte">
+        <i class="bi bi-chat-dots-fill fs-3 text-white"></i>
+        <span class="position-absolute top-0 start-100 translate-middle p-2 bg-danger border border-light rounded-circle" id="badge-suporte-unread" style="display: none;">
+            <span class="visually-hidden">Novas mensagens</span>
+        </span>
+    </button>
+    {% endif %}
+
+    <!-- MODAL DE TICKETS DE SUPORTE -->
+    <div class="modal fade" id="modalSuporte" tabindex="-1" aria-hidden="true" style="z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down modal-lg">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 20px; height: 90vh;">
+                <!-- HEADER CHAT/LISTA -->
+                <div class="modal-header border-0 pb-3 pt-4 px-4 bg-primary text-white" style="border-radius: 20px 20px 0 0;">
+                    <button class="btn text-white me-2" id="btn-voltar-tickets" style="display: none;" onclick="voltarListaTickets()">
+                        <i class="bi bi-arrow-left fs-4"></i>
+                    </button>
+                    <h5 class="modal-title fw-bold flex-grow-1" id="suporte-modal-titulo">Meus Chamados</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                
+                <!-- BODY: LISTA DE TICKETS -->
+                <div class="modal-body p-0 position-relative" id="view-lista-tickets" style="background-color: #f8f9fa;">
+                    <div class="p-3 text-center bg-white border-bottom shadow-sm z-1 position-relative">
+                        <button class="btn btn-outline-primary rounded-pill fw-bold" onclick="abrirNovoTicket()">
+                            <i class="bi bi-plus-circle-fill me-1"></i> Abrir Novo Chamado
+                        </button>
+                    </div>
+                    <div class="p-3" id="container-tickets-ativos">
+                        <!-- Tickets preenchidos via JS -->
+                        <div class="text-center text-muted p-4">
+                            <i class="bi bi-chat-square-text fs-1"></i>
+                            <p class="mt-2 text-sm">Nenhum chamado aberto. Se precisar de ajuda com notas fiscais ou tiver um problema operacional, abra um chamado.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BODY: CRIAR NOVO TICKET -->
+                <div class="modal-body p-3" id="view-novo-ticket" style="display: none;">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Assunto do Chamado</label>
+                        <select class="form-select" id="suporte-novo-categoria">
+                            <option value="">Selecione...</option>
+                            <option value="DUVIDA_NF">Dúvida sobre Nota Fiscal</option>
+                            <option value="PROBLEMA_ENDERECO">Problema no Endereço / Telefone Errado</option>
+                            <option value="PROBLEMA_APP">Problema no Aplicativo</option>
+                            <option value="AVARIA_CARGA">Avaria na Carga / Acidente</option>
+                            <option value="AGUARDE_RETORNO">Preciso de liberação / Aguardo retorno</option>
+                            <option value="OUTROS">Outro Motivo</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-muted small"><i class="bi bi-file-earmark-text"></i> Referenciar NF (Opcional)</label>
+                        <select class="form-select" id="suporte-novo-nf">
+                            <option value="">(Nenhuma NF Específica)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Detalhes do problema</label>
+                        <textarea class="form-control" id="suporte-novo-msg" rows="3" placeholder="Digite detalhadamente o que você precisa..."></textarea>
+                    </div>
+                    <div class="d-grid mt-4">
+                        <button class="btn btn-primary rounded-pill fw-bold shadow-sm py-2" onclick="criarNovoTicket()">
+                            Iniciar Atendimento <i class="bi bi-send-fill ms-2"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- BODY: CHAT ATIVO -->
+                <div class="modal-body p-0 flex-column h-100" id="view-chat-ativo" style="display: none;">
+                    <input type="hidden" id="suporte-ticket-ativo-id">
+                    <div class="flex-grow-1 p-3 overflow-auto chat-container" id="suporte-chat-mensagens" 
+                         style="background-color: #efeae2; background-image: url('data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Ccircle cx=\'2\' cy=\'2\' r=\'1\' fill=\'%23dcd2c6\'/%3E%3C/svg%3E'); padding-bottom: 20px;">
+                        <!-- Balões de MSG -->
+                    </div>
+                    
+                    <div class="p-2 bg-light border-top shadow-sm d-flex gap-2 position-relative" id="suporte-chat-input-area" style="z-index: 10;">
+                        <input type="file" id="suporte-chat-arq" class="d-none" accept="image/*,video/*,audio/*" onchange="previewUploadArquivo()">
+                        <button class="btn btn-light border text-secondary" onclick="document.getElementById('suporte-chat-arq').click()">
+                            <i class="bi bi-paperclip fs-5"></i>
+                        </button>
+                        <button class="btn btn-light border text-danger" id="btn-gravar-audio" onclick="toggleGravarAudio()">
+                            <i class="bi bi-mic-fill fs-5"></i>
+                        </button>
+                        <input type="text" class="form-control border-0 rounded-pill px-3 shadow-none bg-white" id="suporte-chat-input" placeholder="Mensagem...">
+                        <button class="btn btn-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 45px; height: 45px; flex-shrink: 0;" onclick="enviarMensagemChat()">
+                            <i class="bi bi-send-fill ms-1 mt-1"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script src="{% static 'js/serviceworker.js' %}?v=1.34"></script>
+    <script src="/static/js/login_motorista/authFetch.js"></script>
+    <script src="{% static 'js/manifesto_v17.js' %}"></script>
+    <script src="{% static 'js/pwa_tracking.js' %}"></script>
+    <script src="{% static 'js/offiline.js' %}"></script>
+    <script src="{% static 'js/historico_v1.js' %}"></script>
+    <script src="{% static 'js/suporte_app.js' %}"></script>
+
+</body>
+
+</html>

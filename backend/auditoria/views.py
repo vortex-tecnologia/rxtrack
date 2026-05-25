@@ -1,0 +1,131 @@
+from django.shortcuts import render
+from django.views.generic import TemplateView
+from django.contrib.auth.decorators import login_required
+from django.utils.decorators import method_decorator
+from django.utils import timezone
+from datetime import timedelta
+from django.db.models import Count, Q, F, ExpressionWrapper, DateTimeField
+from manifesto.models import Manifesto, NotaFiscal, BaixaNF, Ocorrencia
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.db import transaction
+from manifesto.tasks import enviar_baixa_esl_task
+
+@method_decorator(login_required, name='dispatch')
+class AuditoriaDashboardView(TemplateView):
+    template_name = 'desktop/auditoria_dashboard.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Filtros básicos
+        filial_id = self.request.GET.get('filial')
+        motorista_id = self.request.GET.get('motorista')
+        
+        # Manifestos Ativos (EM_TRANSPORTE)
+        manifestos_ativos = Manifesto.objects.filter(status='EM_TRANSPORTE').select_related('motorista', 'filial')
+        
+        if filial_id:
+            manifestos_ativos = manifestos_ativos.filter(filial_id=filial_id)
+        if motorista_id:
+            manifestos_ativos = manifestos_ativos.filter(motorista_id=motorista_id)
+
+        # Adiciona contagem de notas
+        manifestos_ativos = manifestos_ativos.annotate(
+            total_notas=Count('notas_fiscais'),
+            notas_pendentes=Count('notas_fiscais', filter=Q(notas_fiscais__status='PENDENTE')),
+            notas_baixadas=Count('notas_fiscais', filter=Q(notas_fiscais__status__in=['BAIXADA', 'OCORRENCIA']))
+        )
+
+        # Lógica de "Stale" (Parado)
+        agora = timezone.now()
+        limite_stale = agora - timedelta(hours=4)
+        
+        manifestos_data = []
+        for m in manifestos_ativos:
+            status_cor = 'success'
+            if m.notas_pendentes > 0:
+                if not m.ultimo_acesso or m.ultimo_acesso < limite_stale:
+                    status_cor = 'danger' # Crítico: Notas pendentes e sem acesso há 4h
+                elif m.ultimo_acesso < (agora - timedelta(hours=2)):
+                    status_cor = 'warning' # Atenção: Sem acesso há 2h
+            
+            # Progresso
+            progresso = 0
+            if m.total_notas > 0:
+                progresso = int((m.notas_baixadas / m.total_notas) * 100)
+
+            manifestos_data.append({
+                'obj': m,
+                'status_cor': status_cor,
+                'progresso': progresso,
+                'horas_sem_sinal': int((agora - m.ultimo_acesso).total_seconds() / 3600) if m.ultimo_acesso else None
+            })
+
+        context['manifestos'] = manifestos_data
+        context['total_ativos'] = manifestos_ativos.count()
+        context['total_criticos'] = sum(1 for d in manifestos_data if d['status_cor'] == 'danger')
+        
+        # Penalidades (Motorista Desleixo)
+        context['total_penalidades'] = BaixaNF.objects.filter(motivo_baixa='MOTORISTA_DESLEIXO').count()
+        
+        # Top 5 Motoristas com mais penalidades (Opcional, mas útil)
+        context['top_penalidades'] = BaixaNF.objects.filter(
+            motivo_baixa='MOTORISTA_DESLEIXO'
+        ).values(
+            'nota_fiscal__manifesto__motorista__nome_completo'
+        ).annotate(
+            total=Count('id')
+        ).order_by('-total')[:5]
+
+        return context
+
+class RegistrarBaixaManualSACView(APIView):
+    """
+    Endpoint exclusivo para o SAC realizar baixas forçadas pelo painel de auditoria.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        nota_id = request.data.get('nota_id')
+        codigo_tms = request.data.get('codigo_tms')
+        observacao = request.data.get('observacao', '')
+        
+        if not nota_id or not codigo_tms:
+            return Response({'erro': 'Nota e Código de Ocorrência são obrigatórios.'}, status=400)
+
+        try:
+            with transaction.atomic():
+                nf = NotaFiscal.objects.get(id=nota_id)
+                ocorrencia = Ocorrencia.objects.get(codigo_tms=codigo_tms)
+                
+                # Identifica o SAC que está realizando a baixa
+                perfil_sac = getattr(request.user, 'motorista_perfil', None)
+                
+                baixa = BaixaNF.objects.create(
+                    nota_fiscal=nf,
+                    tipo='ENTREGA' if ocorrencia.tipo == 'ENTREGA' else 'OCORRENCIA',
+                    ocorrencia=ocorrencia,
+                    recebedor="FINALIZADO PELO SAC",
+                    observacao=f"[BAIXA SAC] {observacao}",
+                    autor_baixa=perfil_sac,
+                    data_baixa=timezone.now()
+                )
+                
+                nf.status = 'BAIXADA' if baixa.tipo == 'ENTREGA' else 'OCORRENCIA'
+                nf.save()
+                
+                # Integração com TMS
+                from configuracao.utils import get_config
+                config = get_config()
+                if config.enviar_tms:
+                    enviar_baixa_esl_task.delay(baixa.id)
+                
+                return Response({
+                    'status': 'sucesso',
+                    'mensagem': f'Nota {nf.numero_nota} baixada com sucesso pelo SAC e enviada ao TMS.'
+                })
+                
+        except Exception as e:
+            return Response({'erro': str(e)}, status=400)

@@ -1,22 +1,28 @@
-"""
-URL configuration for core project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
+# core/urls.py
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static # Necessário para arquivos de mídia
+from django.views.generic import RedirectView
 
 urlpatterns = [
+    # Redireciona a raiz (/) para /login/
+    path('', RedirectView.as_view(url='/login/', permanent=True)),
     path('admin/', admin.site.urls),
+    path('api/auth/', include('core.rotas.auth')),
+    path('auth/', include(('usuarios.urls', 'usuarios'), namespace='usuarios')),
+    path('api/', include(('manifesto.urls', 'manifesto'), namespace='manifesto')),
+    path('app/', include(('mobile.urls', 'mobile'), namespace='mobile')),
+    path('app-sac/', include(('sac_mobile.urls', 'sac_mobile'), namespace='sac_mobile')),
+    path('', include(('operacional.urls', 'operacional'), namespace='operacional')),
+    path('ia/', include(('AgenteIa.urls', 'AgenteIa'), namespace='AgenteIa')),
+    path('suporte/', include('suporte.urls')),
+    path('auditoria/', include('auditoria.urls', namespace='auditoria')),
+    path('', include('pwa.urls')),
+    # Gestao de Usuarios
+    path('gestao/', include('usuarios.gestao_urls')),
 ]
+
+# Configuração para servir arquivos de mídia (Fotos de comprovantes) em ambiente de desenvolvimento
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

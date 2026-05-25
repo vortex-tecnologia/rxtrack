@@ -1,0 +1,117 @@
+{% extends 'desktop/base.html' %}
+
+{% block title %}Suporte Online - WhatsApp Style{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0" style="height: calc(100vh - 120px);">
+    <div class="card border-0 shadow-sm h-100 flex-row overflow-hidden">
+        <!-- Sidebar Contatos -->
+        <div class="border-end d-flex flex-column" style="width: 350px; background: #fff;">
+            <div class="p-3 border-bottom d-flex align-items-center justify-content-between" style="background: #f0f2f5;">
+                <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                    <i class="bi bi-person-fill"></i>
+                </div>
+                <div class="d-flex gap-3 text-muted">
+                    <i class="bi bi-chat-left-text-fill"></i>
+                    <i class="bi bi-three-dots-vertical"></i>
+                </div>
+            </div>
+            
+            <div class="p-2 border-bottom">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-light border-0"><i class="bi bi-search text-muted"></i></span>
+                    <input type="text" class="form-control bg-light border-0" placeholder="Pesquisar ou começar uma nova conversa">
+                </div>
+            </div>
+
+            <div class="flex-grow-1 overflow-auto">
+                <div class="p-3 d-flex align-items-center border-bottom bg-light">
+                    <div class="rounded-circle bg-success text-white d-flex align-items-center justify-content-center me-3" style="width: 45px; height: 45px;">
+                        <i class="bi bi-robot"></i>
+                    </div>
+                    <div class="flex-grow-1 overflow-hidden">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0 text-truncate">Suporte Automático</h6>
+                            <small class="text-success">agora</small>
+                        </div>
+                        <small class="text-muted text-truncate d-block">Olá! Como posso te ajudar hoje?</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Área de Chat -->
+        <div class="flex-grow-1 d-flex flex-column" style="background: #e5ddd5; position: relative;">
+            <!-- Wallpaper de fundo sutil -->
+            <div style="position: absolute; top:0; left:0; right:0; bottom:0; background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); opacity: 0.06; pointer-events: none;"></div>
+
+            <!-- Header do Chat -->
+            <div class="p-2 d-flex align-items-center border-bottom bg-white shadow-sm" style="z-index: 10;">
+                <div class="rounded-circle bg-success text-white d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+                    <i class="bi bi-robot"></i>
+                </div>
+                <div>
+                    <h6 class="mb-0">Suporte Automático</h6>
+                    <small class="text-success">online</small>
+                </div>
+                <div class="ms-auto me-2 text-muted">
+                    <i class="bi bi-search p-2"></i>
+                    <i class="bi bi-three-dots-vertical p-2"></i>
+                </div>
+            </div>
+
+            <!-- Mensagens -->
+            <div class="flex-grow-1 p-4 overflow-auto d-flex flex-column gap-3" style="z-index: 1;">
+                <div class="align-self-center bg-info bg-opacity-10 text-dark px-3 py-1 rounded small mb-2 shadow-sm border border-info border-opacity-25">
+                    MENSAGENS CRIPTOGRAFADAS DE PONTA A PONTA
+                </div>
+
+                <!-- Recebida -->
+                <div class="bg-white p-2 rounded shadow-sm" style="max-width: 60%; align-self: flex-start; position: relative; border-radius: 0 8px 8px 8px !important;">
+                    <p class="mb-1">Olá {{ usuario_nome }}! Bem-vindo ao suporte online da Quick Track.</p>
+                    <small class="text-muted d-block text-end" style="font-size: 0.7rem;">16:45</small>
+                </div>
+
+                <!-- Enviada -->
+                <div class="bg-success-subtle p-2 rounded shadow-sm" style="max-width: 60%; align-self: flex-end; position: relative; border-radius: 8px 0 8px 8px !important;">
+                    <p class="mb-1">Preciso de ajuda com uma importação de manifesto.</p>
+                    <div class="d-flex justify-content-end align-items-center gap-1">
+                        <small class="text-muted text-end" style="font-size: 0.7rem;">16:50</small>
+                        <i class="bi bi-check2-all text-primary" style="font-size: 0.8rem;"></i>
+                    </div>
+                </div>
+
+                <!-- Recebida -->
+                <div class="bg-white p-2 rounded shadow-sm" style="max-width: 60%; align-self: flex-start; border-radius: 0 8px 8px 8px !important;">
+                    <p class="mb-1">Com certeza! Pode me enviar o número do manifesto ou o erro que está aparecendo?</p>
+                    <small class="text-muted d-block text-end" style="font-size: 0.7rem;">16:51</small>
+                </div>
+            </div>
+
+            <!-- Input de Mensagem -->
+            <div class="p-2 border-top bg-white d-flex align-items-center gap-2" style="z-index: 10;">
+                <button class="btn btn-link text-muted"><i class="bi bi-emoji-smile fs-4"></i></button>
+                <button class="btn btn-link text-muted"><i class="bi bi-paperclip fs-4"></i></button>
+                <input type="text" class="form-control border-0 bg-light" placeholder="Digite uma mensagem" style="border-radius: 20px;">
+                <button class="btn btn-success rounded-circle d-flex align-items-center justify-content-center" style="width: 45px; height: 45px;">
+                    <i class="bi bi-send-fill text-white"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.addEventListener('load', () => {
+        Swal.fire({
+            title: 'Suporte Online em Breve!',
+            text: 'Estamos finalizando as integrações do nosso chat inteligente para melhor atendê-lo. Por enquanto, os chamados são apenas demonstrativos.',
+            icon: 'info',
+            confirmButtonText: 'Entendido',
+            confirmButtonColor: '#0d6efd'
+        });
+    });
+</script>
+{% endblock %}
