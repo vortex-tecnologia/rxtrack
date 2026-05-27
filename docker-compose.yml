@@ -1,149 +1,179 @@
-# =============================================================
-# Docker Compose - QuickTrack (Homologação)
-# =============================================================
-# Ao subir na VPS do cliente, o backend automaticamente:
-#   1. Aguarda o MySQL ficar disponível
-#   2. Roda migrações do banco
-#   3. Coleta arquivos estáticos
-#   4. Cria superusuário admin + envia email com credenciais
-#   5. Inicia o servidor Daphne (ASGI)
-#
-# Infraestrutura do cliente:
-#   - MySQL na porta 3307 (homologação) / 3308 (produção)
-#   - Backend exposto na porta 8001 (homologação) / 8000 (produção)
-#
-# Portainer: http://<IP_VPS>:9000
-#   User: admin | Senha padrão: QuickTrack@2026!
-# =============================================================
-
 services:
 
-  # 1. Banco de Dados MySQL
-  db:
-    image: mysql:8.0
-    container_name: qt_homolog_db
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: quicktrack_homolog
-      MYSQL_USER: quicktrack
-      MYSQL_PASSWORD: quicktrack123
-    volumes:
-      - db_data_homolog:/var/lib/mysql
-    ports:
-      - "127.0.0.1:3307:3306"
-    networks:
-      - qt-network
-
-  # 2. Broker de Mensagens Redis
   redis:
     image: redis:7-alpine
     container_name: qt_homolog_redis
     restart: always
+
     networks:
       - qt-network
 
-  # 3. Backend Django/DRF (Servidor Web Principal)
-  # Porta interna 8000, exposta como 8001 para não conflitar com produção
   backend:
     build: ./backend
     container_name: qt_homolog_backend
     restart: always
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     entrypoint: ["sh", "./entrypoint.sh"]
-    command: ["daphne", "-b", "0.0.0.0", "-p", "8000", "--application-close-timeout", "60", "core.asgi:application"]
+
+    command:
+      [
+        "daphne",
+        "-b",
+        "0.0.0.0",
+        "-p",
+        "8000",
+        "--application-close-timeout",
+        "60",
+        "core.asgi:application"
+      ]
+
     env_file:
       - ./backend/.env
+
     environment:
       - RUN_SETUP=true
+
     volumes:
       - ./backend:/transportadora_backend
       - media_data:/transportadora_backend/media
+
     depends_on:
-      - db
       - redis
+
     ports:
       - "8001:8000"
+
     networks:
       - qt-network
 
-  # 4. Worker do Celery (Tarefas Assíncronas)
   celery_worker:
     build: ./backend
     container_name: qt_homolog_celery_worker
     restart: always
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     entrypoint: ["sh", "./entrypoint.sh"]
-    command: ["celery", "-A", "core", "worker", "-l", "info"]
+
+    command:
+      [
+        "celery",
+        "-A",
+        "core",
+        "worker",
+        "-l",
+        "info"
+      ]
+
     env_file:
       - ./backend/.env
+
     volumes:
       - ./backend:/transportadora_backend
       - media_data:/transportadora_backend/media
+
     depends_on:
-      - backend
-      - db
       - redis
+
     networks:
       - qt-network
 
-  # 5. Agendador do Celery Beat (Tarefas Recorrentes)
   celery_beat:
     build: ./backend
     container_name: qt_homolog_celery_beat
     restart: always
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     entrypoint: ["sh", "./entrypoint.sh"]
-    command: ["celery", "-A", "core", "beat", "-l", "info", "--scheduler", "django_celery_beat.schedulers.DatabaseScheduler"]
+
+    command:
+      [
+        "celery",
+        "-A",
+        "core",
+        "beat",
+        "-l",
+        "info",
+        "--scheduler",
+        "django_celery_beat.schedulers.DatabaseScheduler"
+      ]
+
     env_file:
       - ./backend/.env
+
     volumes:
       - ./backend:/transportadora_backend
+
     depends_on:
-      - db
       - redis
+
     networks:
       - qt-network
 
-  # 6. Worker Especializado para IA (YOLO + OCR)
   celery_worker_ai:
     build: ./backend
     container_name: qt_homolog_celery_ai
     restart: always
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     entrypoint: ["sh", "./entrypoint.sh"]
-    # Fila específica (-Q ai_queue) com pool 'solo' para evitar crashes do PyTorch/OpenCV
-    command: ["celery", "-A", "core", "worker", "-l", "info", "-Q", "ai_queue", "--pool=solo", "--concurrency=1"]
+
+    command:
+      [
+        "celery",
+        "-A",
+        "core",
+        "worker",
+        "-l",
+        "info",
+        "-Q",
+        "ai_queue",
+        "--pool=solo",
+        "--concurrency=1"
+      ]
+
     env_file:
       - ./backend/.env
+
     environment:
       - OMP_NUM_THREADS=1
       - OPENBLAS_NUM_THREADS=1
       - MKL_NUM_THREADS=1
       - VECLIB_MAXIMUM_THREADS=1
       - NUMEXPR_NUM_THREADS=1
+
     volumes:
       - ./backend:/transportadora_backend
       - media_data:/transportadora_backend/media
+
     depends_on:
-      - db
       - redis
+
     networks:
       - qt-network
 
-  # 7. Painel de Gestão e Monitoramento do Docker (Portainer)
-  # ─────────────────────────────────────────────────────────
-  # Acesso: http://<IP_VPS>:9000
-  # User: admin | Senha padrão: QuickTrack@2026!
-  # Funciona INDEPENDENTE do Django — mesmo que o backend crashe,
-  # o Portainer continua acessível para ver logs e reiniciar containers.
   portainer:
     image: portainer/portainer-ce:latest
     container_name: qt_homolog_portainer
     restart: always
+
     ports:
-      - "9000:9000"
+      - "127.0.0.1:9000:9000"
+
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - portainer_data:/data
-    # Hash bcrypt da senha "QuickTrack@2026!" (gerado com rounds=10)
+
     command: --admin-password '$$2b$$10$$dNxs1ay/04kVqPd8fPAEIuJ7KbI0c6x3rnRQmHKR4mJliTwtLwBQy'
+
     networks:
       - qt-network
 
@@ -151,6 +181,5 @@ networks:
   qt-network:
 
 volumes:
-  db_data_homolog:
   media_data:
   portainer_data:
