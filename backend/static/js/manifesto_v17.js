@@ -21,7 +21,7 @@ const ENDPOINTS = {
     status: `${API_BASE}manifesto/status/`,
 };
 
-const LOGIN_URL = '/app/login/';
+const LOGIN_URL = '/login/';
 let loadingModal = null;
 let pollingInterval = null;
 let manifestoAtual = null;
