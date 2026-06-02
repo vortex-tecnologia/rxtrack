@@ -36,9 +36,6 @@ def notificar_falha_tms(baixa_id, erro, task_name=""):
     """
     Envia email de notificação quando uma integração TMS falha.
     Só envia se a flag enviar_email_falhas estiver ativa e houver emails cadastrados.
-    
-    - Remetente: configurado no settings.py (EMAIL_HOST_USER)
-    - Destinatários: cadastrados no Admin (emails_notificacao)
     """
     config = get_config()
     if not config.enviar_email_falhas:
@@ -51,24 +48,63 @@ def notificar_falha_tms(baixa_id, erro, task_name=""):
     
     try:
         from django.core.mail import send_mail
+        from django.template.loader import render_to_string
+        from django.utils.html import strip_tags
         from django.conf import settings
+        from manifesto.models import BaixaNF
+        from django.utils import timezone
         
-        assunto = f"⚠️ Falha TMS - Baixa #{baixa_id}"
-        mensagem = (
-            f"Uma integração com o TMS falhou.\n\n"
-            f"Task: {task_name}\n"
-            f"Baixa ID: {baixa_id}\n"
-            f"Erro: {erro}\n\n"
-            f"Verifique o painel administrativo para mais detalhes."
-        )
+        # Busca detalhes da baixa
+        try:
+            baixa = BaixaNF.objects.select_related(
+                'nota_fiscal', 
+                'nota_fiscal__manifesto', 
+                'nota_fiscal__manifesto__motorista'
+            ).get(id=baixa_id)
+            
+            nota = baixa.nota_fiscal
+            manifesto = nota.manifesto
+            
+            # Formatar datas para o email
+            data_baixa_formatada = timezone.localtime(baixa.data_baixa).strftime('%d/%m/%Y %H:%M:%S')
+            data_criacao_mft_formatada = timezone.localtime(manifesto.data_criacao).strftime('%d/%m/%Y %H:%M:%S')
+            
+            numero_manifesto = manifesto.numero_manifesto
+            motorista_nome = manifesto.motorista.nome_completo if manifesto.motorista else "Não atribuído"
+            numero_nota = nota.numero_nota or "N/A"
+            chave_nfe = nota.chave_acesso or "N/A"
+            
+        except BaixaNF.DoesNotExist:
+            numero_manifesto = "N/A (Baixa Excluída)"
+            data_criacao_mft_formatada = "N/A"
+            motorista_nome = "N/A"
+            numero_nota = "N/A"
+            chave_nfe = "N/A"
+            data_baixa_formatada = "N/A"
+
+        assunto = f"⚠️ Falha TMS - Manifesto #{numero_manifesto} / NF {numero_nota}"
+        
+        contexto = {
+            'numero_manifesto': numero_manifesto,
+            'data_criacao_manifesto': data_criacao_mft_formatada,
+            'motorista_nome': motorista_nome,
+            'numero_nota': numero_nota,
+            'chave_nfe': chave_nfe,
+            'data_baixa': data_baixa_formatada,
+            'erro': erro
+        }
+        
+        html_message = render_to_string('emails/falha_tms.html', contexto)
+        plain_message = strip_tags(html_message)
         
         send_mail(
             assunto,
-            mensagem,
+            plain_message,
             settings.DEFAULT_FROM_EMAIL,
             destinatarios,
+            html_message=html_message,
             fail_silently=True,
         )
-        print(f"EMAIL: Notificação de falha TMS enviada para {', '.join(destinatarios)}")
+        print(f"EMAIL HTML: Notificação de falha TMS enviada para {', '.join(destinatarios)}")
     except Exception as e:
-        print(f"EMAIL: Erro ao enviar notificação de falha: {e}")
+        print(f"EMAIL: Erro ao enviar notificação de falha HTML: {e}")

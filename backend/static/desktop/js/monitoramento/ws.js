@@ -48,15 +48,118 @@ function conectarWebSocket() {
 
             // 2. TRATAR ATUALIZAÇÃO DE MANIFESTO (SIGNAL)
             if (data.dados && data.type !== 'status_motorista') {
-                const mID = data.dados.manifesto_id;
-                // ... lógica de atualização de progresso na tabela ...
+                const d = data.dados;
+                const mID = d.manifesto_id;
+                
+                if (d.remover) {
+                    const card = document.getElementById(`card-mft-${mID}`);
+                    if (card) {
+                        card.classList.add('fade-out');
+                        setTimeout(() => card.remove(), 600);
+                    }
+                    return; // Ignora o resto se for remover
+                }
+
+                let cardContainer = document.getElementById(`card-mft-${mID}`);
+
+                // Se não existe, criamos um novo
+                if (!cardContainer) {
+                    criarNovoCardManifesto(d);
+                    cardContainer = document.getElementById(`card-mft-${mID}`);
+                }
+
+                // Atualiza a barrinha azul
                 const progressBar = document.getElementById(`progress-bar-${mID}`);
-                if (progressBar) progressBar.style.width = (data.dados.porcentagem || 0) + '%';
+                if (progressBar) progressBar.style.width = (d.porcentagem || 0) + '%';
+                
+                // Atualiza os números
+                const baixadasEl = document.getElementById(`baixadas-${mID}`);
+                if (baixadasEl) baixadasEl.innerText = d.baixadas;
+
+                const totalEl = document.getElementById(`total-${mID}`);
+                if (totalEl) totalEl.innerText = d.total;
+
+                const percentEl = document.getElementById(`percent-${mID}`);
+                if (percentEl) percentEl.innerText = d.porcentagem;
+
+                // Efeito de flash (pulsada no card)
+                if (cardContainer) {
+                    const innerCard = cardContainer.querySelector('.card');
+                    if (innerCard) {
+                        innerCard.classList.remove('card-update-flash');
+                        void innerCard.offsetWidth; // força reflow para reiniciar animação
+                        innerCard.classList.add('card-update-flash');
+                    }
+                }
             }
         } catch (err) {
             console.error("❌ Erro ao processar mensagem WS:", err);
         }
     };
+
+    function criarNovoCardManifesto(d) {
+        const grid = document.getElementById('grid-monitoramento');
+        if (!grid) return;
+
+        // Remove a mensagem de "Nenhum manifesto" caso exista
+        const emptyMsg = grid.querySelector('.col-12.text-center.py-5');
+        if (emptyMsg) {
+            emptyMsg.remove();
+        }
+
+        const html = `
+            <div class="col-12 col-md-6 col-lg-4 col-xl-3" id="card-mft-${d.manifesto_id}">
+                <div class="card h-100 border-0 shadow-sm position-relative overflow-hidden" style="border-radius: 15px;">
+                    <div class="progress position-absolute top-0 start-0 w-100" style="height: 4px; border-radius: 0;">
+                        <div id="progress-bar-${d.manifesto_id}" class="progress-bar bg-primary" role="progressbar"
+                            style="width: ${d.porcentagem || 0}%"></div>
+                    </div>
+
+                    <div class="card-body pt-4">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="flex-shrink-0">
+                                <div class="bg-soft-primary p-3 rounded-circle">
+                                    <i class="fas fa-truck-moving text-primary"></i>
+                                </div>
+                            </div>
+                            <div class="ms-3">
+                                <h6 class="mb-0 fw-bold">${d.motorista_nome || 'Desconhecido'}</h6>
+                                <small class="text-muted">Manifesto: #${d.manifesto_id}</small>
+                                <small class="text-muted d-block mt-1" style="font-size: 9px;" id="data-registro-${d.manifesto_id}">
+                                    <i class="bi bi-clock pe-1"></i>${d.data_registro || ''}
+                                </small>
+                            </div>
+                        </div>
+
+                        <div class="row text-center bg-light rounded-3 py-2 g-0">
+                            <div class="col-6 border-end">
+                                <small class="text-muted d-block">Total</small>
+                                <span class="fw-bold" id="total-${d.manifesto_id}">${d.total || 0}</span>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted d-block">Baixadas</small>
+                                <span class="fw-bold text-success" id="baixadas-${d.manifesto_id}">
+                                    ${d.baixadas || 0}</span>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 d-flex justify-content-between align-items-center">
+                            <div class="text-primary fw-bold fs-5">
+                                <span id="percent-${d.manifesto_id}">
+                                    ${d.porcentagem || 0}</span>%
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary"
+                                onclick="abrirRastreio('${d.manifesto_id}', '${d.motorista_nome || ''}', '${d.baixadas || 0}', '${d.total || 0}')">
+                                <i class="bi bi-geo-alt me-1"></i> Rastrear
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        grid.insertAdjacentHTML('afterbegin', html);
+    }
 
     function updateBatteryIcon(mID, level) {
         const container = document.getElementById(`battery-mft-${mID}`);
