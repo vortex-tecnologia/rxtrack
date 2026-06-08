@@ -3,7 +3,7 @@ const CACHE_NAME = 'fluxo-logistica-v1.35';
 
 const filesToCache = [
     '/app/',
-    '/app/login/',
+    '/login/',
     '/static/css/app_v2.css',
     '/static/css/login.css',
     '/static/js/manifesto_v17.js',

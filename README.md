@@ -20,7 +20,7 @@ Abaixo estão listadas as atualizações passadas do projeto principal (`nv`) pa
 
 4. **Frontend e PWA (Aplicativo Mobile):**
    - Atualização das imagens e ícones do PWA (`icon-160x160.png`, `icon-512x512.png`).
-   - Correção do redirecionamento do Service Worker e dos scripts Javascript. A rota de autenticação foi corrigida de `/login/` para `/app/login/` (`backend/static/js/manifesto_v17.js` e `backend/static/js/serviceworker.js`).
+   - Correção do redirecionamento do Service Worker e dos scripts Javascript. A rota de autenticação foi mantida em `/login/` (`backend/static/js/manifesto_v17.js` e `backend/static/js/serviceworker.js`).
 
 ---
 > **Aviso de Infraestrutura:** Os arquivos de configuração de ambiente (`docker-compose.yml`, `.env`, `Dockerfile`) **não** foram sobrescritos. A porta principal do projeto foi preservada como **8000**, para garantir que o ambiente de produção permaneça separado do ambiente VPS de testes.
