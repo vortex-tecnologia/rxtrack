@@ -33,7 +33,8 @@
         background: var(--dark-bg);
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         z-index: 1050;
-        overflow: hidden;
+        overflow-y: auto;
+        overflow-x: hidden;
     }
 
     /* Quando a classe .active é adicionada, ela expande */
@@ -238,11 +239,24 @@
     return cookieValue;
 }
 
-    document.getElementById('btn-toggle-sidebar').addEventListener('click', function() {
+    document.getElementById('btn-toggle-sidebar').addEventListener('click', function(e) {
+        e.stopPropagation();
         // Alterna a classe no sidebar para expandir/recolher
         document.getElementById('sidebar').classList.toggle('active');
         // Alterna a margem do conteúdo principal
         document.getElementById('main-content').classList.toggle('expanded');
+    });
+
+    // Fechar barra lateral ao clicar fora (no mobile)
+    document.addEventListener('click', function(event) {
+        const sidebar = document.getElementById('sidebar');
+        // Verifica se tela é mobile e se o sidebar está aberto
+        if (window.innerWidth <= 768 && sidebar.classList.contains('active')) {
+            if (!sidebar.contains(event.target)) {
+                sidebar.classList.remove('active');
+                document.getElementById('main-content').classList.remove('expanded');
+            }
+        }
     });
 
     // Opcional: Fechar menu automaticamente se a tela for pequena ao carregar
