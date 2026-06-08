@@ -35,6 +35,12 @@
         z-index: 1050;
         overflow-y: auto;
         overflow-x: hidden;
+        scrollbar-width: none; /* Firefox */
+    }
+
+    /* Ocultar barra de rolagem no Chrome/Safari/Edge */
+    #sidebar::-webkit-scrollbar {
+        display: none;
     }
 
     /* Quando a classe .active é adicionada, ela expande */
