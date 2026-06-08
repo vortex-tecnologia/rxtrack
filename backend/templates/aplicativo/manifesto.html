@@ -1315,6 +1315,7 @@
             }, ms);
         }
         function verificarStatusNotificacao() {
+            return; // TODO: Alerta desativado temporariamente. Futuramente será via WhatsApp.
             if (localStorage.getItem("webpush_aceitou") === "true" || Notification.permission === "granted") {
                 return;
             }
