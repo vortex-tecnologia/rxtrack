@@ -5,7 +5,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="apple-touch-icon" href="/static/images/icon-160x160.png">
+    <meta name="theme-color" content="#0d6efd">
+    <link rel="manifest" href="/app-sac/manifest_sac.json">
+    <link rel="apple-touch-icon" href="/static/images/icon-sac-160x160.png">
     <title>App SAC - Gestão de Notas</title>
     <link href="{% static 'css/bootstrap.min.css' %}" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/bootstrap-icons.css' %}">
@@ -530,6 +532,20 @@
             } else {
                 showFeedback(false, "Erro no Envio", data.error || "Não foi possível registrar a ocorrência.");
             }
+        }
+    </script>
+    <script>
+        // Registro do Service Worker Exclusivo para o SAC
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/app-sac/serviceworker_sac.js')
+                    .then(registration => {
+                        console.log('✅ ServiceWorker SAC Registrado com sucesso:', registration.scope);
+                    })
+                    .catch(err => {
+                        console.log('❌ Falha ao registrar ServiceWorker SAC:', err);
+                    });
+            });
         }
     </script>
 </body>

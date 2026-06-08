@@ -4,11 +4,16 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static # Necessário para arquivos de mídia
 from django.views.generic import RedirectView
+from usuarios.views_login.auth_views import login_sac_mobile_view
 
 urlpatterns = [
     # Redireciona a raiz (/) para /login/
     path('', RedirectView.as_view(url='/login/', permanent=True)),
     path('admin/', admin.site.urls),
+    
+    # Rota Exclusiva de Login do SAC
+    path('login-sac/', login_sac_mobile_view, name='login_sac_mobile'),
+    
     path('api/auth/', include('core.rotas.auth')),
     path('auth/', include(('usuarios.urls', 'usuarios'), namespace='usuarios')),
     path('api/', include(('manifesto.urls', 'manifesto'), namespace='manifesto')),

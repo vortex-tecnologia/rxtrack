@@ -145,3 +145,19 @@ class MeView(APIView):
             "tipo": motorista.tipo_usuario,
             "cargo": motorista.cargo
         })
+
+@csrf_exempt
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def login_sac_mobile_view(request):
+    """
+    Renderiza a página de login exclusiva para o SAC.
+    O JS desta página irá lidar com a requisição POST para a API /api/token/ 
+    e então redirecionar para /app-sac/.
+    """
+    if request.method == 'GET':
+        from django.shortcuts import render
+        return render(request, 'aplicativo/sac/login.html')
+    else:
+        return Response({'erro': 'Metodo nao permitido para renderizacao de template.'}, status=405)

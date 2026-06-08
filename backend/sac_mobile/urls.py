@@ -5,6 +5,8 @@ app_name = 'sac_mobile'
 
 urlpatterns = [
     path('', views.app_view, name='app_home'),
+    path('manifest_sac.json', views.serve_manifest_sac, name='manifest_sac'),
+    path('serviceworker_sac.js', views.serve_sw_sac, name='serviceworker_sac'),
     path('api/search-nf/', views.api_search_nf, name='api_search_nf'),
     path('api/check-comprovante/', views.api_check_comprovante_sac, name='api_check_comprovante_sac'),
     path('api/baixa/', views.api_registrar_baixa_sac, name='api_registrar_baixa_sac'),
