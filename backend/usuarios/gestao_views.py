@@ -173,11 +173,11 @@ def api_editar_usuario(request, usuario_id):
     except Motorista.DoesNotExist:
         return JsonResponse({'erro': 'Usuario nao encontrado'}, status=404)
     
-    # Nao pode editar quem tem cargo >= ao seu
+    # Nao pode editar quem tem cargo >= ao seu, exceto se for Gestor
     nivel_logado = CARGO_NIVEL.get(perfil.cargo, 0)
     nivel_alvo = CARGO_NIVEL.get(alvo.cargo, 0)
     
-    if nivel_alvo >= nivel_logado:
+    if nivel_alvo >= nivel_logado and perfil.cargo != 'GESTOR':
         return JsonResponse({'erro': 'Voce nao pode editar este usuario'}, status=403)
     
     try:
@@ -192,7 +192,7 @@ def api_editar_usuario(request, usuario_id):
     if 'cargo' in data:
         cargo_novo = data['cargo']
         nivel_novo = CARGO_NIVEL.get(cargo_novo, 0)
-        if nivel_novo >= nivel_logado:
+        if nivel_novo >= nivel_logado and perfil.cargo != 'GESTOR':
             return JsonResponse({'erro': f'Voce nao pode promover para {cargo_novo}'}, status=403)
         alvo.cargo = cargo_novo
     
@@ -229,8 +229,11 @@ def api_deletar_usuario(request, usuario_id):
     nivel_logado = CARGO_NIVEL.get(perfil.cargo, 0)
     nivel_alvo = CARGO_NIVEL.get(alvo.cargo, 0)
     
-    if nivel_alvo >= nivel_logado:
+    if nivel_alvo >= nivel_logado and perfil.cargo != 'GESTOR':
         return JsonResponse({'erro': 'Voce nao pode excluir este usuario'}, status=403)
+        
+    if alvo.id == perfil.id:
+        return JsonResponse({'erro': 'Voce nao pode excluir a si mesmo'}, status=403)
     
     # Gerente so deleta MEMBRO
     if perfil.cargo == 'GERENTE' and alvo.cargo != 'MEMBRO':
