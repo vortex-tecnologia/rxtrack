@@ -43,3 +43,23 @@ Abaixo estão listadas as atualizações passadas do projeto principal (`nv`) pa
 
 4. **Painel de Gestão de Usuários (Controle de Acesso):**
    - Correção de validação hierárquica no backend (`usuarios/gestao_views.py`) que bloqueava perfis do tipo `GESTOR` de editar ou excluir permissões de outros Gestores (ou deles mesmos). Agora Gestores possuem passe-livre, enquanto Gerentes continuam com a trava.
+
+---
+
+**Data:** 08/06/2026
+**Hora:** 17:30
+
+## Arquitetura PWA Duplo (Motorista e SAC):
+
+Foi realizado um **rollback total** nas tentativas anteriores de unificar as rotas do SAC e Motorista sob o mesmo Service Worker, pois a lógica de interceptação estava prejudicando o cache offline necessário para o motorista em áreas sem internet.
+
+Para resolver o problema definitivamente, o sistema foi dividido em dois PWA instaláveis independentes:
+
+1. **PWA do Motorista (Original):**
+   - **Acesso:** `/login/` -> `/app/`
+   - **Comportamento:** Mantém o Cache Offline-First agressivo. Nenhuma alteração foi mantida.
+2. **PWA do SAC (Novo):**
+   - **Acesso Exclusivo:** Nova rota `/login-sac/` redirecionando para `/app-sac/`.
+   - **PWA Isolado:** Criados `manifest_sac.json` e `serviceworker_sac.js`.
+   - **Comportamento do Cache:** Estratégia "Network-First", garantindo que a equipe do SAC sempre veja a versão mais recente em tempo real (já que operam com internet estável), eliminando o bug de roteamento corrompido ao fechar o app.
+   - **Identidade Visual:** Adicionados novos ícones (`icon-sac-160x160.png` e `icon-sac-512x512.png`) com badge "SAC" personalizado, permitindo que os gestores identifiquem facilmente qual aplicativo está instalado na tela inicial do celular.
