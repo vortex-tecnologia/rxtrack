@@ -94,6 +94,20 @@
             border: none;
             font-size: 1.5rem;
         }
+
+        /* Ocultar barra lateral no mobile */
+        @media (max-width: 768px) {
+            #sidebar {
+                transform: translateX(-100%);
+                width: var(--sidebar-width) !important;
+            }
+            #sidebar.active {
+                transform: translateX(0);
+            }
+            #main-content, #main-content.expanded {
+                margin-left: 0 !important;
+            }
+        }
     </style>
 </head>
 <body>
