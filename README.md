@@ -24,3 +24,22 @@ Abaixo estão listadas as atualizações passadas do projeto principal (`nv`) pa
 
 ---
 > **Aviso de Infraestrutura:** Os arquivos de configuração de ambiente (`docker-compose.yml`, `.env`, `Dockerfile`) **não** foram sobrescritos. A porta principal do projeto foi preservada como **8000**, para garantir que o ambiente de produção permaneça separado do ambiente VPS de testes.
+
+<br>
+
+**Data:** 08/06/2026
+**Hora:** 15:45
+
+## Adendos e Correções Pós-Migração:
+
+1. **Atualização da Identidade Visual PWA:**
+   - Ícones atualizados para o modelo oficial de fundo branco validado pelo cliente, com a versão do Service Worker forçada para atualização em cache.
+
+2. **Ajustes de Layout Responsivo (Painel Operacional):**
+   - Corrigido o bug onde a barra lateral ficava presa na tela (Mobile). Agora ela possui barra de rolagem inteligente (escondendo a barra nativa do navegador no Desktop) e se fecha automaticamente ao clicar na área externa da tela.
+
+3. **Notificações do Aplicativo:**
+   - Suspenso o alerta de permissão para notificações WebPush no aplicativo do motorista (agora ele loga diretamente, sem janelas chatas). Preparação para futura integração de notificações com WhatsApp.
+
+4. **Painel de Gestão de Usuários (Controle de Acesso):**
+   - Correção de validação hierárquica no backend (`usuarios/gestao_views.py`) que bloqueava perfis do tipo `GESTOR` de editar ou excluir permissões de outros Gestores (ou deles mesmos). Agora Gestores possuem passe-livre, enquanto Gerentes continuam com a trava.
