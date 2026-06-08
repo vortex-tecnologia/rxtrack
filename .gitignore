@@ -1,23 +1,14 @@
-# ambiente
-.env
-.env.*
-
-# python
+venv/
+staticfiles/
+media/
 __pycache__/
 *.pyc
-
-# logs
-*.log
-
-# banco
-*.db
-
-# docker
-*.pid
-
-# arquivos do sistema
+.env
 .DS_Store
-Thumbs.db
-
-# media uploads
-/media
+*.swp
+*.bak
+db.sqlite3
+node_modules/
+dist/
+build/
+*.log

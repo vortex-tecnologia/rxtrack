@@ -6,7 +6,7 @@ User = get_user_model()
 
 class WebPushSubscription(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='webpush_subscriptions')
-    endpoint = models.TextField(unique=True)
+    endpoint = models.URLField(max_length=500, unique=True)
     p256dh = models.CharField(max_length=255)
     auth = models.CharField(max_length=255)
     browser = models.CharField(max_length=200, blank=True, null=True)

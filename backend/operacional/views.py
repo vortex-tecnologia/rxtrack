@@ -509,11 +509,13 @@ def salvar_edicao_manifesto_view(request, manifesto_id):
             manifesto.filial_id = filial_id
 
         # 4. Lógica de Status e Datas de Finalização
+        enviar_finalizacao_tms = False
         # Se o checkbox de finalizar foi marcado agora
         if foi_finalizado and not manifesto.finalizado:
             manifesto.finalizado = True
             manifesto.data_finalizacao = timezone.now()
             manifesto.status = 'FINALIZADO'
+            enviar_finalizacao_tms = True
         
         # Se o checkbox foi desmarcado (reabertura de manifesto)
         elif not foi_finalizado and manifesto.finalizado:
@@ -525,6 +527,11 @@ def salvar_edicao_manifesto_view(request, manifesto_id):
 
         # 5. Salva no Banco de Dados
         manifesto.save()
+
+        # Dispara integração TMS em background se acabou de ser finalizado
+        if enviar_finalizacao_tms:
+            from manifesto.tasks import finalizar_manifesto_tms_task
+            finalizar_manifesto_tms_task.delay(manifesto.id)
 
         return JsonResponse({
             'success': True, 

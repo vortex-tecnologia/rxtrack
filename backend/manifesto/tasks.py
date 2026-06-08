@@ -309,7 +309,7 @@ def buscar_manifesto_completo_task(self, log_id):
         token_notas = config.token_invoices
         url_notas = f"https://{config.dominio_esl}/api/invoice_occurrences"
         
-        params_notas = {"manifest_id": str(id_interno_esl), "per": 20}
+        params_notas = {"manifest_id": str(numero_visual), "per": 20}
         start_cursor = None
         notas_unicas_dict = {} 
         
@@ -624,28 +624,27 @@ def finalizar_manifesto_tms_task(self, manifesto_id):
         from configuracao.utils import get_config
         config = get_config()
         url_graphql = f"https://{config.dominio_esl}/graphql"
-        token = config.token_analytics
+        token = config.token_analytics  # O manual da ESL usa o token de analytics para essa ação
 
-        # 2. Mutation simplificada (Removido closingKm do retorno e do input se possível)
+        # 2. Mutation completa conforme documentação da ESL
         mutation = """
-        mutation manifestClose($id: ID, $params: ManifestCloseInput!) {
-          manifestClose(id: $id, params: $params) {
-            success
+        mutation manifestClose($id: ID, $sequenceCode: String, $params: ManifestCloseInput!) {
+          manifestClose(id: $id, sequenceCode: $sequenceCode, params: $params) {
             errors
-            resource { 
-                id 
-                closedAt 
+            resource {
+              id
+              closedAt
             }
+            success
           }
         }
         """
 
-        # 3. Variáveis apenas com a Data de Fechamento
+        # 3. Variáveis com Data de Fechamento (obrigatório)
         variables = {
             "id": str(manifesto.manifesto_id_tms),
             "params": {
                 "closedAt": data_iso
-                # O KM foi removido daqui
             }
         }
 
@@ -655,10 +654,10 @@ def finalizar_manifesto_tms_task(self, manifesto_id):
         }
 
         # 4. Chamada para a ESL
-        response = requests.post(url_graphql, json={"query": mutation, "variables": variables}, timeout=30)
+        response = requests.post(url_graphql, json={"query": mutation, "variables": variables}, headers=headers, timeout=30)
         
         if not response.text:
-             raise Exception("Resposta vazia da ESL.")
+             raise Exception(f"Resposta vazia da ESL. HTTP Status: {response.status_code}")
 
         res_data = response.json()
         result = res_data.get('data', {}).get('manifestClose', {})
