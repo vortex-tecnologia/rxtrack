@@ -1,5 +1,5 @@
 // UNIFICADO: Versão v1.26 (Corrigida para evitar erro de Clone/POST)
-const CACHE_NAME = 'fluxo-logistica-v1.35';
+const CACHE_NAME = 'fluxo-logistica-v1.36';
 
 const filesToCache = [
     '/app/',
