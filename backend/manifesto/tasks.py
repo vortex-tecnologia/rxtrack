@@ -429,8 +429,10 @@ def buscar_manifesto_completo_task(self, log_id):
         log.status = 'PROCESSADO'
         log.save()
         # 🔔 Atualiza o painel somente depois que tudo foi salvo
-
         transaction.on_commit(lambda: enviar_painel(manifesto_obj))
+
+        # Dispara busca de coletas em background após finalizar o processo principal
+        buscar_coletas_manifesto_task.delay(manifesto_obj.id, numero_visual)
 
         return f"Manifesto {numero_visual} processado: {total_processadas} itens entre notas e minutas."
 
@@ -459,9 +461,115 @@ def buscar_detalhes_esl_interno(chave, numero, token):
     except: pass
     return None
 
+def buscar_coletas_esl(numero_manifesto, token, dominio, report_coletas):
+    """Busca coletas no Data Export usando o sequence_code do manifesto."""
+    import requests
+    import json
+    
+    url = f"https://{dominio}/api/analytics/reports/{report_coletas}/data"
+    payload = {
+        "search": {
+            "picks": {
+                "request_date": "2024-01-01 - 2050-12-31"
+            },
+            "scopes": {
+                "from_manifest_sequence_code": str(numero_manifesto)
+            }
+        },
+        "page": "1",
+        "per": "100"
+    }
+    
+    try:
+        r = requests.get(
+            url, 
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, 
+            data=json.dumps(payload), 
+            timeout=30
+        )
+        if r.status_code == 200:
+            return r.json()
+        else:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erro ao buscar coletas para manifesto {numero_manifesto}: {r.status_code} - {r.text}")
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Exceção ao buscar coletas: {e}")
+    return []
 
+@shared_task(bind=True, max_retries=3)
+def buscar_coletas_manifesto_task(self, manifesto_id, numero_visual):
+    from manifesto.models import Manifesto, NotaFiscal
+    from manifesto.services import enviar_painel
+    from configuracao.utils import get_config
+    import logging
 
+    logger = logging.getLogger(__name__)
+    logger.info(f"Iniciando busca de coletas em background para manifesto {numero_visual}")
 
+    try:
+        manifesto_obj = Manifesto.objects.get(id=manifesto_id)
+        config = get_config()
+        token_geral = config.token_analytics
+        dominio = config.dominio_esl
+        report_coletas = getattr(config, 'report_coletas', '11324')
+        
+        coletas = buscar_coletas_esl(numero_visual, token_geral, dominio, report_coletas)
+        
+        if coletas:
+            total_adicionadas = 0
+            for coleta in coletas:
+                seq_code = coleta.get('sequence_code')
+                if not seq_code:
+                    continue
+                
+                # Campos de Destinatário / Endereço
+                solicitante = coleta.get('pck_pln_name', '')
+                if not solicitante:
+                    solicitante = coleta.get('requester', 'SOLICITANTE NÃO INFORMADO')
+                    
+                destinatario = str(solicitante).upper()
+                
+                rua = coleta.get('pck_pln_mds_line_1', '')
+                num = coleta.get('pck_pln_mds_number', '')
+                bairro = coleta.get('pck_pln_mds_neighborhood', '')
+                cidade = coleta.get('pck_pln_mds_cty_name', '')
+                
+                # Montando endereço
+                partes_endereco = [rua, num, bairro, cidade]
+                endereco = ", ".join([p.strip() for p in partes_endereco if p and str(p).strip()])
+                if not endereco:
+                    endereco = "ENDEREÇO NÃO INFORMADO"
+                endereco = endereco.upper()
+                
+                # Atualiza ou cria a coleta
+                NotaFiscal.objects.update_or_create(
+                    manifesto=manifesto_obj,
+                    numero_nota=str(seq_code), # Salva como nota
+                    tipo_operacao='COLETA',
+                    defaults={
+                        'destinatario': destinatario,
+                        'endereco_entrega': endereco,
+                        'numero_coleta': str(seq_code), # E salva como coleta tbm
+                    }
+                )
+                total_adicionadas += 1
+            
+            if total_adicionadas > 0:
+                qtd_coletas = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='COLETA').count()
+                manifesto_obj.qtd_retirada = qtd_coletas
+                manifesto_obj.save(update_fields=['qtd_retirada'])
+                
+            enviar_painel(manifesto_obj)
+            return f"Adicionadas {total_adicionadas} coletas ao manifesto {numero_visual}"
+            
+        return "Nenhuma coleta encontrada."
+        
+    except Exception as e:
+        logger.error(f"Erro na task de buscar coletas para {numero_visual}: {e}")
+        raise self.retry(exc=e, countdown=60)
 from celery import shared_task
 
 @shared_task(bind=True, max_retries=2)

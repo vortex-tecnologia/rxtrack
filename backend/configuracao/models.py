@@ -49,6 +49,12 @@ class ConfiguracaoSistema(models.Model):
         verbose_name="ID Report Busca NF-e",
         help_text="ID do report de busca de notas fiscais"
     )
+    report_coletas = models.CharField(
+        max_length=20, 
+        default="11324",
+        verbose_name="ID Report Busca Coletas",
+        help_text="ID do report de busca de coletas"
+    )
 
     # ===== FEATURE FLAGS (Liga/Desliga) =====
     processar_yolo = models.BooleanField(
