@@ -19,15 +19,24 @@ class AuditoriaDashboardView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Filtros básicos
-        filial_id = self.request.GET.get('filial')
-        motorista_id = self.request.GET.get('motorista')
-        
+        # Busca filial do usuário
+        usuario_filial = None
+        if self.request.user.is_authenticated:
+            try:
+                from usuarios.models import Motorista
+                perfil = Motorista.objects.get(user=self.request.user)
+                usuario_filial = perfil.filial
+            except Exception:
+                pass
+                
         # Manifestos Ativos (EM_TRANSPORTE)
         manifestos_ativos = Manifesto.objects.filter(status='EM_TRANSPORTE').select_related('motorista', 'filial')
         
-        if filial_id:
-            manifestos_ativos = manifestos_ativos.filter(filial_id=filial_id)
+        if not usuario_filial:
+            manifestos_ativos = manifestos_ativos.none()
+        else:
+            manifestos_ativos = manifestos_ativos.filter(motorista__filial=usuario_filial)
+            
         if motorista_id:
             manifestos_ativos = manifestos_ativos.filter(motorista_id=motorista_id)
 
@@ -68,16 +77,28 @@ class AuditoriaDashboardView(TemplateView):
         context['total_criticos'] = sum(1 for d in manifestos_data if d['status_cor'] == 'danger')
         
         # Penalidades (Motorista Desleixo)
-        context['total_penalidades'] = BaixaNF.objects.filter(motivo_baixa='MOTORISTA_DESLEIXO').count()
+        if not usuario_filial:
+            context['total_penalidades'] = 0
+        else:
+            context['total_penalidades'] = BaixaNF.objects.filter(
+                motivo_baixa='MOTORISTA_DESLEIXO',
+                nota_fiscal__manifesto__motorista__filial=usuario_filial
+            ).count()
         
-        # Top 5 Motoristas com mais penalidades (Opcional, mas útil)
-        context['top_penalidades'] = BaixaNF.objects.filter(
-            motivo_baixa='MOTORISTA_DESLEIXO'
-        ).values(
+        # Top 5 Motoristas com mais penalidades
+        penalidades_qs = BaixaNF.objects.filter(motivo_baixa='MOTORISTA_DESLEIXO')
+        if not usuario_filial:
+            penalidades_qs = penalidades_qs.none()
+        else:
+            penalidades_qs = penalidades_qs.filter(nota_fiscal__manifesto__motorista__filial=usuario_filial)
+            
+        context['top_penalidades'] = penalidades_qs.values(
             'nota_fiscal__manifesto__motorista__nome_completo'
         ).annotate(
             total=Count('id')
         ).order_by('-total')[:5]
+
+        context['sem_filial'] = not bool(usuario_filial)
 
         return context
 

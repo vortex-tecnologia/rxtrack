@@ -206,6 +206,16 @@
     </nav>
 
         <div class="container-fluid p-4">
+            {% if sem_filial %}
+            <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center mb-4" role="alert">
+                <i class="bi bi-exclamation-triangle-fill fs-4 me-3 text-warning"></i>
+                <div>
+                    <h6 class="alert-heading mb-1 fw-bold">Aviso Importante</h6>
+                    <p class="mb-0">Você precisa estar vinculado a uma filial no seu cadastro de motorista para ver dados. Nenhum dado será carregado até que seu perfil seja associado a uma unidade.</p>
+                </div>
+            </div>
+            {% endif %}
+            
             {% block content %}
             <div class="row g-4">
                 <div class="col-md-3">

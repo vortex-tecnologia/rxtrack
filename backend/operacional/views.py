@@ -127,13 +127,12 @@ class DashboardView(TemplateView):
         # 1. Busca os manifestos do dia
         manifestos_do_dia = Manifesto.objects.filter(data_criacao__range=(hoje_inicio, hoje_fim)).exclude(numero_manifesto__startswith='SAC-')
         
-        # 2. Aplica filtro de Filial (Prioridade: URL param -> Perfil do Usuário -> Todas)
-        if filial_param == 'todas':
-            # Não filtra por filial, mostra tudo
-            pass
-        elif filial_param:
-            manifestos_do_dia = manifestos_do_dia.filter(filial_id=filial_param)
-        elif usuario_filial:
+        # 2. Aplica filtro de Filial (Isolamento Estrito)
+        sem_filial = False
+        if not usuario_filial:
+            manifestos_do_dia = manifestos_do_dia.none()
+            sem_filial = True
+        else:
             manifestos_do_dia = manifestos_do_dia.filter(filial=usuario_filial)
 
         notas_do_dia = NotaFiscal.objects.filter(manifesto__in=manifestos_do_dia)
@@ -202,6 +201,7 @@ class DashboardView(TemplateView):
         # Passar lista de filiais e filial ativa para o Dropdown no Frontend
         context['filiais'] = Filial.objects.all().order_by('nome')
         context['filial_selecionada'] = filial_param if filial_param else (str(usuario_filial.id) if usuario_filial else 'todas')
+        context['sem_filial'] = sem_filial
         
         return context
 
@@ -241,13 +241,11 @@ class NotasFiscaisListView(ListView):
         manifesto = self.request.GET.get('manifesto')
         integrado = self.request.GET.get('integrado')
         data_inicio = self.request.GET.get('data_inicio')
-        filial_param = self.request.GET.get('filial')
-
-        if filial_param == 'todas':
-            pass
-        elif filial_param:
-            queryset = queryset.filter(manifesto__filial_id=filial_param)
-        elif usuario_filial:
+        sem_filial = False
+        if not usuario_filial:
+            queryset = queryset.none()
+            sem_filial = True
+        else:
             queryset = queryset.filter(manifesto__filial=usuario_filial)
 
         if q:
@@ -288,6 +286,7 @@ class NotasFiscaisListView(ListView):
         context['usuario_nome'] = self.request.user.get_full_name() or self.request.user.username
         context['filiais'] = Filial.objects.all().order_by('nome')
         context['filial_selecionada'] = filial_param if filial_param else (str(usuario_filial.id) if usuario_filial else 'todas')
+        context['sem_filial'] = not bool(usuario_filial)
         
         return context
 
@@ -369,12 +368,9 @@ class ManifestosMonitoramentoView(ListView):
         motorista = self.request.GET.get('motorista')
         data_str = self.request.GET.get('data')
 
-        if filial_id == 'todas':
-            # Não filtra por filial, mostra tudo
-            pass
-        elif filial_id:
-            queryset = queryset.filter(filial_id=filial_id)
-        elif usuario_filial:
+        if not usuario_filial:
+            queryset = queryset.none()
+        else:
             queryset = queryset.filter(filial=usuario_filial)
         
         if numero:
@@ -427,6 +423,7 @@ class ManifestosMonitoramentoView(ListView):
         context['filtro_numero'] = self.request.GET.get('numero', '')
         context['motoristas_list'] = Motorista.objects.all().order_by('nome_completo')
         context['ultimos_logs'] = ManifestoBuscaLog.objects.all().order_by('-atualizado_em')[:5]
+        context['sem_filial'] = not bool(usuario_filial)
         
         return context
     
@@ -640,14 +637,9 @@ class MotoristasPerformanceView(LoginRequiredMixin, ListView):
         # 1. Base: Apenas quem é motorista
         queryset = Motorista.objects.filter(tipo_usuario='MOTORISTA')
         
-        # Filtro de Filial
-        filial_param = self.request.GET.get('filial')
-        if filial_param == 'todas':
-            # Não filtra por filial, mostra tudo
-            pass
-        elif filial_param:
-            queryset = queryset.filter(filial_id=filial_param)
-        elif usuario_filial:
+        if not usuario_filial:
+            queryset = queryset.none()
+        else:
             queryset = queryset.filter(filial=usuario_filial)
 
         # 2. Captura datas do filtro
@@ -736,6 +728,7 @@ class MotoristasPerformanceView(LoginRequiredMixin, ListView):
         filial_param = self.request.GET.get('filial')
         context['filiais'] = Filial.objects.all().order_by('nome')
         context['filial_selecionada'] = filial_param if filial_param else (str(usuario_filial.id) if usuario_filial else 'todas')
+        context['sem_filial'] = not bool(usuario_filial)
         
         return context
     

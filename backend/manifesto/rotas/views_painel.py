@@ -22,24 +22,16 @@ def painel_monitoramento(request):
     from django.utils.text import slugify
     filial_selecionada = slugify(usuario_filial.nome) if usuario_filial else "todas"
 
-    # Buscamos manifestos de hoje (Ativos)
-    # Aqui a view não filtra por filial no ORM (vê todos os ativos), 
-    # mas caso precise isolar, seria:
-    # qs = Manifesto.objects.filter(status='EM_TRANSPORTE')
-    # if usuario_filial: qs = qs.filter(filial=usuario_filial)
-    
-    # Manter o comportamento existente de exibir todos (?) ou filtrar?
-    # O user pediu isolamento. Vamos filtrar a exibição inicial também!
+    # Filtramos apenas os manifestos ativos
     qs = Manifesto.objects.filter(status='EM_TRANSPORTE')
-    # Opcional: Se 'filial' puder ser passada na URL
-    # 2. FILTRO DE FILIAL (Prioridade: URL param -> Perfil do Usuário -> Todas)
-    filial_param_id = request.GET.get('filial')
-    if filial_param_id == 'todas' or filial_param_id == 'Todas as Filiais':
-        # Não filtra por filial, mostra tudo
-        pass
-    elif filial_param_id:
-        qs = qs.filter(filial_id=filial_param_id)
-    elif usuario_filial:
+    
+    # Trava de segurança: Se não tem filial, não vê nada
+    sem_filial = False
+    if not usuario_filial:
+        qs = Manifesto.objects.none()
+        sem_filial = True
+    else:
+        # Força o filtro pela filial do manifesto ser a mesma do usuário logado
         qs = qs.filter(filial=usuario_filial)
 
     manifestos = qs.select_related('motorista', 'filial').annotate(
@@ -53,5 +45,6 @@ def painel_monitoramento(request):
         'titulo': 'Painel de Monitoramento',
         'usuario_nome': request.user.get_full_name() or request.user.username,
         'filial_selecionada': filial_selecionada, # Adicionado para o WebSocket
+        'sem_filial': sem_filial,
     }
     return render(request, 'desktop/paginas/painel/monitoramento.html', context)
