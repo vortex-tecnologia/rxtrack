@@ -761,6 +761,8 @@ def motorista_cadastrar(request):
     try:
         nome = request.POST.get('nome_completo')
         cpf_sujo = request.POST.get('cpf')
+        telefone = request.POST.get('telefone', '')
+        filial_id = request.POST.get('filial_id')
         foto = request.FILES.get('foto_perfil')
 
         # Remove tudo que não for número (limpa pontos e traços)
@@ -769,6 +771,8 @@ def motorista_cadastrar(request):
         Motorista.objects.create(
             nome_completo=nome,
             cpf=cpf_limpo,
+            telefone=telefone,
+            filial_id=filial_id if filial_id else None,
             foto_perfil=foto
         )
         return JsonResponse({'success': True, 'message': 'Motorista cadastrado com sucesso!'})
@@ -784,6 +788,10 @@ def motorista_editar(request):
         
         motorista.nome_completo = request.POST.get('nome_completo')
         motorista.cpf = request.POST.get('cpf')
+        motorista.telefone = request.POST.get('telefone', '')
+        
+        filial_id = request.POST.get('filial_id')
+        motorista.filial_id = filial_id if filial_id else None
         
         if request.FILES.get('foto_perfil'):
             motorista.foto_perfil = request.FILES.get('foto_perfil')

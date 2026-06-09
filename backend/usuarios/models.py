@@ -26,6 +26,7 @@ class Motorista(models.Model):
     
     nome_completo = models.CharField(max_length=255, verbose_name="Nome Completo")
     cnh_numero = models.CharField(max_length=20, blank=True, null=True, verbose_name="Número da CNH")
+    telefone = models.CharField(max_length=20, blank=True, null=True, verbose_name="Telefone / Celular")
     
     TIPO_USUARIO_CHOICES = [
         ('MOTORISTA', 'Motorista'),

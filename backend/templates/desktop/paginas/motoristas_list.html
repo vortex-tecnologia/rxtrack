@@ -172,7 +172,7 @@
                             </div>
                         </td>
                         <td class="text-end pe-4">
-                            <button onclick="abrirDetalhes('{{ m.id }}', '{{ m.nome_completo }}', '{{ m.cpf }}', '{% if m.foto_perfil %}{{ m.foto_perfil.url }}{% endif %}')" 
+                            <button onclick="abrirDetalhes('{{ m.id }}', '{{ m.nome_completo }}', '{{ m.cpf }}', '{% if m.foto_perfil %}{{ m.foto_perfil.url }}{% endif %}', '{{ m.telefone|default:'' }}', '{{ m.filial_id|default:'' }}')" 
                                     class="btn btn-sm btn-outline-primary border-0">
                                 <i class="bi bi-pencil-square"></i> Editar
                             </button>
@@ -206,6 +206,19 @@
                     <div class="mb-3">
                         <label class="form-label small fw-bold">CPF</label>
                         <input type="text" name="cpf" class="form-control cpf-mask" required placeholder="000.000.000-00">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Telefone / Celular (Opcional)</label>
+                        <input type="text" name="telefone" class="form-control phone-mask" placeholder="(00) 00000-0000">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Filial</label>
+                        <select name="filial_id" class="form-select">
+                            <option value="">Selecione uma filial...</option>
+                            {% for f in filiais %}
+                            <option value="{{ f.id }}">{{ f.nome }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-bold">Foto de Perfil</label>
@@ -246,6 +259,19 @@
                     <div class="mb-3">
                         <label class="form-label small fw-bold">CPF</label>
                         <input type="text" name="cpf" id="edit_cpf" class="form-control cpf-mask">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Telefone / Celular (Opcional)</label>
+                        <input type="text" name="telefone" id="edit_telefone" class="form-control phone-mask" placeholder="(00) 00000-0000">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Filial</label>
+                        <select name="filial_id" id="edit_filial" class="form-select">
+                            <option value="">Selecione uma filial...</option>
+                            {% for f in filiais %}
+                            <option value="{{ f.id }}">{{ f.nome }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-bold">Trocar Foto</label>
@@ -290,6 +316,17 @@ document.querySelectorAll('.cpf-mask').forEach(input => {
         v = v.replace(/(\d{3})(\d)/, '$1.$2');
         v = v.replace(/(\d{3})(\d)/, '$1.$2');
         v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+        e.target.value = v;
+    });
+});
+
+// Máscara de Telefone (Celular com DDD)
+document.querySelectorAll('.phone-mask').forEach(input => {
+    input.addEventListener('input', e => {
+        let v = e.target.value.replace(/\D/g, '');
+        if (v.length > 11) v = v.slice(0, 11);
+        v = v.replace(/^(\d{2})(\d)/g, '($1) $2');
+        v = v.replace(/(\d{5})(\d)/, '$1-$2');
         e.target.value = v;
     });
 });
@@ -349,10 +386,12 @@ document.getElementById('formEdicao').addEventListener('submit', e => {
     enviarFormulario('formEdicao', "{% url 'operacional:motorista_editar' %}", 'btnSalvarEdicao', 'loaderBtnEdicao', 'msgFeedbackEdicao'); // Crie essa ID no modal de edição também
 });
 
-function abrirDetalhes(id, nome, cpf, foto) {
+function abrirDetalhes(id, nome, cpf, foto, telefone, filial_id) {
     document.getElementById('edit_id').value = id;
     document.getElementById('edit_nome').value = nome;
     document.getElementById('edit_cpf').value = cpf;
+    document.getElementById('edit_telefone').value = telefone || '';
+    document.getElementById('edit_filial').value = filial_id || '';
     const img = document.getElementById('view_foto');
     if(foto) { img.src = foto; img.style.display = 'inline-block'; } 
     else { img.style.display = 'none'; }
