@@ -100,6 +100,7 @@ Para resolver o problema definitivamente, o sistema foi dividido em dois PWA ins
    - Corrigido o Erro 500 no modal de detalhes da Auditoria de Processos que travava a visualização da nota (resolvido injetando fallback seguro na variável `badgeColor` no JS).
    - Menu "Financeiro" removido permanentemente da barra lateral.
    - Cabeçalho da barra lateral modificado: Substituído texto cru pela logo oficial do app (`logo_app.png`) acompanhada de uma tag destacando a filial ativa do usuário logado na sessão atual.
+   - **UX de Finalização (Mobile):** Reduzido drasticamente o tempo de recarregamento (`setTimeout`) ao finalizar um manifesto de 3000ms para 500ms no PWA do motorista. Isso evita a falsa sensação de travamento e o recarregamento assíncrono que gerava a mensagem de "Manifesto já finalizado" quando o motorista fechava o app antes do tempo de animação.
 
 ---
 
