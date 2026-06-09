@@ -812,7 +812,7 @@ async function executarFinalizacaoManual() {
 
             setTimeout(() => {
                 window.location.reload();
-            }, 3000);
+            }, 500);
 
         } else {
             // ESTADO 3: ERRO DO BACKEND
