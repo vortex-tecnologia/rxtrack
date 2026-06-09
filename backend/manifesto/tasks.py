@@ -284,8 +284,19 @@ def buscar_manifesto_completo_task(self, log_id):
             return
 
         # Lógica de Filial
-        nome_filial_tms = info_tms.get('mft_crn_psn_nickname', 'MATRIZ').strip().upper()
-        filial_obj, _ = Filial.objects.get_or_create(nome=nome_filial_tms)
+        nome_filial_tms = info_tms.get('mft_crn_psn_nickname')
+        if not nome_filial_tms:
+            nome_filial_tms = 'MATRIZ'
+        else:
+            nome_filial_tms = nome_filial_tms.strip().upper()
+            
+        id_filial_tms = info_tms.get('mft_crn_id')
+        
+        filial_obj, created = Filial.objects.get_or_create(nome=nome_filial_tms)
+        
+        if id_filial_tms and (created or not filial_obj.id_filial_tms):
+            filial_obj.id_filial_tms = str(id_filial_tms)
+            filial_obj.save(update_fields=['id_filial_tms'])
 
         # Criar/Recuperar Manifesto Local
         manifesto_obj, _ = Manifesto.objects.update_or_create(
