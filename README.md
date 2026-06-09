@@ -68,3 +68,31 @@ Para resolver o problema definitivamente, o sistema foi dividido em dois PWA ins
 1. **Erro 500 no Daphne (Backend):** Corrigida falha de inicialização do servidor provocada pela ausência de importação dos decorators `@api_view`, `@permission_classes` e `@authentication_classes` no arquivo `usuarios/views_login/auth_views.py`.
 2. **Conflito de Instalação de App (Frontend):** Removida a tag nativa `{% progressive_web_app_meta %}` da tela de login clonada do SAC. Essa tag injetava dinamicamente o `/manifest.json` do motorista, induzindo o navegador a instalar o PWA incorreto. A tag foi substituída por uma referência explícita estática ao `<link rel="manifest" href="/app-sac/manifest_sac.json">`.
 3. **Redirecionamento de Logout:** Criação do script customizado `authFetch_sac.js` para garantir que sessões expiradas no SAC redirecionem o usuário de volta para `/login-sac/` em vez de `/login/`.
+
+---
+
+**Data:** 09/06/2026
+**Hora:** 14:45
+
+## Multitenancy, Isolamento de Dados e Refinamentos de UI:
+
+1. **Isolamento de Dados por Filial (Multi-Tenancy):**
+   - Implementado isolamento rigoroso nas QuerySets do sistema inteiro.
+   - As views de **Dashboard, Torre de Controle, Notas e Manifestos** agora filtram as informações com base na `Filial` vinculada ao manifesto.
+   - As views de **Auditoria e Performance** filtram os dados olhando para a `Filial` do Motorista.
+   - Lógica de Prioridade definida: Parâmetros de URL (ex: `?filial=`) sobrepõem a filial do perfil do usuário. Caso o usuário não tenha filial e não aplique filtros, nenhuma informação sensível é carregada.
+   - Adicionado banner de alerta (amarelo) global no `base.html` que notifica usuários que estão acessando o painel mas ainda não possuem vínculo com nenhuma filial.
+
+2. **Cadastro e Edição de Motoristas:**
+   - Adicionado o campo `telefone` (Celular com DDD) ao modelo de `Motorista` no banco de dados para preparar terreno para futuras automações via WhatsApp.
+   - Modais de criação e edição agora possuem input para "Telefone" (com máscara JS embutida) e campo de seleção Dropdown para vincular/alterar a "Filial" do motorista de forma dinâmica.
+
+3. **Criação Automática de Filiais com ID do TMS:**
+   - Atualizada a `buscar_manifesto_completo_task` (`backend/manifesto/tasks.py`) para consumir os campos `mft_crn_id` e `mft_crn_psn_nickname` do payload JSON da ESL.
+   - Quando o sistema consulta a ESL e encontra uma filial nova, ele a cria automaticamente no banco já preenchendo o `id_filial_tms`. Se a filial já existe e o ID está vazio (como em cadastros manuais antigos), ele detecta e preenche o ID por baixo dos panos.
+
+4. **UX e Correções na Interface (Bugfixes):**
+   - Substituída a imagem quebrada (`empty-truck.svg`) na Torre de Controle por um ícone SVG nativo do Bootstrap responsivo para o cenário sem resultados.
+   - Corrigido o Erro 500 no modal de detalhes da Auditoria de Processos que travava a visualização da nota (resolvido injetando fallback seguro na variável `badgeColor` no JS).
+   - Menu "Financeiro" removido permanentemente da barra lateral.
+   - Cabeçalho da barra lateral modificado: Substituído texto cru pela logo oficial do app (`logo_app.png`) acompanhada de uma tag destacando a filial ativa do usuário logado na sessão atual.
