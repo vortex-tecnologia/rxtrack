@@ -18,6 +18,9 @@ class AuditoriaDashboardView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # Filtros básicos
+        filial_id = self.request.GET.get('filial')
+        motorista_id = self.request.GET.get('motorista')
         
         # Busca filial do usuário
         usuario_filial = None
