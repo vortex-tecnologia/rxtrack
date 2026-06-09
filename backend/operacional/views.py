@@ -127,13 +127,21 @@ class DashboardView(TemplateView):
         # 1. Busca os manifestos do dia
         manifestos_do_dia = Manifesto.objects.filter(data_criacao__range=(hoje_inicio, hoje_fim)).exclude(numero_manifesto__startswith='SAC-')
         
-        # 2. Aplica filtro de Filial (Isolamento Estrito)
-        sem_filial = False
-        if not usuario_filial:
-            manifestos_do_dia = manifestos_do_dia.none()
-            sem_filial = True
-        else:
+        # 2. Aplica filtro de Filial (Prioridade: URL param -> Perfil do Usuário -> Vazio)
+        sem_filial = not bool(usuario_filial)
+        
+        if filial_param == 'todas':
+            # Se filtrou explicitamente por 'todas', mostra tudo
+            pass
+        elif filial_param:
+            # Se filtrou por uma filial específica, mostra ela
+            manifestos_do_dia = manifestos_do_dia.filter(filial_id=filial_param)
+        elif usuario_filial:
+            # Padrão: mostra a do usuário
             manifestos_do_dia = manifestos_do_dia.filter(filial=usuario_filial)
+        else:
+            # Se não filtrou nada e não tem filial, não mostra nada
+            manifestos_do_dia = manifestos_do_dia.none()
 
         notas_do_dia = NotaFiscal.objects.filter(manifesto__in=manifestos_do_dia)
 
@@ -241,12 +249,16 @@ class NotasFiscaisListView(ListView):
         manifesto = self.request.GET.get('manifesto')
         integrado = self.request.GET.get('integrado')
         data_inicio = self.request.GET.get('data_inicio')
-        sem_filial = False
-        if not usuario_filial:
-            queryset = queryset.none()
-            sem_filial = True
-        else:
+        filial_param = self.request.GET.get('filial')
+
+        if filial_param == 'todas':
+            pass
+        elif filial_param:
+            queryset = queryset.filter(manifesto__filial_id=filial_param)
+        elif usuario_filial:
             queryset = queryset.filter(manifesto__filial=usuario_filial)
+        else:
+            queryset = queryset.none()
 
         if q:
             queryset = queryset.filter(
@@ -368,10 +380,14 @@ class ManifestosMonitoramentoView(ListView):
         motorista = self.request.GET.get('motorista')
         data_str = self.request.GET.get('data')
 
-        if not usuario_filial:
-            queryset = queryset.none()
-        else:
+        if filial_id == 'todas':
+            pass
+        elif filial_id:
+            queryset = queryset.filter(filial_id=filial_id)
+        elif usuario_filial:
             queryset = queryset.filter(filial=usuario_filial)
+        else:
+            queryset = queryset.none()
         
         if numero:
             queryset = queryset.filter(numero_manifesto__icontains=numero)
@@ -637,10 +653,16 @@ class MotoristasPerformanceView(LoginRequiredMixin, ListView):
         # 1. Base: Apenas quem é motorista
         queryset = Motorista.objects.filter(tipo_usuario='MOTORISTA')
         
-        if not usuario_filial:
-            queryset = queryset.none()
-        else:
+        filial_param = self.request.GET.get('filial')
+        
+        if filial_param == 'todas':
+            pass
+        elif filial_param:
+            queryset = queryset.filter(filial_id=filial_param)
+        elif usuario_filial:
             queryset = queryset.filter(filial=usuario_filial)
+        else:
+            queryset = queryset.none()
 
         # 2. Captura datas do filtro
         data_inicio_str = self.request.GET.get('data_inicio')

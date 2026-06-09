@@ -25,14 +25,18 @@ def painel_monitoramento(request):
     # Filtramos apenas os manifestos ativos
     qs = Manifesto.objects.filter(status='EM_TRANSPORTE')
     
-    # Trava de segurança: Se não tem filial, não vê nada
-    sem_filial = False
-    if not usuario_filial:
-        qs = Manifesto.objects.none()
-        sem_filial = True
-    else:
-        # Força o filtro pela filial do manifesto ser a mesma do usuário logado
+    # Prioridade de Filtro: URL param -> Perfil do Usuário -> Vazio
+    sem_filial = not bool(usuario_filial)
+    filial_param_id = request.GET.get('filial')
+    
+    if filial_param_id == 'todas' or filial_param_id == 'Todas as Filiais':
+        pass
+    elif filial_param_id:
+        qs = qs.filter(filial_id=filial_param_id)
+    elif usuario_filial:
         qs = qs.filter(filial=usuario_filial)
+    else:
+        qs = qs.none()
 
     manifestos = qs.select_related('motorista', 'filial').annotate(
         total_nfe=Count('notas_fiscais'),
