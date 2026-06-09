@@ -68,9 +68,12 @@
             </div>
         </div>
         {% empty %}
-        <div class="col-12 text-center py-5">
-            <img src="/static/img/empty-truck.svg" style="width: 150px; opacity: 0.5;">
-            <p class="text-muted mt-3">Nenhum manifesto em transporte no momento.</p>
+        <div class="col-12 text-center py-5 mt-5">
+            <div class="d-inline-block mb-3">
+                <i class="bi bi-truck text-secondary" style="font-size: 80px; opacity: 0.4;"></i>
+            </div>
+            <h5 class="text-muted fw-bold">Nenhum manifesto em transporte no momento</h5>
+            <p class="text-muted small">Os manifestos ativos da sua filial aparecerão aqui automaticamente.</p>
         </div>
         {% endfor %}
     </div>
