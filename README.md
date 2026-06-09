@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="backend/static/images/logo_app.png" alt="Quick Track Logo" width="150" />
+</div>
+
 # Atualizações Aplicadas (Push para Produção)
 
 **Data:** 08/06/2026
