@@ -276,8 +276,19 @@
         let baixadas = 0;
 
         notas.forEach(nota => {
-            if (nota.status === 'PENDENTE') pendentes++;
-            else baixadas++;
+            let badgeColor = 'secondary';
+            if (nota.status === 'PENDENTE') {
+                pendentes++;
+                badgeColor = 'warning';
+            } else if (nota.status === 'BAIXADA') {
+                baixadas++;
+                badgeColor = 'success';
+            } else if (nota.status === 'OCORRENCIA') {
+                baixadas++;
+                badgeColor = 'danger';
+            } else {
+                baixadas++;
+            }
 
             let badgesSac = '';
             if (nota.dados_baixa && nota.dados_baixa.motivo_baixa) {
