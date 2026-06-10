@@ -20,15 +20,13 @@ class PainelSACView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
             return False
         perfil = user.motorista_perfil
         
-        # Usa PermissaoUsuario se existir
+        # Gestor e SAC nativo sempre tem acesso (sobrepoe tabela de permissoes)
+        if perfil.cargo == 'GESTOR' or perfil.tipo_usuario == 'SAC':
+            return True
+        
+        # Usa PermissaoUsuario se existir como fallback para outros membros
         if hasattr(perfil, 'permissoes'):
             return perfil.permissoes.pode_acessar_sac
-        
-        # Fallback: logica por tipo/cargo
-        if perfil.tipo_usuario == 'SAC':
-            return True
-        if perfil.cargo == 'GESTOR':
-            return True
         
         return False
 
