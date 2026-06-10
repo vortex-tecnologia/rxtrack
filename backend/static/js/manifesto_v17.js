@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Luiz Gustavo. Todos os direitos reservados. Licença Proprietária.
 // manifesto.js - VERSÃO FINAL REVISADA E OTIMIZADA
 // =====================================================
 // CONFIGURAÇÕES E ESTADO GLOBAL

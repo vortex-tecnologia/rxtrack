@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Luiz Gustavo. Todos os direitos reservados. Licença Proprietária.
 # manifestos/models.py
 
 from django.db import models

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Luiz Gustavo. Todos os direitos reservados. Licença Proprietária.
 """
 Django settings for core project.
 """

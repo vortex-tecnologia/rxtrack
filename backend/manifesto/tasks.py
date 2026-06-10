@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Luiz Gustavo. Todos os direitos reservados. Licença Proprietária.
 from celery import shared_task
 import requests
 import json
