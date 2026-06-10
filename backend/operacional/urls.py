@@ -34,6 +34,7 @@ urlpatterns = [
     path('api/treinamentos/registrar_view/<int:video_id>/', views.registrar_view_treinamento, name='registrar_view_treinamento'),
     path('api/treinamentos/avaliar/<int:video_id>/', views.avaliar_treinamento, name='avaliar_treinamento'),
     path('central-ajuda/', views.CentralAjudaView.as_view(), name='central_ajuda'),
+    path('api/suporte/abrir_ticket_operacional/', views.abrir_ticket_operacional, name='abrir_ticket_operacional'),
 
     # Configurações do Sistema
     path('configuracao/', views.ConfiguracaoSistemaView.as_view(), name='configuracao_sistema'),

@@ -9,9 +9,11 @@
         <p class="text-muted">Gerencie seus pedidos de suporte e solicitações técnicas.</p>
     </div>
     <div class="col-md-4 text-md-end">
-        <button class="btn btn-primary d-flex align-items-center gap-2 ms-auto px-4 shadow-sm" style="border-radius: 10px;">
+        {% if cargo_usuario == 'GERENTE' or cargo_usuario == 'GESTOR' %}
+        <button class="btn btn-primary d-flex align-items-center gap-2 ms-auto px-4 shadow-sm" style="border-radius: 10px;" data-bs-toggle="modal" data-bs-target="#abrirTicketModal">
             <i class="bi bi-plus-lg"></i> Abrir Novo Ticket
         </button>
+        {% endif %}
     </div>
 </div>
 
@@ -19,19 +21,19 @@
     <div class="col-md-3">
         <div class="card border-0 shadow-sm p-3 border-start border-primary border-4">
             <small class="text-muted fw-bold">TOTAL DE TICKETS</small>
-            <h2 class="mb-0 fw-bold">12</h2>
+            <h2 class="mb-0 fw-bold">{{ total_chamados }}</h2>
         </div>
     </div>
     <div class="col-md-3">
         <div class="card border-0 shadow-sm p-3 border-start border-warning border-4">
             <small class="text-muted fw-bold">EM ANÁLISE</small>
-            <h2 class="mb-0 fw-bold">3</h2>
+            <h2 class="mb-0 fw-bold">{{ chamados_analise }}</h2>
         </div>
     </div>
     <div class="col-md-3">
         <div class="card border-0 shadow-sm p-3 border-start border-success border-4">
             <small class="text-muted fw-bold">RESOLVIDOS</small>
-            <h2 class="mb-0 fw-bold">9</h2>
+            <h2 class="mb-0 fw-bold">{{ chamados_resolvidos }}</h2>
         </div>
     </div>
 </div>
@@ -45,41 +47,77 @@
                     <th>ASSUNTO</th>
                     <th>DATA DE ABERTURA</th>
                     <th>STATUS</th>
-                    <th>PRIORIDADE</th>
                     <th class="text-end pe-4">AÇÕES</th>
                 </tr>
             </thead>
             <tbody>
+                {% for ticket in chamados %}
                 <tr>
-                    <td class="ps-4 fw-bold text-primary">#TK-8025</td>
+                    <td class="ps-4 fw-bold text-primary">#TK-{{ ticket.id }}</td>
                     <td>
-                        <div class="fw-bold text-dark">Erro na sincronização de NFe</div>
-                        <small class="text-muted">A nota nº 123456 não está subindo para o TMS...</small>
+                        <div class="fw-bold text-dark">{{ ticket.get_categoria_display }}</div>
+                        <small class="text-muted">Aberto por: {{ ticket.motorista.nome_completo }}</small>
                     </td>
-                    <td>10 Mar 2026, 09:24</td>
-                    <td><span class="badge rounded-pill bg-warning text-dark px-3 mt-1">EM ANÁLISE</span></td>
-                    <td><span class="text-danger fw-bold"><i class="bi bi-fire"></i> URGENTE</span></td>
+                    <td>{{ ticket.created_at|date:"d M Y, H:i" }}</td>
+                    <td>
+                        {% if ticket.status == 'CANAL_ABERTO' or ticket.status == 'EM_ATENDIMENTO' %}
+                            <span class="badge rounded-pill bg-warning text-dark px-3 mt-1">{{ ticket.get_status_display }}</span>
+                        {% else %}
+                            <span class="badge rounded-pill bg-success px-3 mt-1">{{ ticket.get_status_display }}</span>
+                        {% endif %}
+                    </td>
                     <td class="text-end pe-4">
-                        <button class="btn btn-sm btn-light border"><i class="bi bi-eye"></i></button>
-                        <button class="btn btn-sm btn-light border"><i class="bi bi-chat-dots"></i></button>
+                        <button class="btn btn-sm btn-light border" title="Em breve: visualizar histórico" onclick="Swal.fire('Em Breve', 'O painel de chat do chamado será liberado em breve. Acompanhe a resposta pelo sistema principal ou aguarde o retorno.', 'info')"><i class="bi bi-chat-dots"></i> Histórico</button>
                     </td>
                 </tr>
+                {% empty %}
                 <tr>
-                    <td class="ps-4 fw-bold text-primary">#TK-7954</td>
-                    <td>
-                        <div class="fw-bold text-dark">Dúvida sobre permissões de motorista</div>
-                        <small class="text-muted">Como altero a filial de um motorista já cadastrado?</small>
-                    </td>
-                    <td>08 Mar 2026, 14:12</td>
-                    <td><span class="badge rounded-pill bg-success px-3 mt-1">RESOLVIDO</span></td>
-                    <td><span class="text-muted">MÉDIA</span></td>
-                    <td class="text-end pe-4">
-                        <button class="btn btn-sm btn-light border"><i class="bi bi-eye"></i></button>
-                        <button class="btn btn-sm btn-light border"><i class="bi bi-chat-dots"></i></button>
-                    </td>
+                    <td colspan="5" class="text-center py-4 text-muted">Nenhum chamado aberto na sua filial.</td>
                 </tr>
+                {% endfor %}
             </tbody>
         </table>
+    </div>
+</div>
+
+<!-- Modal Abrir Ticket -->
+<div class="modal fade" id="abrirTicketModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-light border-0">
+                <h5 class="modal-title fw-bold text-dark"><i class="bi bi-headset text-primary me-2"></i> Abrir Novo Ticket</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="formTicket">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">CATEGORIA DO CHAMADO</label>
+                        <select class="form-select bg-light border-0 shadow-none" id="ticketCategoria" required>
+                            <option value="DUVIDA_NF">Dúvida sobre Nota Fiscal</option>
+                            <option value="PROBLEMA_ENDERECO">Problema no Endereço / Telefone Errado</option>
+                            <option value="PROBLEMA_APP">Problema no Aplicativo</option>
+                            <option value="AVARIA_CARGA">Avaria na Carga / Acidente</option>
+                            <option value="AGUARDE_RETORNO">Preciso de liberação / Aguardo retorno</option>
+                            <option value="OUTROS" selected>Outro Motivo</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">ASSUNTO</label>
+                        <input type="text" class="form-control bg-light border-0 shadow-none" id="ticketAssunto" placeholder="Resumo do problema..." required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">MENSAGEM INICIAL</label>
+                        <textarea class="form-control bg-light border-0 shadow-none" id="ticketMensagem" rows="4" placeholder="Descreva os detalhes para nossa equipe de suporte..." required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-0 bg-light">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary px-4" id="btnSalvarTicket" onclick="enviarTicket()">
+                    Enviar Chamado <i class="bi bi-send ms-1"></i>
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -93,14 +131,50 @@
 
 {% block extra_js %}
 <script>
-    window.addEventListener('load', () => {
-        Swal.fire({
-            title: 'Central de Ajuda',
-            text: 'O sistema de tickets está em fase de testes internos. Utilize os canais oficiais de comunicação para suporte imediato.',
-            icon: 'warning',
-            confirmButtonText: 'Entendido',
-            confirmButtonColor: '#0d6efd'
+    function enviarTicket() {
+        const assunto = document.getElementById('ticketAssunto').value;
+        const categoria = document.getElementById('ticketCategoria').value;
+        const mensagem = document.getElementById('ticketMensagem').value;
+
+        if (!assunto || !mensagem) {
+            Swal.fire('Atenção', 'Por favor, preencha o assunto e a mensagem.', 'warning');
+            return;
+        }
+
+        const btnSalvar = document.getElementById('btnSalvarTicket');
+        btnSalvar.disabled = true;
+        btnSalvar.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Enviando...';
+
+        fetch('/api/suporte/abrir_ticket_operacional/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                assunto: assunto,
+                categoria: categoria,
+                mensagem: mensagem
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                Swal.fire('Sucesso', 'Seu chamado foi aberto e enviado para nossa equipe de suporte!', 'success').then(() => {
+                    window.location.reload();
+                });
+            } else {
+                Swal.fire('Erro', data.message || 'Ocorreu um erro ao abrir o chamado.', 'error');
+                btnSalvar.disabled = false;
+                btnSalvar.innerHTML = 'Enviar Chamado <i class="bi bi-send ms-1"></i>';
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            Swal.fire('Erro', 'Ocorreu um erro na requisição.', 'error');
+            btnSalvar.disabled = false;
+            btnSalvar.innerHTML = 'Enviar Chamado <i class="bi bi-send ms-1"></i>';
         });
-    });
+    }
 </script>
 {% endblock %}

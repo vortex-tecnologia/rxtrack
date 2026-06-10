@@ -877,8 +877,78 @@ class CentralAjudaView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['titulo'] = "Central de Ajuda"
-        context['usuario_nome'] = self.request.user.get_full_name() or self.request.user.username
+        
+        user = self.request.user
+        perfil = getattr(user, 'motorista_perfil', None)
+        context['usuario_nome'] = user.get_full_name() or user.username
+        context['cargo_usuario'] = perfil.cargo if perfil else 'MEMBRO'
+        
+        if perfil and perfil.filial:
+            # Lista apenas os chamados da filial do operacional
+            chamados = TicketSuporte.objects.filter(filial=perfil.filial).order_by('-created_at')
+            context['chamados'] = chamados
+            context['total_chamados'] = chamados.count()
+            context['chamados_analise'] = chamados.filter(status='EM_ATENDIMENTO').count() + chamados.filter(status='CANAL_ABERTO').count()
+            context['chamados_resolvidos'] = chamados.filter(status__in=['RESOLVIDO', 'FECHADO']).count()
+        else:
+            context['chamados'] = []
+            context['total_chamados'] = 0
+            context['chamados_analise'] = 0
+            context['chamados_resolvidos'] = 0
+            
         return context
+
+@csrf_exempt
+@login_required(login_url='/login/')
+def abrir_ticket_operacional(request):
+    if request.method == 'POST':
+        try:
+            import json
+            data = json.loads(request.body)
+            assunto = data.get('assunto', 'Dúvida Operacional')
+            categoria = data.get('categoria', 'OUTROS')
+            mensagem = data.get('mensagem', '')
+            
+            user = request.user
+            perfil = getattr(user, 'motorista_perfil', None)
+            
+            if not perfil or not perfil.filial:
+                return JsonResponse({'status': 'error', 'message': 'Seu perfil não possui filial vinculada.'}, status=400)
+                
+            if perfil.cargo not in ['GERENTE', 'GESTOR']:
+                return JsonResponse({'status': 'error', 'message': 'Sem permissão para abrir chamados.'}, status=403)
+                
+            from suporte.models import TicketSuporte, MensagemSuporte
+            
+            # Cria o chamado associado ao perfil
+            ticket = TicketSuporte.objects.create(
+                motorista=perfil,
+                filial=perfil.filial,
+                categoria=categoria,
+                status='CANAL_ABERTO'
+            )
+            
+            # Mensagem inicial do sistema
+            MensagemSuporte.objects.create(
+                ticket=ticket,
+                enviado_por_motorista=False,
+                tipo='SISTEMA',
+                texto=f"Chamado aberto pelo Painel Operacional ({perfil.get_cargo_display()}). Assunto: {assunto}"
+            )
+            
+            # Mensagem do usuario
+            if mensagem.strip():
+                MensagemSuporte.objects.create(
+                    ticket=ticket,
+                    enviado_por_motorista=True, # true porque foi quem abriu o chamado
+                    tipo='TEXTO',
+                    texto=mensagem.strip()
+                )
+                
+            return JsonResponse({'status': 'success', 'message': 'Chamado aberto com sucesso.', 'ticket_id': ticket.id})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'error', 'message': 'Método inválido'}, status=405)
 
 # --- CONFIGURAÇÃO DO SISTEMA ---
 @method_decorator(login_required(login_url='/login/'), name='dispatch')
