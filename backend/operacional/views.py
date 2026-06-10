@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login
 from usuarios.models import Motorista , Filial
 from manifesto.models import Manifesto, Ocorrencia , NotaFiscal , BaixaNF , ManifestoBuscaLog, HistoricoOcorrencia
+from suporte.models import VideoTreinamento
 import json
 from django.views.generic import TemplateView, ListView
 from usuarios.decorators import apenas_operacional
@@ -823,7 +824,50 @@ class TreinamentosView(TemplateView):
         context = super().get_context_data(**kwargs)
         context['titulo'] = "Treinamentos e Tutoriais"
         context['usuario_nome'] = self.request.user.get_full_name() or self.request.user.username
+        context['videos'] = VideoTreinamento.objects.filter(ativo=True)
         return context
+
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+
+@csrf_exempt
+@login_required(login_url='/login/')
+def registrar_view_treinamento(request, video_id):
+    if request.method == 'POST':
+        try:
+            video = VideoTreinamento.objects.get(id=video_id)
+            video.visualizacoes += 1
+            video.save(update_fields=['visualizacoes'])
+            return JsonResponse({'status': 'success', 'views': video.visualizacoes})
+        except VideoTreinamento.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Vídeo não encontrado'}, status=404)
+    return JsonResponse({'status': 'error', 'message': 'Método inválido'}, status=405)
+
+@csrf_exempt
+@login_required(login_url='/login/')
+def avaliar_treinamento(request, video_id):
+    if request.method == 'POST':
+        try:
+            import json
+            data = json.loads(request.body)
+            tipo = data.get('tipo') # 'like' ou 'dislike'
+            
+            video = VideoTreinamento.objects.get(id=video_id)
+            
+            if tipo == 'like':
+                video.likes += 1
+                video.save(update_fields=['likes'])
+                return JsonResponse({'status': 'success', 'likes': video.likes})
+            elif tipo == 'dislike':
+                video.dislikes += 1
+                video.save(update_fields=['dislikes'])
+                return JsonResponse({'status': 'success', 'dislikes': video.dislikes})
+            else:
+                return JsonResponse({'status': 'error', 'message': 'Tipo inválido'}, status=400)
+                
+        except VideoTreinamento.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Vídeo não encontrado'}, status=404)
+    return JsonResponse({'status': 'error', 'message': 'Método inválido'}, status=405)
 
 @method_decorator(login_required(login_url='/login/'), name='dispatch')
 @method_decorator(apenas_operacional, name='dispatch')

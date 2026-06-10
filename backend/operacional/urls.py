@@ -31,6 +31,8 @@ urlpatterns = [
     # Central de Ajuda
     path('suporte/', views.SuporteView.as_view(), name='suporte'),
     path('treinamentos/', views.TreinamentosView.as_view(), name='treinamentos'),
+    path('api/treinamentos/registrar_view/<int:video_id>/', views.registrar_view_treinamento, name='registrar_view_treinamento'),
+    path('api/treinamentos/avaliar/<int:video_id>/', views.avaliar_treinamento, name='avaliar_treinamento'),
     path('central-ajuda/', views.CentralAjudaView.as_view(), name='central_ajuda'),
 
     # Configurações do Sistema
