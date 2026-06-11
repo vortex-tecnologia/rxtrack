@@ -112,3 +112,26 @@ Para resolver o problema definitivamente, o sistema foi dividido em dois PWA ins
 > A conclusão estabelecida foi de que o atual banco de dados **MySQL não possui suporte nativo à separação por schemas lógicos** da maneira como a arquitetura moderna do Django (ex: biblioteca `django-tenants`) exige para realizar o roteamento seguro e escalável. 
 > 
 > Sendo assim, **é mandatório que a infraestrutura realize a migração dos dados do MySQL para um banco de dados PostgreSQL** (versão 13 ou superior) antes que a transição para Multi-SaaS seja implementada. A tentativa de forçar o modelo Multi-SaaS no MySQL ("Row-level Multi-tenancy") exigiria a reescrita maciça de todas as QuerySets do sistema, adicionando chaves estrangeiras de `empresa_id` em todos os modelos (altíssimo custo de engenharia e altíssimo risco de vazamento de dados). O PostgreSQL resolverá este desafio "por baixo dos panos" garantindo segurança, escalabilidade e menor necessidade de reescrita do código fonte.
+
+---
+
+**Data:** 11/06/2026
+**Hora:** 11:30
+
+## Atualizações Aplicadas (10/06 a 11/06):
+
+1. **Migração Oficial Concluída (MySQL para PostgreSQL):**
+   - Transição definitiva e bem-sucedida do MySQL para o PostgreSQL na infraestrutura da VPS, cumprindo o pré-requisito arquitetural para o futuro modelo Multi-SaaS.
+   - Atualização do `backend/core/settings.py` para usar dinamicamente a engine e opções do PostgreSQL a partir das variáveis de ambiente (`.env`).
+   - Reestruturação do script `entrypoint.sh` do Docker para monitorar a disponibilidade do PostgreSQL (utilizando `psycopg2`) antes de disparar o Django, prevenindo falhas de inicialização do Nginx (Erro 404).
+
+2. **Novos Módulos Dinâmicos (Painel Operacional):**
+   - **Central de Treinamentos:** Nova página implementada e integrada dinamicamente. Os administradores agora cadastram vídeos pelo Django Admin, que são renderizados em modais dinâmicos no portal com suporte a rastreamento de engajamento (likes e visualizações de vídeos por usuário).
+   - **Central de Ajuda (Suporte):** O painel de tickets de suporte foi dinamizado, garantindo o acompanhamento visual do status do chamado e restringindo a criação excessiva de tickets baseada em lógicas do perfil de usuário.
+
+3. **Correções de Permissões (SAC):**
+   - Resolvido um bug crítico que causava bloqueio indevido de usuários com nível de "Gestor" no painel do SAC. A checagem de cargos no backend foi priorizada e corrigida (`09ed582`).
+
+4. **Direitos Autorais e Licenciamento (Legal):**
+   - Criação e inclusão de uma licença de software proprietário (`LICENSE`) na raiz do repositório para proteção jurídica do código fonte.
+   - Injeção de cabeçalhos formais de Copyright nos arquivos vitais e de configuração do backend.
