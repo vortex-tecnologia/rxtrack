@@ -241,7 +241,7 @@ class PreCadastroSAC(models.Model):
     """
     cpf = models.CharField(max_length=11, unique=True, verbose_name="CPF (Apenas números)")
     nome = models.CharField(max_length=255, verbose_name="Nome Completo")
-    email = models.EmailField(verbose_name="E-mail", help_text="Obrigatório para o envio do link de convite.")
+    email = models.EmailField(verbose_name="E-mail", help_text="Obrigatório para o envio do link de convite.", default='', blank=True)
     filial = models.ForeignKey(
         'Filial',
         on_delete=models.SET_NULL,
