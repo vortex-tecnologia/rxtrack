@@ -95,6 +95,7 @@ class Ocorrencia(models.Model):
         ('PROBLEMA', 'Problema (Rejeição/Não Realizada)'),
     ]
     tipo = models.CharField(max_length=10, choices=TIPO_CHOICES, default='PROBLEMA')
+    is_coleta = models.BooleanField(default=False, verbose_name="Exibir em Coletas", help_text="Marque se esta ocorrência deve aparecer nas opções do aplicativo para recusa de coletas.")
 
     def __str__(self):
         return f"[{self.codigo_tms}] {self.descricao}"

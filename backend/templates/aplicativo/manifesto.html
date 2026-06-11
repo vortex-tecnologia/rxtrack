@@ -1071,22 +1071,51 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-4 text-center">
-                    <div class="mb-4">
-                        <i class="bi bi-question-circle text-primary" style="font-size: 4rem;"></i>
-                    </div>
-                    <h4 class="fw-bold mb-3">A coleta foi realizada?</h4>
-                    <p class="text-muted mb-4">Confirme se os itens foram coletados com sucesso no cliente.</p>
                     
-                    <div class="d-grid gap-3">
-                        <button type="button" id="btn-coleta-sim" class="btn btn-success btn-lg py-3 fw-bold shadow-sm">
-                            <i class="bi bi-check-circle me-2"></i> SIM, COLETEI
-                        </button>
-                        <button type="button" id="btn-coleta-nao" class="btn btn-outline-danger btn-lg py-3 fw-bold">
-                            <i class="bi bi-x-circle me-2"></i> NÃO COLETEI
-                        </button>
+                    <div id="coleta-pergunta-container">
+                        <div class="mb-4">
+                            <i class="bi bi-question-circle text-primary" style="font-size: 4rem;"></i>
+                        </div>
+                        <h4 class="fw-bold mb-3">A coleta foi realizada?</h4>
+                        <p class="text-muted mb-4">Confirme se os itens foram coletados com sucesso no cliente.</p>
+                        
+                        <div class="d-grid gap-3">
+                            <button type="button" id="btn-coleta-sim" class="btn btn-success btn-lg py-3 fw-bold shadow-sm">
+                                <i class="bi bi-check-circle me-2"></i> SIM, COLETEI
+                            </button>
+                            <button type="button" id="btn-coleta-nao" class="btn btn-outline-danger btn-lg py-3 fw-bold">
+                                <i class="bi bi-x-circle me-2"></i> NÃO COLETEI
+                            </button>
+                        </div>
                     </div>
+
+                    <!-- CONTAINER DE MOTIVO DE NÃO COLETA -->
+                    <div id="coleta-motivo-container" class="d-none text-start">
+                        <div class="mb-3 text-center">
+                            <i class="bi bi-exclamation-triangle text-warning" style="font-size: 3rem;"></i>
+                        </div>
+                        <h5 class="fw-bold mb-3 text-center">Qual o motivo?</h5>
+                        <p class="text-muted small text-center mb-3">Selecione o motivo pelo qual a coleta não foi realizada com sucesso.</p>
+                        
+                        <select id="select-coleta-motivo" class="form-select form-select-lg mb-3">
+                            <option value="" disabled selected>Selecione um motivo...</option>
+                            <!-- Prenchido via JS -->
+                        </select>
+                        
+                        <textarea id="obs-coleta-motivo" class="form-control mb-4" placeholder="Observação (Opcional)" rows="2"></textarea>
+                        
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="button" id="btn-confirmar-nao-coleta" class="btn btn-primary btn-lg fw-bold shadow-sm">
+                                Confirmar Motivo <i class="bi bi-check-lg ms-1"></i>
+                            </button>
+                            <button type="button" id="btn-voltar-coleta" class="btn btn-light fw-bold">
+                                Voltar
+                            </button>
+                        </div>
+                    </div>
+
                 </div>
-                <div class="modal-footer border-0 justify-content-center pb-4">
+                <div class="modal-footer border-0 justify-content-center pb-4" id="coleta-footer-cancelar">
                     <button type="button" class="btn btn-link text-muted text-decoration-none fw-bold" data-bs-dismiss="modal">
                         Cancelar e Voltar
                     </button>

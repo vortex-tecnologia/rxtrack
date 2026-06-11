@@ -1779,11 +1779,52 @@ async function confirmarTransferenciaIndividual(numeroNota, chave) {
 // LÓGICA DE COLETA (NOVO FLUXO)
 // =====================================================
 
+let motivosColetaCache = null;
+
+async function carregarMotivosColeta() {
+    if (motivosColetaCache) return motivosColetaCache;
+    
+    try {
+        const response = await authFetch(`${API_BASE}manifesto/ocorrencias/?is_coleta=true`);
+        if (response.ok) {
+            motivosColetaCache = await response.json();
+            return motivosColetaCache;
+        }
+    } catch (e) {
+        console.warn("Erro ao buscar motivos de coleta", e);
+    }
+    
+    // Fallback caso a API falhe ou offline
+    return [
+        { codigo_tms: "004", descricao: "Coleta não Realizada" },
+        { codigo_tms: "020", descricao: "Falta de Tempo Hábil" },
+        { codigo_tms: "021", descricao: "Estabelecimento Fechado" },
+        { codigo_tms: "041", descricao: "Retorno para ARMAZENAGEM por devolução do cliente" },
+        { codigo_tms: "044", descricao: "Tempo de espera no cliente excedido" }
+    ];
+}
+
 function abrirModalColeta(numero, pickId, tipo) {
     console.log("📦 Abrindo modal de Coleta:", numero);
     const modalColeta = new bootstrap.Modal(document.getElementById('modalColeta'));
     const btnSim = document.getElementById('btn-coleta-sim');
     const btnNao = document.getElementById('btn-coleta-nao');
+    
+    // Elementos do novo UI
+    const containerPergunta = document.getElementById('coleta-pergunta-container');
+    const containerMotivo = document.getElementById('coleta-motivo-container');
+    const footerCancelar = document.getElementById('coleta-footer-cancelar');
+    const selectMotivo = document.getElementById('select-coleta-motivo');
+    const obsMotivo = document.getElementById('obs-coleta-motivo');
+    const btnConfirmarMotivo = document.getElementById('btn-confirmar-nao-coleta');
+    const btnVoltarColeta = document.getElementById('btn-voltar-coleta');
+
+    // Reset da UI para estado inicial (Pergunta Sim/Não)
+    containerPergunta.classList.remove('d-none');
+    containerMotivo.classList.add('d-none');
+    footerCancelar.classList.remove('d-none');
+    selectMotivo.value = "";
+    obsMotivo.value = "";
 
     // Remove listeners antigos para evitar disparos duplos
     const novoBtnSim = btnSim.cloneNode(true);
@@ -1791,15 +1832,56 @@ function abrirModalColeta(numero, pickId, tipo) {
 
     const novoBtnNao = btnNao.cloneNode(true);
     btnNao.parentNode.replaceChild(novoBtnNao, btnNao);
+    
+    const novoBtnConfirmar = btnConfirmarMotivo.cloneNode(true);
+    btnConfirmarMotivo.parentNode.replaceChild(novoBtnConfirmar, btnConfirmarMotivo);
+    
+    const novoBtnVoltar = btnVoltarColeta.cloneNode(true);
+    btnVoltarColeta.parentNode.replaceChild(novoBtnVoltar, btnVoltarColeta);
 
+    // Ações
     novoBtnSim.onclick = () => {
         modalColeta.hide();
         salvarRegistroColeta(pickId, '1', 'Coleta realizada com sucesso');
     };
 
-    novoBtnNao.onclick = () => {
+    novoBtnNao.onclick = async () => {
+        // Mostra a tela de motivo
+        containerPergunta.classList.add('d-none');
+        footerCancelar.classList.add('d-none');
+        containerMotivo.classList.remove('d-none');
+        
+        // Carrega motivos se ainda não estiver carregado no select
+        if (selectMotivo.options.length <= 1) {
+            selectMotivo.innerHTML = '<option value="" disabled selected>Carregando motivos...</option>';
+            const motivos = await carregarMotivosColeta();
+            selectMotivo.innerHTML = '<option value="" disabled selected>Selecione um motivo...</option>';
+            motivos.forEach(motivo => {
+                // Não adiciona a ocorrência 1 (sucesso) na lista de problemas
+                if (motivo.codigo_tms !== "001" && motivo.codigo_tms !== "1") {
+                    selectMotivo.innerHTML += `<option value="${motivo.codigo_tms}">${motivo.codigo_tms} - ${motivo.descricao}</option>`;
+                }
+            });
+        }
+    };
+    
+    novoBtnVoltar.onclick = () => {
+        containerMotivo.classList.add('d-none');
+        containerPergunta.classList.remove('d-none');
+        footerCancelar.classList.remove('d-none');
+    };
+    
+    novoBtnConfirmar.onclick = () => {
+        const codigo = selectMotivo.value;
+        const obs = obsMotivo.value.trim();
+        
+        if (!codigo) {
+            alert("Por favor, selecione um motivo.");
+            return;
+        }
+        
         modalColeta.hide();
-        salvarRegistroColeta(pickId, '04', 'Coleta não realizada');
+        salvarRegistroColeta(pickId, codigo, obs || selectMotivo.options[selectMotivo.selectedIndex].text);
     };
 
     modalColeta.show();
