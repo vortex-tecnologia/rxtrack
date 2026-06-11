@@ -133,14 +133,13 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.mysql'),
-        'NAME': os.getenv('DB_NAME', 'st63136_dev_app_transportadora'),
-        'USER': os.getenv('DB_USER', 'st63136_quickdelivery'),
-        'PASSWORD': os.getenv('DB_PASSWORD'),
-        'HOST': os.getenv('DB_HOST', 'host.docker.internal'),
-        'PORT': os.getenv('DB_PORT', '3308'),
+        'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.postgresql'),
+        'NAME': os.getenv('DB_NAME', 'quicktrack_homolog'),
+        'USER': os.getenv('DB_USER', 'quicktrack'),
+        'PASSWORD': os.getenv('DB_PASSWORD', 'VxQtHom2026#Pg'),
+        'HOST': os.getenv('DB_HOST', 'qt_homolog_postgres'),
+        'PORT': os.getenv('DB_PORT', '5432'),
         'OPTIONS': {
-            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
             'charset': 'utf8mb4',
         },
     }
