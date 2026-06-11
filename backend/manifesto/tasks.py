@@ -444,7 +444,11 @@ def buscar_manifesto_completo_task(self, log_id):
         transaction.on_commit(lambda: enviar_painel(manifesto_obj))
 
         # Dispara busca de coletas em background após finalizar o processo principal
-        buscar_coletas_manifesto_task.delay(manifesto_obj.id, numero_visual)
+        # Aguarda 30s antes de disparar para respeitar o rate limit da API ESL
+        buscar_coletas_manifesto_task.apply_async(
+            args=[manifesto_obj.id, numero_visual],
+            countdown=30
+        )
 
         return f"Manifesto {numero_visual} processado: {total_processadas} itens entre notas e minutas."
 
@@ -492,6 +496,9 @@ def buscar_coletas_esl(numero_manifesto, token, dominio, report_coletas):
         "per": "100"
     }
     
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
         r = requests.get(
             url, 
@@ -501,14 +508,14 @@ def buscar_coletas_esl(numero_manifesto, token, dominio, report_coletas):
         )
         if r.status_code == 200:
             return r.json()
+        elif r.status_code == 429:
+            # Rate limit da ESL - propaga o erro para o Celery fazer retry
+            raise Exception(f"Rate limit ESL (429): API pediu para aguardar. Manifesto {numero_manifesto}")
         else:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Erro ao buscar coletas para manifesto {numero_manifesto}: {r.status_code} - {r.text}")
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Exceção ao buscar coletas: {e}")
+        raise  # Re-lança para o Celery fazer retry
     return []
 
 @shared_task(bind=True, max_retries=3)
