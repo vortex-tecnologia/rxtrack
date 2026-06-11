@@ -24,6 +24,9 @@ class Motorista(models.Model):
     # Campo CRÍTICO: Armazena o CPF (sem pontuação)
     cpf = models.CharField(max_length=11, unique=True, verbose_name="CPF")
     
+    # NOVO: E-mail para recebimento de senha e alertas (Obrigatório para SAC/Operacional na View, opcional para Motorista)
+    email = models.EmailField(blank=True, null=True, verbose_name="E-mail")
+    
     nome_completo = models.CharField(max_length=255, verbose_name="Nome Completo")
     cnh_numero = models.CharField(max_length=20, blank=True, null=True, verbose_name="Número da CNH")
     telefone = models.CharField(max_length=20, blank=True, null=True, verbose_name="Telefone / Celular")
@@ -238,6 +241,7 @@ class PreCadastroSAC(models.Model):
     """
     cpf = models.CharField(max_length=11, unique=True, verbose_name="CPF (Apenas números)")
     nome = models.CharField(max_length=255, verbose_name="Nome Completo")
+    email = models.EmailField(verbose_name="E-mail", help_text="Obrigatório para o envio do link de convite.")
     filial = models.ForeignKey(
         'Filial',
         on_delete=models.SET_NULL,
@@ -256,3 +260,33 @@ class PreCadastroSAC(models.Model):
     class Meta:
         verbose_name = "Pré-Cadastro SAC"
         verbose_name_plural = "Pré-Cadastros SAC"
+
+@receiver(post_save, sender=PreCadastroSAC)
+def enviar_email_convite_sac(sender, instance, created, **kwargs):
+    if created and instance.email:
+        try:
+            from django.core.mail import send_mail
+            from django.template.loader import render_to_string
+            from django.utils.html import strip_tags
+            from django.conf import settings
+            
+            # TODO: We need a way to get the domain here, since request is not available in signals.
+            # We will use settings.ALLOWED_HOSTS[0] or a default environment variable for now.
+            import os
+            host = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')[0]
+            dominio = f"https://{host}" if host != '127.0.0.1' else "http://localhost:8000"
+
+            context = {'nome': instance.nome, 'cpf': instance.cpf, 'dominio': dominio}
+            html_message = render_to_string('emails/convite_sac.html', context)
+            plain_message = strip_tags(html_message)
+            
+            send_mail(
+                'Convite para Equipe - QuickTrack',
+                plain_message,
+                settings.DEFAULT_FROM_EMAIL,
+                [instance.email],
+                html_message=html_message,
+                fail_silently=True
+            )
+        except Exception:
+            pass

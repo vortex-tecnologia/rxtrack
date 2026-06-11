@@ -14,6 +14,9 @@ urlpatterns = [
     # Rota Exclusiva de Login do SAC
     path('login-sac/', login_sac_mobile_view, name='login_sac_mobile'),
     
+    # Rota para redefinição de senha via email
+    path('redefinir-senha/<uidb64>/<token>/', include('usuarios.urls_reset')),
+    
     path('api/auth/', include('core.rotas.auth')),
     path('auth/', include(('usuarios.urls', 'usuarios'), namespace='usuarios')),
     path('api/', include(('manifesto.urls', 'manifesto'), namespace='manifesto')),

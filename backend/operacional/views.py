@@ -766,16 +766,40 @@ def motorista_cadastrar(request):
         filial_id = request.POST.get('filial_id')
         foto = request.FILES.get('foto_perfil')
 
+        email = request.POST.get('email', '')
+
         # Remove tudo que não for número (limpa pontos e traços)
         cpf_limpo = re.sub(r'\D', '', cpf_sujo)
 
-        Motorista.objects.create(
+        motorista = Motorista.objects.create(
             nome_completo=nome,
             cpf=cpf_limpo,
             telefone=telefone,
+            email=email if email else None,
             filial_id=filial_id if filial_id else None,
             foto_perfil=foto
         )
+        
+        if email:
+            from django.core.mail import send_mail
+            from django.template.loader import render_to_string
+            from django.utils.html import strip_tags
+            from django.conf import settings
+            
+            dominio = f"{request.scheme}://{request.get_host()}"
+            context = {'nome': nome, 'cpf': cpf_sujo, 'dominio': dominio}
+            html_message = render_to_string('emails/boas_vindas.html', context)
+            plain_message = strip_tags(html_message)
+            
+            send_mail(
+                'Bem-vindo ao QuickTrack',
+                plain_message,
+                settings.DEFAULT_FROM_EMAIL,
+                [email],
+                html_message=html_message,
+                fail_silently=True
+            )
+            
         return JsonResponse({'success': True, 'message': 'Motorista cadastrado com sucesso!'})
     except Exception as e:
         return JsonResponse({'success': False, 'message': f'Erro ao cadastrar: {str(e)}'})
@@ -790,6 +814,9 @@ def motorista_editar(request):
         motorista.nome_completo = request.POST.get('nome_completo')
         motorista.cpf = request.POST.get('cpf')
         motorista.telefone = request.POST.get('telefone', '')
+        
+        email = request.POST.get('email', '')
+        motorista.email = email if email else None
         
         filial_id = request.POST.get('filial_id')
         motorista.filial_id = filial_id if filial_id else None
@@ -848,6 +875,7 @@ def registrar_view_treinamento(request, video_id):
 def avaliar_treinamento(request, video_id):
     if request.method == 'POST':
         try:
+
             import json
             data = json.loads(request.body)
             tipo = data.get('tipo') # 'like' ou 'dislike'
@@ -1020,3 +1048,48 @@ def salvar_configuracao_view(request):
         
     except Exception as e:
         return JsonResponse({'status': 'erro', 'message': str(e)}, status=400)
+
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+
+@login_required
+@require_POST
+def enviar_redefinicao_senha_view(request, motorista_id):
+    try:
+        motorista = Motorista.objects.get(id=motorista_id)
+        if not motorista.email:
+            return JsonResponse({'success': False, 'message': 'Este usuário não possui um e-mail cadastrado.'})
+        
+        user = motorista.user
+        if not user:
+            return JsonResponse({'success': False, 'message': 'O usuário ainda não acessou o sistema e não possui uma conta vinculada para redefinição de senha.'})
+
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        dominio = f"{request.scheme}://{request.get_host()}"
+        reset_url = f"{dominio}/redefinir-senha/{uid}/{token}/"
+
+        from django.core.mail import send_mail
+        from django.template.loader import render_to_string
+        from django.utils.html import strip_tags
+        from django.conf import settings
+
+        context = {'nome': motorista.nome_completo, 'reset_url': reset_url, 'dominio': dominio}
+        html_message = render_to_string('emails/reset_senha.html', context)
+        plain_message = strip_tags(html_message)
+
+        send_mail(
+            'Redefinição de Senha - QuickTrack',
+            plain_message,
+            settings.DEFAULT_FROM_EMAIL,
+            [motorista.email],
+            html_message=html_message,
+            fail_silently=False
+        )
+
+        return JsonResponse({'success': True, 'message': 'E-mail enviado com sucesso!'})
+    except Motorista.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Motorista não encontrado.'}, status=404)
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': f'Erro ao enviar e-mail: {str(e)}'}, status=500)

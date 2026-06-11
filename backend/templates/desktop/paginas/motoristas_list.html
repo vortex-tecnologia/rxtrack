@@ -172,7 +172,10 @@
                             </div>
                         </td>
                         <td class="text-end pe-4">
-                            <button onclick="abrirDetalhes('{{ m.id }}', '{{ m.nome_completo }}', '{{ m.cpf }}', '{% if m.foto_perfil %}{{ m.foto_perfil.url }}{% endif %}', '{{ m.telefone|default:'' }}', '{{ m.filial_id|default:'' }}')" 
+                            <button onclick="enviarRedefinicaoSenha('{{ m.id }}')" class="btn btn-sm btn-outline-secondary border-0 me-1" title="Enviar Redefinição de Senha">
+                                <i class="bi bi-envelope"></i>
+                            </button>
+                            <button onclick="abrirDetalhes('{{ m.id }}', '{{ m.nome_completo }}', '{{ m.cpf }}', '{% if m.foto_perfil %}{{ m.foto_perfil.url }}{% endif %}', '{{ m.telefone|default:'' }}', '{{ m.filial_id|default:'' }}', '{{ m.email|default:'' }}')" 
                                     class="btn btn-sm btn-outline-primary border-0">
                                 <i class="bi bi-pencil-square"></i> Editar
                             </button>
@@ -206,6 +209,10 @@
                     <div class="mb-3">
                         <label class="form-label small fw-bold">CPF</label>
                         <input type="text" name="cpf" class="form-control cpf-mask" required placeholder="000.000.000-00">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">E-mail (Opcional p/ Motorista)</label>
+                        <input type="email" name="email" class="form-control" placeholder="usuario@email.com">
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-bold">Telefone / Celular (Opcional)</label>
@@ -259,6 +266,10 @@
                     <div class="mb-3">
                         <label class="form-label small fw-bold">CPF</label>
                         <input type="text" name="cpf" id="edit_cpf" class="form-control cpf-mask">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">E-mail (Opcional p/ Motorista)</label>
+                        <input type="email" name="email" id="edit_email" class="form-control" placeholder="usuario@email.com">
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-bold">Telefone / Celular (Opcional)</label>
@@ -386,16 +397,39 @@ document.getElementById('formEdicao').addEventListener('submit', e => {
     enviarFormulario('formEdicao', "{% url 'operacional:motorista_editar' %}", 'btnSalvarEdicao', 'loaderBtnEdicao', 'msgFeedbackEdicao'); // Crie essa ID no modal de edição também
 });
 
-function abrirDetalhes(id, nome, cpf, foto, telefone, filial_id) {
+function abrirDetalhes(id, nome, cpf, foto, telefone, filial_id, email) {
     document.getElementById('edit_id').value = id;
     document.getElementById('edit_nome').value = nome;
     document.getElementById('edit_cpf').value = cpf;
     document.getElementById('edit_telefone').value = telefone || '';
     document.getElementById('edit_filial').value = filial_id || '';
+    document.getElementById('edit_email').value = email || '';
     const img = document.getElementById('view_foto');
     if(foto) { img.src = foto; img.style.display = 'inline-block'; } 
     else { img.style.display = 'none'; }
     new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
+}
+
+async function enviarRedefinicaoSenha(id) {
+    if(!confirm("Deseja enviar um link de redefinição de senha para o e-mail cadastrado deste usuário?")) return;
+    
+    try {
+        const response = await fetch(`/operacional/usuarios/reset-senha/${id}/`, {
+            method: 'POST',
+            headers: { 
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            }
+        });
+        const data = await response.json();
+        if (data.success) {
+            alert("E-mail de redefinição enviado com sucesso!");
+        } else {
+            alert("Erro: " + data.message);
+        }
+    } catch (e) {
+        alert("Erro ao comunicar com o servidor.");
+    }
 }
 </script>
 {% endblock %}
