@@ -115,7 +115,6 @@
                 <thead class="bg-light">
                     <tr>
                         <th class="ps-4">Motorista</th>
-                        <th>Contato & Acesso</th>
                         <th class="text-center">Manifestos</th>
                         <th class="text-center">Sucessos</th>
                         <th class="text-center">Pendentes</th>
@@ -142,12 +141,6 @@
                                     <h6 class="mb-0 fw-bold">{{ m.nome_completo }}</h6>
                                     <small class="text-muted">CPF: {{ m.cpf }}</small>
                                 </div>
-                            </div>
-                        </td>
-                        <td>
-                            <div class="small text-muted mb-1" title="E-mail"><i class="bi bi-envelope"></i> {{ m.email|default:'Não informado' }}</div>
-                            <div class="small fw-bold {% if m.user.last_login %}text-success{% else %}text-danger{% endif %}" title="Último Acesso">
-                                <i class="bi bi-box-arrow-in-right"></i> {{ m.user.last_login|date:"d/m/y H:i"|default:"Nunca acessou" }}
                             </div>
                         </td>
                         <td class="text-center fw-bold text-dark">{{ m.total_mfts }}</td>
@@ -189,7 +182,7 @@
                         </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="8" class="text-center py-5">Nenhum dado no período.</td></tr>
+                    <tr><td colspan="6" class="text-center py-5">Nenhum dado no período.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
