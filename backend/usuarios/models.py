@@ -283,10 +283,10 @@ def enviar_email_convite_sac(sender, instance, created, **kwargs):
             send_mail(
                 'Convite para Equipe - QuickTrack',
                 plain_message,
-                settings.DEFAULT_FROM_EMAIL,
+                settings.EMAIL_HOST_USER,
                 [instance.email],
                 html_message=html_message,
-                fail_silently=True
+                fail_silently=False
             )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Erro ao enviar email de convite SAC: {e}")

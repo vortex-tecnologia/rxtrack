@@ -184,15 +184,17 @@ def api_criar_usuario(request):
             send_mail(
                 'Bem-vindo ao QuickTrack',
                 plain_message,
-                settings.DEFAULT_FROM_EMAIL,
+                settings.EMAIL_HOST_USER,
                 [email],
                 html_message=html_message,
-                fail_silently=True
+                fail_silently=False
             )
         except Exception as e:
-            print(f"Erro ao enviar email: {e}")
+            email_erro = str(e)
+            print(f"Erro ao enviar email: {email_erro}")
+            return JsonResponse({'status': 'ok', 'id': motorista.id, 'mensagem': f'{nome} criado, mas o e-mail falhou: {email_erro}'})
         
-        return JsonResponse({'status': 'ok', 'id': motorista.id, 'mensagem': f'{nome} criado com sucesso!'})
+        return JsonResponse({'status': 'ok', 'id': motorista.id, 'mensagem': f'{nome} criado e e-mail enviado com sucesso!'})
     except Exception as e:
         return JsonResponse({'erro': str(e)}, status=500)
 
