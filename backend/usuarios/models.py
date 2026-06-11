@@ -263,7 +263,7 @@ class PreCadastroSAC(models.Model):
 
 @receiver(post_save, sender=PreCadastroSAC)
 def enviar_email_convite_sac(sender, instance, created, **kwargs):
-    if created and instance.email:
+    if instance.email:
         try:
             from django.core.mail import send_mail
             from django.template.loader import render_to_string
