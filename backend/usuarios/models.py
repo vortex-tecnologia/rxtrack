@@ -50,7 +50,7 @@ class Motorista(models.Model):
         ('ADMINISTRADOR', 'Administrador'),
     ]
     cargo = models.CharField(
-        max_length=10,
+        max_length=15,
         choices=CARGO_CHOICES,
         default='MEMBRO',
         verbose_name="Cargo"
