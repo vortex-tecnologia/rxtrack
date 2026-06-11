@@ -759,7 +759,7 @@
         // SCRIPT PARA EXTRAIR E MOSTRAR AS VERSÕES DINAMICAMENTE NO MODAL
         document.addEventListener('DOMContentLoaded', function () {
             // Data da última atualização na interface HTML (pode ser hardcoded aqui sempre que houver update significativo)
-            const htmlLastUpdate = "19/03/2026";
+            const htmlLastUpdate = "11/06/2026";
 
             const btnDispData = document.getElementById('disp-html-data');
             if (btnDispData) btnDispData.textContent = htmlLastUpdate;
@@ -784,7 +784,7 @@
             // Encontrar a versão do ServiceWorker listada no arquivo estaticamente
             // (Para PWA, como o cacheName está no sw.js, o mais performático é hardcodar a versão paralela aqui 
             // no HTML. Sempre recomendo alterar aqui com o SW)
-            const currentSwVersion = "1.34";
+            const currentSwVersion = "1.35";
             const btnDispSw = document.getElementById('disp-sw-versao');
             if (btnDispSw) btnDispSw.textContent = "v" + currentSwVersion;
         });
@@ -1639,9 +1639,9 @@
     </div>
 
 
-    <script src="{% static 'js/serviceworker.js' %}?v=1.34"></script>
+    <script src="{% static 'js/serviceworker.js' %}?v=1.35"></script>
     <script src="/static/js/login_motorista/authFetch.js"></script>
-    <script src="{% static 'js/manifesto_v17.js' %}"></script>
+    <script src="{% static 'js/manifesto_v18.js' %}"></script>
     <script src="{% static 'js/pwa_tracking.js' %}"></script>
     <script src="{% static 'js/offiline.js' %}"></script>
     <script src="{% static 'js/historico_v1.js' %}"></script>
