@@ -266,8 +266,6 @@ async function confirmarExclusao() {
     }
 }
 
-}
-
 // === ENVIAR REDEFINICAO DE SENHA ===
 async function enviarRedefinicaoSenha(id) {
     if(!confirm("Deseja enviar um link de redefinição de senha para o e-mail cadastrado deste usuário?")) return;
