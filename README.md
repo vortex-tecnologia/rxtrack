@@ -135,3 +135,24 @@ Para resolver o problema definitivamente, o sistema foi dividido em dois PWA ins
 4. **Direitos Autorais e Licenciamento (Legal):**
    - Criação e inclusão de uma licença de software proprietário (`LICENSE`) na raiz do repositório para proteção jurídica do código fonte.
    - Injeção de cabeçalhos formais de Copyright nos arquivos vitais e de configuração do backend.
+
+---
+
+**Data:** 11/06/2026
+**Hora:** 16:30
+
+## Ajustes de Timezone, E-mails e Central de Ajuda:
+
+1. **Gestão de Usuários e Automação de E-mails:**
+   - Adicionadas as colunas de **E-mail** e **Último Acesso** na tabela principal de Gestão de Usuários.
+   - Inserido um novo botão de ação rápida (ícone de envelope) para disparar **E-mails de Redefinição de Senha** para usuários operacionais e motoristas com apenas um clique.
+   - Corrigido o envio de **E-mails de Boas Vindas** e **Convite SAC**, alterando o remetente padrão para a conta autenticada no servidor (SMTP) a fim de evitar bloqueios de *spoofing* do Gmail.
+   - Removido o bloqueio silencioso (`fail_silently=False`) para exibir avisos reais caso haja falha no provedor de envio de e-mails.
+
+2. **Correção Definitiva de Timezone (Fuso Horário):**
+   - Restaurada a integridade global do banco de dados mantendo `USE_TZ = True`.
+   - Corrigido o **bug da virada de dia antecipada** às 21h no painel `DashboardView`, convertendo explicitamente o objeto de tempo para o fuso local do Brasil (`timezone.localtime()`) antes dos cálculos de métricas.
+   - Corrigida a exibição do **Último Acesso** na listagem de usuários, subtraindo o avanço incorreto de 3 horas gerado pela leitura direta em UTC.
+
+3. **Correção de Erro na Central de Ajuda:**
+   - Resolvido o *Erro 500* que derrubava a renderização da Central de Ajuda devido a uma falha de referência (importação) do modelo `TicketSuporte` no controller da view operacional.
