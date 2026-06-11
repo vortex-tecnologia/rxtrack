@@ -70,17 +70,17 @@ function renderUserRow(u) {
                 <div class="rounded-circle bg-primary bg-opacity-10 text-primary fw-bold d-flex align-items-center justify-content-center" 
                      style="width: 40px; height: 40px; font-size: 0.85rem;">${iniciais}</div>
                 <div>
-                    <div class="fw-semibold">${u.nome}</div>
+                    <div class="fw-semibold mb-1">${u.nome}</div>
+                    <div class="small text-muted" title="E-mail"><i class="bi bi-envelope"></i> ${u.email || 'Não informado'}</div>
                 </div>
             </div>
         </td>
-        <td class="py-3"><code>${formatCPF(u.cpf)}</code></td>
         <td class="py-3">
-            <div class="small text-muted mb-1" title="E-mail"><i class="bi bi-envelope"></i> ${u.email || 'Não informado'}</div>
             <div class="small fw-bold ${u.ultimo_acesso ? 'text-success' : 'text-danger'}" title="Último Acesso">
                 <i class="bi bi-box-arrow-in-right"></i> ${u.ultimo_acesso || 'Nunca acessou'}
             </div>
         </td>
+        <td class="py-3"><code>${formatCPF(u.cpf)}</code></td>
         <td class="py-3">${badgeTipo}</td>
         <td class="py-3">${badgeCargo}</td>
         <td class="py-3"><span class="text-muted small">${u.filial_nome}</span></td>
