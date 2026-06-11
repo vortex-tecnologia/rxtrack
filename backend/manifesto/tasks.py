@@ -440,17 +440,68 @@ def buscar_manifesto_completo_task(self, log_id):
                 continue
         log.status = 'PROCESSADO'
         log.save()
-        # 🔔 Atualiza o painel somente depois que tudo foi salvo
+
+        # --- ETAPA 4: BUSCAR COLETAS (INLINE, MESMO FLUXO) ---
+        # Aguarda 2.1s para respeitar o rate limit da ESL antes de fazer nova chamada
+        time.sleep(2.1)
+        try:
+            report_coletas = getattr(config, 'report_coletas', '11324')
+            coletas = buscar_coletas_esl(numero_visual, token_geral, config.dominio_esl, report_coletas)
+            
+            total_coletas = 0
+            if coletas:
+                for coleta in coletas:
+                    seq_code = coleta.get('sequence_code')
+                    if not seq_code:
+                        continue
+                    
+                    solicitante = coleta.get('pck_pln_name', '')
+                    if not solicitante:
+                        solicitante = coleta.get('requester', 'SOLICITANTE NÃO INFORMADO')
+                    destinatario = str(solicitante).upper()
+                    
+                    rua = coleta.get('pck_pln_mds_line_1', '')
+                    num = coleta.get('pck_pln_mds_number', '')
+                    bairro = coleta.get('pck_pln_mds_neighborhood', '')
+                    cidade = coleta.get('pck_pln_mds_cty_name', '')
+                    
+                    partes_endereco = [rua, num, bairro, cidade]
+                    endereco = ", ".join([p.strip() for p in partes_endereco if p and str(p).strip()])
+                    if not endereco:
+                        endereco = "ENDEREÇO NÃO INFORMADO"
+                    endereco = endereco.upper()
+                    
+                    NotaFiscal.objects.update_or_create(
+                        manifesto=manifesto_obj,
+                        numero_nota=str(seq_code),
+                        tipo_operacao='COLETA',
+                        defaults={
+                            'destinatario': destinatario,
+                            'endereco_entrega': endereco,
+                            'numero_coleta': str(seq_code),
+                        }
+                    )
+                    total_coletas += 1
+                
+                if total_coletas > 0:
+                    qtd_coletas = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='COLETA').count()
+                    manifesto_obj.qtd_retirada = qtd_coletas
+                    manifesto_obj.save(update_fields=['qtd_retirada'])
+                    
+            logger.info(f"Coletas para {numero_visual}: {total_coletas} encontradas e salvas.")
+        except Exception as e:
+            # Se a busca de coletas falhar, não trava o fluxo principal
+            # Dispara a task de retry em background como fallback
+            logger.warning(f"⚠️ Falha ao buscar coletas inline para {numero_visual}: {e}. Disparando retry em background.")
+            buscar_coletas_manifesto_task.apply_async(
+                args=[manifesto_obj.id, numero_visual],
+                countdown=30
+            )
+
+        # 🔔 Atualiza o painel DEPOIS de tudo (notas + coletas) estar salvo
         transaction.on_commit(lambda: enviar_painel(manifesto_obj))
 
-        # Dispara busca de coletas em background após finalizar o processo principal
-        # Aguarda 30s antes de disparar para respeitar o rate limit da API ESL
-        buscar_coletas_manifesto_task.apply_async(
-            args=[manifesto_obj.id, numero_visual],
-            countdown=30
-        )
-
-        return f"Manifesto {numero_visual} processado: {total_processadas} itens entre notas e minutas."
+        return f"Manifesto {numero_visual} processado: {total_processadas} notas/minutas + {total_coletas if 'total_coletas' in dir() else 0} coletas."
 
     except Exception as e:
         logger.error(f"🔴 Erro crítico: {str(e)}")
