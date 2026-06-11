@@ -9,7 +9,7 @@
         <p class="text-muted">Gerencie seus pedidos de suporte e solicitações técnicas.</p>
     </div>
     <div class="col-md-4 text-md-end">
-        {% if cargo_usuario == 'GERENTE' or cargo_usuario == 'GESTOR' %}
+        {% if cargo_usuario == 'GERENTE' or cargo_usuario == 'GESTOR' or cargo_usuario == 'ADMINISTRADOR' %}
         <button class="btn btn-primary d-flex align-items-center gap-2 ms-auto px-4 shadow-sm" style="border-radius: 10px;" data-bs-toggle="modal" data-bs-target="#abrirTicketModal">
             <i class="bi bi-plus-lg"></i> Abrir Novo Ticket
         </button>

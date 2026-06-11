@@ -8,7 +8,7 @@ from django.db import transaction
 from .models import Motorista, Filial, PermissaoUsuario
 import json
 
-CARGO_NIVEL = {'MEMBRO': 1, 'GERENTE': 2, 'GESTOR': 3}
+CARGO_NIVEL = {'MEMBRO': 1, 'GERENTE': 2, 'GESTOR': 3, 'ADMINISTRADOR': 4}
 
 
 def get_perfil_logado(request):
@@ -22,7 +22,7 @@ def pode_gerenciar(perfil):
     """Verifica se o perfil tem permissao para gerenciar usuarios."""
     if not perfil:
         return False
-    return perfil.cargo in ['GESTOR', 'GERENTE']
+    return perfil.cargo in ['GESTOR', 'GERENTE', 'ADMINISTRADOR']
 
 
 @login_required
@@ -216,7 +216,7 @@ def api_editar_usuario(request, usuario_id):
     nivel_logado = CARGO_NIVEL.get(perfil.cargo, 0)
     nivel_alvo = CARGO_NIVEL.get(alvo.cargo, 0)
     
-    if nivel_alvo >= nivel_logado and perfil.cargo != 'GESTOR':
+    if nivel_alvo >= nivel_logado and perfil.cargo not in ['GESTOR', 'ADMINISTRADOR']:
         return JsonResponse({'erro': 'Voce nao pode editar este usuario'}, status=403)
     
     try:
@@ -231,15 +231,15 @@ def api_editar_usuario(request, usuario_id):
     if 'cargo' in data:
         cargo_novo = data['cargo']
         nivel_novo = CARGO_NIVEL.get(cargo_novo, 0)
-        if nivel_novo >= nivel_logado and perfil.cargo != 'GESTOR':
+        if nivel_novo >= nivel_logado and perfil.cargo not in ['GESTOR', 'ADMINISTRADOR']:
             return JsonResponse({'erro': f'Voce nao pode promover para {cargo_novo}'}, status=403)
         alvo.cargo = cargo_novo
     
     if 'filial_id' in data:
-        if perfil.cargo == 'GESTOR':
+        if perfil.cargo in ['GESTOR', 'ADMINISTRADOR']:
             alvo.filial_id = data['filial_id']
         else:
-            return JsonResponse({'erro': 'Apenas Gestor pode mudar filial'}, status=403)
+            return JsonResponse({'erro': 'Apenas Gestor/Administrador pode mudar filial'}, status=403)
     
     if 'nome' in data:
         alvo.nome_completo = data['nome']
@@ -271,7 +271,7 @@ def api_deletar_usuario(request, usuario_id):
     nivel_logado = CARGO_NIVEL.get(perfil.cargo, 0)
     nivel_alvo = CARGO_NIVEL.get(alvo.cargo, 0)
     
-    if nivel_alvo >= nivel_logado and perfil.cargo != 'GESTOR':
+    if nivel_alvo >= nivel_logado and perfil.cargo not in ['GESTOR', 'ADMINISTRADOR']:
         return JsonResponse({'erro': 'Voce nao pode excluir este usuario'}, status=403)
         
     if alvo.id == perfil.id:
@@ -299,18 +299,18 @@ def api_salvar_permissoes(request, usuario_id):
     if not perfil:
         return JsonResponse({'erro': 'Sem permissao'}, status=403)
     
-    # Apenas GESTOR pode alterar permissoes
-    if perfil.cargo != 'GESTOR':
-        return JsonResponse({'erro': 'Apenas Gestor pode alterar permissoes'}, status=403)
+    # Apenas GESTOR ou ADMINISTRADOR pode alterar permissoes
+    if perfil.cargo not in ['GESTOR', 'ADMINISTRADOR']:
+        return JsonResponse({'erro': 'Apenas Gestor/Administrador pode alterar permissoes'}, status=403)
     
     try:
         alvo = Motorista.objects.get(id=usuario_id)
     except Motorista.DoesNotExist:
         return JsonResponse({'erro': 'Usuario nao encontrado'}, status=404)
     
-    # Nao pode alterar permissoes de GESTOR
-    if alvo.cargo == 'GESTOR':
-        return JsonResponse({'erro': 'Nao e possivel alterar permissoes de um Gestor'}, status=403)
+    # Nao pode alterar permissoes de GESTOR ou ADMINISTRADOR (exceto Administrador pode alterar de Gestor)
+    if alvo.cargo in ['GESTOR', 'ADMINISTRADOR'] and perfil.cargo != 'ADMINISTRADOR':
+        return JsonResponse({'erro': 'Não é possivel alterar permissões deste usuário com seu nível atual'}, status=403)
     
     try:
         data = json.loads(request.body)

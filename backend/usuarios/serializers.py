@@ -76,7 +76,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                     motorista.cpf = cpf_limpo
                     motorista.nome_completo = pre_cadastro.nome
                     motorista.filial = pre_cadastro.filial
-                    motorista.tipo_usuario = 'GESTOR' if pre_cadastro.is_gestor else 'SAC'
+                    motorista.tipo_usuario = 'SAC'
+                    motorista.cargo = 'GESTOR' if pre_cadastro.is_gestor else 'MEMBRO'
                     motorista.save()
 
         # Processo normal de validação de senha (se recem criado, a senha já confere)

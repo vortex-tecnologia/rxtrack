@@ -944,7 +944,7 @@ def abrir_ticket_operacional(request):
             if not perfil or not perfil.filial:
                 return JsonResponse({'status': 'error', 'message': 'Seu perfil não possui filial vinculada.'}, status=400)
                 
-            if perfil.cargo not in ['GERENTE', 'GESTOR']:
+            if perfil.cargo not in ['GERENTE', 'GESTOR', 'ADMINISTRADOR']:
                 return JsonResponse({'status': 'error', 'message': 'Sem permissão para abrir chamados.'}, status=403)
                 
             from suporte.models import TicketSuporte, MensagemSuporte
@@ -994,7 +994,7 @@ class ConfiguracaoSistemaView(TemplateView):
         token_analytics = config.token_analytics
         token_invoices = config.token_invoices
         
-        if perfil.cargo != 'GESTOR':
+        if perfil.cargo not in ['GESTOR', 'ADMINISTRADOR']:
             if token_analytics:
                 token_analytics = token_analytics[:5] + "*" * 10 + token_analytics[-5:]
             if token_invoices:
@@ -1015,8 +1015,8 @@ class ConfiguracaoSistemaView(TemplateView):
 @require_POST
 def salvar_configuracao_view(request):
     perfil = request.user.motorista_perfil
-    if perfil.cargo != 'GESTOR':
-        return JsonResponse({'status': 'erro', 'message': 'Acesso negado. Apenas Gestores podem alterar as configurações.'}, status=403)
+    if perfil.cargo not in ['GESTOR', 'ADMINISTRADOR']:
+        return JsonResponse({'status': 'erro', 'message': 'Acesso negado. Apenas Gestores/Administradores podem alterar as configurações.'}, status=403)
     
     config = ConfiguracaoSistema.load()
     

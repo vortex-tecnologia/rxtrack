@@ -151,8 +151,7 @@ class SupportConsumer(AsyncWebsocketConsumer):
                 return perfil.permissoes.pode_acessar_sac or perfil.permissoes.pode_acessar_tickets
                 
             # Fallback
-            if perfil.tipo_usuario in ['SAC', 'GESTOR']: return True
-            if perfil.cargo == 'GESTOR': return True
+            if perfil.tipo_usuario == 'SAC' or perfil.cargo in ['GESTOR', 'ADMINISTRADOR']: return True
             
             return False
         except Exception as e:
@@ -176,7 +175,7 @@ class SupportConsumer(AsyncWebsocketConsumer):
         # SAC e GERENTE respeitam a filial do cadastro (ou o Gestor ve tudo?)
         # Baseado no suporte_painel.js, ele passa a filial do config.
         # Se for Gestor, permitimos ver qualquer uma.
-        if perfil.cargo == 'GESTOR': return True
+        if perfil.cargo in ['GESTOR', 'ADMINISTRADOR']: return True
         
         # Outros: apenas se for a mesma filial
         return str(perfil.filial_id) == str(filial_id)

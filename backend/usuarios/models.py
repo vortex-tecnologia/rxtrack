@@ -43,11 +43,11 @@ class Motorista(models.Model):
         verbose_name="Tipo de Usuário"
     )
 
-    # Cargo define o nível de permissão DENTRO do sistema (separado de tipo_usuario)
     CARGO_CHOICES = [
         ('MEMBRO', 'Membro'),
         ('GERENTE', 'Gerente'),
         ('GESTOR', 'Gestor'),
+        ('ADMINISTRADOR', 'Administrador'),
     ]
     cargo = models.CharField(
         max_length=10,

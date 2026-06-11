@@ -15,7 +15,7 @@
                     <p class="text-muted mb-0">Gerencie tokens, feature flags e configurações globais.</p>
                 </div>
                 <div>
-                    <span class="badge {% if cargo == 'GESTOR' %}bg-success{% else %}bg-secondary{% endif %} px-3 py-2 fs-6">
+                    <span class="badge {% if cargo == 'GESTOR' or cargo == 'ADMINISTRADOR' %}bg-success{% else %}bg-secondary{% endif %} px-3 py-2 fs-6">
                         <i class="bi bi-shield-lock me-1"></i> Perfil: {{ cargo }}
                     </span>
                 </div>
@@ -24,7 +24,7 @@
     </div>
 </div>
 
-<div class="row g-4 {% if cargo != 'GESTOR' %}opacity-50{% endif %}">
+<div class="row g-4 {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}opacity-50{% endif %}">
     <!-- 1. TOKENS DA API ESL -->
     <div class="col-md-6">
         <div class="card border-0 shadow-sm h-100">
@@ -35,8 +35,8 @@
                 <div class="mb-3">
                     <label class="form-label small fw-bold text-muted">Token Analytics / GraphQL</label>
                     <div class="input-group">
-                        <input type="password" id="token_analytics" class="form-control" value="{{ token_analytics_masked }}" {% if cargo != 'GESTOR' %}disabled{% endif %}>
-                        {% if cargo == 'GESTOR' %}
+                        <input type="password" id="token_analytics" class="form-control" value="{{ token_analytics_masked }}" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                        {% if cargo == 'GESTOR' or cargo == 'ADMINISTRADOR' %}
                         <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('token_analytics', '{{ config.token_analytics }}')">
                             <i class="bi bi-eye"></i>
                         </button>
@@ -47,8 +47,8 @@
                 <div class="mb-0">
                     <label class="form-label small fw-bold text-muted">Token Invoices / Ocorrências</label>
                     <div class="input-group">
-                        <input type="password" id="token_invoices" class="form-control" value="{{ token_invoices_masked }}" {% if cargo != 'GESTOR' %}disabled{% endif %}>
-                        {% if cargo == 'GESTOR' %}
+                        <input type="password" id="token_invoices" class="form-control" value="{{ token_invoices_masked }}" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                        {% if cargo == 'GESTOR' or cargo == 'ADMINISTRADOR' %}
                         <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('token_invoices', '{{ config.token_invoices }}')">
                             <i class="bi bi-eye"></i>
                         </button>
@@ -69,16 +69,16 @@
             <div class="card-body">
                 <div class="mb-3">
                     <label class="form-label small fw-bold text-muted">Domínio Base ESL</label>
-                    <input type="text" id="dominio_esl" class="form-control" value="{{ config.dominio_esl }}" {% if cargo != 'GESTOR' %}disabled{% endif %}>
+                    <input type="text" id="dominio_esl" class="form-control" value="{{ config.dominio_esl }}" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
                 </div>
                 <div class="row">
                     <div class="col-6">
                         <label class="form-label small fw-bold text-muted">ID Report Validação</label>
-                        <input type="text" id="report_validacao" class="form-control" value="{{ config.report_validacao }}" {% if cargo != 'GESTOR' %}disabled{% endif %}>
+                        <input type="text" id="report_validacao" class="form-control" value="{{ config.report_validacao }}" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
                     </div>
                     <div class="col-6">
                         <label class="form-label small fw-bold text-muted">ID Report Busca NF-e</label>
-                        <input type="text" id="report_busca_nfe" class="form-control" value="{{ config.report_busca_nfe }}" {% if cargo != 'GESTOR' %}disabled{% endif %}>
+                        <input type="text" id="report_busca_nfe" class="form-control" value="{{ config.report_busca_nfe }}" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
                     </div>
                 </div>
             </div>
@@ -95,28 +95,28 @@
                 <div class="row g-3">
                     <div class="col-md-6">
                         <div class="form-check form-switch p-3 border rounded">
-                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="processar_yolo" {% if config.processar_yolo %}checked{% endif %} {% if cargo != 'GESTOR' %}disabled{% endif %}>
+                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="processar_yolo" {% if config.processar_yolo %}checked{% endif %} {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
                             <label class="form-check-label fw-bold small">🤖 Processar YOLO (IA)</label>
                             <div class="text-muted" style="font-size: 0.75rem;">Recorte automático de canhotos</div>
                         </div>
                     </div>
                     <div class="col-md-6">
                         <div class="form-check form-switch p-3 border rounded">
-                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="processar_ocr" {% if config.processar_ocr %}checked{% endif %} {% if cargo != 'GESTOR' %}disabled{% endif %}>
+                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="processar_ocr" {% if config.processar_ocr %}checked{% endif %} {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
                             <label class="form-check-label fw-bold small">📖 Processar OCR (IA)</label>
                             <div class="text-muted" style="font-size: 0.75rem;">Leitura e rotação automática</div>
                         </div>
                     </div>
                     <div class="col-md-6">
                         <div class="form-check form-switch p-3 border rounded border-primary bg-primary bg-opacity-10">
-                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="enviar_tms" {% if config.enviar_tms %}checked{% endif %} {% if cargo != 'GESTOR' %}disabled{% endif %}>
+                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="enviar_tms" {% if config.enviar_tms %}checked{% endif %} {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
                             <label class="form-check-label fw-bold small">📤 Enviar para TMS (Produção)</label>
                             <div class="text-muted" style="font-size: 0.75rem;">Se desligado, nada vai para a ESL</div>
                         </div>
                     </div>
                     <div class="col-md-6">
                         <div class="form-check form-switch p-3 border rounded">
-                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="armazenar_foto_backup" {% if config.armazenar_foto_backup %}checked{% endif %} {% if cargo != 'GESTOR' %}disabled{% endif %}>
+                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="armazenar_foto_backup" {% if config.armazenar_foto_backup %}checked{% endif %} {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
                             <label class="form-check-label fw-bold small">💾 Foto de Backup</label>
                             <div class="text-muted" style="font-size: 0.75rem;">Salva imagem original no servidor</div>
                         </div>
@@ -124,11 +124,11 @@
                     <div class="col-12 mt-4">
                         <div class="p-3 border rounded bg-light">
                             <div class="form-check form-switch mb-2">
-                                <input class="form-check-input" type="checkbox" role="switch" id="enviar_email_falhas" {% if config.enviar_email_falhas %}checked{% endif %} {% if cargo != 'GESTOR' %}disabled{% endif %}>
+                                <input class="form-check-input" type="checkbox" role="switch" id="enviar_email_falhas" {% if config.enviar_email_falhas %}checked{% endif %} {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
                                 <label class="form-check-label fw-bold small">📧 Notificar Falhas por E-mail</label>
                             </div>
                             <label class="form-label small fw-bold text-muted mb-1">E-mails (separados por vírgula)</label>
-                            <textarea id="emails_notificacao" class="form-control form-control-sm" rows="2" placeholder="ex: alerta@empresa.com, ti@empresa.com" {% if cargo != 'GESTOR' %}disabled{% endif %}>{{ config.emails_notificacao }}</textarea>
+                            <textarea id="emails_notificacao" class="form-control form-control-sm" rows="2" placeholder="ex: alerta@empresa.com, ti@empresa.com" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>{{ config.emails_notificacao }}</textarea>
                         </div>
                     </div>
                 </div>
@@ -145,7 +145,7 @@
             <div class="card-body">
                 <div class="mb-3">
                     <label class="form-label small fw-bold text-muted">Códigos que ativam YOLO</label>
-                    <input type="text" id="codigos_ocorrencia_yolo" class="form-control" value="{{ config.codigos_ocorrencia_yolo }}" placeholder="01,02,1,2" {% if cargo != 'GESTOR' %}disabled{% endif %}>
+                    <input type="text" id="codigos_ocorrencia_yolo" class="form-control" value="{{ config.codigos_ocorrencia_yolo }}" placeholder="01,02,1,2" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
                     <p class="text-muted mt-2" style="font-size: 0.75rem;">
                         <i class="bi bi-info-circle me-1"></i>
                         Apenas baixas com estes códigos de amarrada serão processadas pela IA.
@@ -156,7 +156,7 @@
     </div>
 </div>
 
-{% if cargo == 'GESTOR' %}
+{% if cargo == 'GESTOR' or cargo == 'ADMINISTRADOR' %}
 <div class="row mt-5 mb-5">
     <div class="col-12 text-center">
         <button type="button" class="btn btn-primary btn-lg px-5 py-3 fw-bold shadow" onclick="salvarConfiguracao()">
@@ -169,7 +169,7 @@
     <i class="bi bi-info-circle-fill fs-4 me-3"></i>
     <div>
         <strong>Acesso apenas para leitura.</strong> Os campos estão bloqueados pois seu cargo atual é <b>{{ cargo }}</b>. 
-        Apenas usuários com o cargo <b>GESTOR</b> podem modificar as variáveis do sistema.
+        Apenas usuários com o cargo <b>GESTOR</b> ou <b>ADMINISTRADOR</b> podem modificar as variáveis do sistema.
     </div>
 </div>
 {% endif %}

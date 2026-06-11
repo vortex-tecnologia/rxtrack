@@ -113,7 +113,8 @@ class PrimeiroAcessoView(APIView):
                 cpf=cpf,
                 nome_completo=pre_cadastro.nome,
                 filial=pre_cadastro.filial,
-                tipo_usuario='GESTOR' if pre_cadastro.is_gestor else 'SAC'
+                tipo_usuario='SAC',
+                cargo='GESTOR' if pre_cadastro.is_gestor else 'MEMBRO'
             )
 
         refresh = RefreshToken.for_user(user_to_create)

@@ -20,8 +20,8 @@ class PainelSACView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
             return False
         perfil = user.motorista_perfil
         
-        # Gestor e SAC nativo sempre tem acesso (sobrepoe tabela de permissoes)
-        if perfil.cargo == 'GESTOR' or perfil.tipo_usuario == 'SAC':
+        # Gestor, Admin e SAC nativo sempre tem acesso (sobrepoe tabela de permissoes)
+        if perfil.cargo in ['GESTOR', 'ADMINISTRADOR'] or perfil.tipo_usuario == 'SAC':
             return True
         
         # Usa PermissaoUsuario se existir como fallback para outros membros
@@ -50,7 +50,7 @@ class PainelSACView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
                 <div class="card-body p-5">
                     <i class="bi bi-shield-lock-fill text-danger" style="font-size: 4rem;"></i>
                     <h4 class="fw-bold mt-3">Acesso Restrito</h4>
-                    <p class="text-muted">Voce nao tem permissao para acessar esta pagina. Apenas usuarios do tipo <strong>SAC</strong> ou <strong>Gestor</strong> podem acessar o painel de suporte.</p>
+                    <p class="text-muted">Voce nao tem permissao para acessar esta pagina. Apenas usuarios do tipo <strong>SAC</strong>, <strong>Gestor</strong> ou <strong>Administrador</strong> podem acessar o painel de suporte.</p>
                     <a href="/dashboard/" class="btn btn-primary rounded-pill px-4 py-2 mt-2 fw-bold">
                         <i class="bi bi-arrow-left me-2"></i>Ir para Dashboard
                     </a>
@@ -74,7 +74,7 @@ class TicketSuporteViewSet(viewsets.ModelViewSet):
             return TicketSuporte.objects.none()
             
         perfil = user.motorista_perfil
-        if perfil.tipo_usuario in ['SAC', 'GESTOR']:
+        if perfil.tipo_usuario == 'SAC' or perfil.cargo in ['GESTOR', 'ADMINISTRADOR']:
             return TicketSuporte.objects.filter(filial=perfil.filial).order_by('-updated_at')
         else:
             return TicketSuporte.objects.filter(motorista=perfil).order_by('-updated_at')
@@ -140,7 +140,7 @@ class TicketSuporteViewSet(viewsets.ModelViewSet):
         ticket = self.get_object()
         user = request.user
         
-        if not hasattr(user, 'motorista_perfil') or user.motorista_perfil.tipo_usuario not in ['SAC', 'GESTOR']:
+        if not hasattr(user, 'motorista_perfil') or (user.motorista_perfil.tipo_usuario != 'SAC' and user.motorista_perfil.cargo not in ['GESTOR', 'ADMINISTRADOR']):
             return Response({"error": "Apenas agentes SAC podem assumir tickets."}, status=status.HTTP_403_FORBIDDEN)
             
         if ticket.status != 'CANAL_ABERTO':
@@ -195,7 +195,7 @@ class TicketSuporteViewSet(viewsets.ModelViewSet):
         ticket = self.get_object()
         user = request.user
         
-        if not hasattr(user, 'motorista_perfil') or user.motorista_perfil.tipo_usuario not in ['SAC', 'GESTOR']:
+        if not hasattr(user, 'motorista_perfil') or (user.motorista_perfil.tipo_usuario != 'SAC' and user.motorista_perfil.cargo not in ['GESTOR', 'ADMINISTRADOR']):
             return Response({"error": "Apenas agentes SAC podem encerrar tickets."}, status=status.HTTP_403_FORBIDDEN)
             
         if ticket.status == 'FECHADO':
@@ -258,7 +258,7 @@ class MensagemSuporteViewSet(viewsets.ModelViewSet):
             return MensagemSuporte.objects.none()
             
         perfil = self.request.user.motorista_perfil
-        if perfil.tipo_usuario in ['SAC', 'GESTOR']:
+        if perfil.tipo_usuario == 'SAC' or perfil.cargo in ['GESTOR', 'ADMINISTRADOR']:
             return MensagemSuporte.objects.filter(ticket__filial=perfil.filial).order_by('created_at')
         else:
             return MensagemSuporte.objects.filter(ticket__motorista=perfil).order_by('created_at')
@@ -311,7 +311,7 @@ class MensagemSuporteViewSet(viewsets.ModelViewSet):
         perfil = getattr(user, 'motorista_perfil', None)
         
         # Define se é o motorista dono do ticket ou um agente (SAC/Gestor)
-        is_agente = (perfil and perfil.tipo_usuario in ['SAC', 'GESTOR']) or user.is_staff or user.is_superuser
+        is_agente = (perfil and (perfil.tipo_usuario == 'SAC' or perfil.cargo in ['GESTOR', 'ADMINISTRADOR'])) or user.is_staff or user.is_superuser
         is_dono_ticket = (perfil and ticket.motorista == perfil)
 
         if is_agente:

@@ -23,7 +23,7 @@
                 <div class="col-md-3">
                     <label class="form-label small fw-bold text-muted">Filial</label>
                     <select class="form-select" id="filtro-filial" onchange="carregarUsuarios()">
-                        {% if perfil_logado.cargo == 'GESTOR' %}
+                        {% if perfil_logado.cargo == 'GESTOR' or perfil_logado.cargo == 'ADMINISTRADOR' %}
                         <option value="">Todas as Filiais</option>
                         {% endif %}
                         {% for f in filiais %}
@@ -46,6 +46,9 @@
                         <option value="MEMBRO">Membro</option>
                         <option value="GERENTE">Gerente</option>
                         <option value="GESTOR">Gestor</option>
+                        {% if perfil_logado.cargo == 'ADMINISTRADOR' %}
+                        <option value="ADMINISTRADOR">Administrador</option>
+                        {% endif %}
                     </select>
                 </div>
                 <div class="col-md-3">
@@ -122,13 +125,17 @@
                         <label class="form-label fw-bold">Cargo</label>
                         <select class="form-select" id="campo-cargo">
                             <option value="MEMBRO">Membro</option>
-                            {% if perfil_logado.cargo == 'GESTOR' %}
+                            {% if perfil_logado.cargo == 'GESTOR' or perfil_logado.cargo == 'ADMINISTRADOR' %}
                             <option value="GERENTE">Gerente</option>
+                            <option value="GESTOR">Gestor</option>
+                            {% endif %}
+                            {% if perfil_logado.cargo == 'ADMINISTRADOR' %}
+                            <option value="ADMINISTRADOR">Administrador</option>
                             {% endif %}
                         </select>
                     </div>
                 </div>
-                {% if perfil_logado.cargo == 'GESTOR' %}
+                {% if perfil_logado.cargo == 'GESTOR' or perfil_logado.cargo == 'ADMINISTRADOR' %}
                 <div class="mt-3">
                     <label class="form-label fw-bold">Filial</label>
                     <select class="form-select" id="campo-filial">

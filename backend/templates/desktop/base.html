@@ -168,7 +168,7 @@
             <span class="menu-text">Suporte Online</span>
         </a>
 
-        {% if request.user.motorista_perfil.cargo == 'GESTOR' or request.user.motorista_perfil.cargo == 'GERENTE' %}
+        {% if request.user.motorista_perfil.cargo == 'GESTOR' or request.user.motorista_perfil.cargo == 'ADMINISTRADOR' or request.user.motorista_perfil.cargo == 'GERENTE' %}
         <a href="{% url 'gestao:gestao_usuarios' %}" class="nav-link {% if '/gestao/' in request.path %}active-menu{% endif %}">
             <i class="bi bi-person-gear"></i>
             <span class="menu-text">Gestao de Usuarios</span>
