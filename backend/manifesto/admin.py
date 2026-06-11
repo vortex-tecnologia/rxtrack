@@ -121,9 +121,9 @@ class NotaFiscalAdmin(ModelAdmin):
 
 @admin.register(Ocorrencia)
 class OcorrenciaAdmin(ModelAdmin):
-    list_display = ("codigo_tms", "descricao", "tipo", "is_coleta")
+    list_display = ("codigo_tms", "descricao", "tipo", "is_coleta", "is_entrega")
     search_fields = ("codigo_tms", "descricao")
-    list_filter = ("tipo", "is_coleta")
+    list_filter = ("tipo", "is_coleta", "is_entrega")
 
 @admin.register(HistoricoOcorrencia)
 class HistoricoOcorrenciaAdmin(ModelAdmin):

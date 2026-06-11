@@ -26,8 +26,8 @@ def app_view(request):
     # Ocorrências de sucesso (Entrega)
     sucesso = Ocorrencia.objects.filter(codigo_tms__in=['1', '2']).order_by('codigo_tms')
     
-    # Ocorrências de problema (Não Entrega) - Excluímos a 1 e 2
-    problemas = Ocorrencia.objects.exclude(codigo_tms__in=['1', '2']).order_by('codigo_tms')
+    # Ocorrências de problema (Não Entrega) - Excluímos a 1 e 2 e filtramos por is_entrega=True
+    problemas = Ocorrencia.objects.filter(is_entrega=True).exclude(codigo_tms__in=['1', '2']).order_by('codigo_tms')
 
     # Cia aera e rodoviaria
     cias = Ocorrencia.objects.filter(codigo_tms__in=['50', '51']).order_by('codigo_tms')
