@@ -1,23 +1,23 @@
 #!/bin/sh
 echo "=== QuickTrack Entrypoint ==="
-echo "Esperando o banco de dados MySQL..."
+echo "Esperando o banco de dados PostgreSQL..."
 
 python - <<END
 import time
 import os
-import MySQLdb
+import psycopg2
 
 max_retries = 30
 retry = 0
 
 while retry < max_retries:
     try:
-        conn = MySQLdb.connect(
-            db=os.environ.get('DB_NAME', 'st63136_dev_app_transportadora'),
-            user=os.environ.get('DB_USER', 'st63136_quickdelivery'),
-            passwd=os.environ.get('DB_PASSWORD', ''),
-            host=os.environ.get('DB_HOST', 'host.docker.internal'),
-            port=int(os.environ.get('DB_PORT', 3308)),
+        conn = psycopg2.connect(
+            dbname=os.environ.get('DB_NAME', 'quicktrack_homolog'),
+            user=os.environ.get('DB_USER', 'quicktrack'),
+            password=os.environ.get('DB_PASSWORD', ''),
+            host=os.environ.get('DB_HOST', 'qt_homolog_postgres'),
+            port=int(os.environ.get('DB_PORT', 5432)),
             connect_timeout=5
         )
         conn.close()
@@ -25,7 +25,7 @@ while retry < max_retries:
         break
     except Exception as e:
         retry += 1
-        print(f"Tentativa {retry}/{max_retries} - Aguardando MySQL: {e}")
+        print(f"Tentativa {retry}/{max_retries} - Aguardando PostgreSQL: {e}")
         time.sleep(2)
 
 if retry >= max_retries:
