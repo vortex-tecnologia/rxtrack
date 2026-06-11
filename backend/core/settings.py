@@ -139,9 +139,6 @@ DATABASES = {
         'PASSWORD': os.getenv('DB_PASSWORD', 'VxQtHom2026#Pg'),
         'HOST': os.getenv('DB_HOST', 'qt_homolog_postgres'),
         'PORT': os.getenv('DB_PORT', '5432'),
-        'OPTIONS': {
-            'charset': 'utf8mb4',
-        },
     }
 }
 
