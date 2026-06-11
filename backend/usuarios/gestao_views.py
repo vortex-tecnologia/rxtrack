@@ -89,12 +89,22 @@ def api_listar_usuarios(request):
                 'pode_ver_historico': p.pode_ver_historico,
             }
         
+        from django.utils import timezone
+        
+        if m.user and m.user.last_login:
+            if timezone.is_aware(m.user.last_login):
+                ultimo_acesso = timezone.localtime(m.user.last_login).strftime('%d/%m/%Y %H:%M')
+            else:
+                ultimo_acesso = m.user.last_login.strftime('%d/%m/%Y %H:%M')
+        else:
+            ultimo_acesso = None
+            
         usuarios.append({
             'id': m.id,
             'nome': m.nome_completo,
             'cpf': m.cpf,
             'email': m.email if m.email else None,
-            'ultimo_acesso': m.user.last_login.strftime('%d/%m/%Y %H:%M') if m.user and m.user.last_login else None,
+            'ultimo_acesso': ultimo_acesso,
             'tipo_usuario': m.tipo_usuario,
             'cargo': m.cargo,
             'filial_id': m.filial_id,

@@ -105,7 +105,8 @@ class DashboardView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        hoje_inicio = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        agora_local = timezone.localtime()
+        hoje_inicio = agora_local.replace(hour=0, minute=0, second=0, microsecond=0)
         hoje_fim = hoje_inicio + timedelta(days=1)
 
         # Pega nome, foto e FILIAL do usuario logado
