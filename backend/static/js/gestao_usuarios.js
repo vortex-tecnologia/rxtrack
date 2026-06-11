@@ -75,6 +75,12 @@ function renderUserRow(u) {
             </div>
         </td>
         <td class="py-3"><code>${formatCPF(u.cpf)}</code></td>
+        <td class="py-3">
+            <div class="small text-muted mb-1" title="E-mail"><i class="bi bi-envelope"></i> ${u.email || 'Não informado'}</div>
+            <div class="small fw-bold ${u.ultimo_acesso ? 'text-success' : 'text-danger'}" title="Último Acesso">
+                <i class="bi bi-box-arrow-in-right"></i> ${u.ultimo_acesso || 'Nunca acessou'}
+            </div>
+        </td>
         <td class="py-3">${badgeTipo}</td>
         <td class="py-3">${badgeCargo}</td>
         <td class="py-3"><span class="text-muted small">${u.filial_nome}</span></td>
@@ -86,6 +92,9 @@ function renderUserRow(u) {
                 </button>
                 <button class="btn btn-outline-success rounded-pill px-3" title="Permissoes" onclick='abrirModalPermissoes(${JSON.stringify(u)})'>
                     <i class="bi bi-shield-check"></i>
+                </button>
+                <button class="btn btn-outline-secondary rounded-pill px-3" title="Enviar Redefinição de Senha" onclick="enviarRedefinicaoSenha(${u.id})">
+                    <i class="bi bi-envelope"></i>
                 </button>
                 <button class="btn btn-outline-danger rounded-pill px-3" title="Excluir" onclick="abrirModalExcluir(${u.id}, '${u.nome}')">
                     <i class="bi bi-trash"></i>
@@ -104,7 +113,9 @@ function formatCPF(cpf) {
 function abrirModalCriar() {
     document.getElementById('modalUsuarioTitulo').textContent = 'Novo Usuario';
     document.getElementById('edit-usuario-id').value = '';
+    document.getElementById('edit-usuario-id').value = '';
     document.getElementById('campo-nome').value = '';
+    document.getElementById('campo-email').value = '';
     document.getElementById('campo-cpf').value = '';
     document.getElementById('campo-cpf').disabled = false;
     document.getElementById('campo-tipo').value = 'OPERACIONAL';
@@ -117,7 +128,9 @@ function abrirModalCriar() {
 function abrirModalEditar(u) {
     document.getElementById('modalUsuarioTitulo').textContent = 'Editar Usuario';
     document.getElementById('edit-usuario-id').value = u.id;
+    document.getElementById('edit-usuario-id').value = u.id;
     document.getElementById('campo-nome').value = u.nome;
+    document.getElementById('campo-email').value = u.email || '';
     document.getElementById('campo-cpf').value = u.cpf;
     document.getElementById('campo-cpf').disabled = true;
     document.getElementById('campo-tipo').value = u.tipo_usuario;
@@ -132,6 +145,7 @@ function abrirModalEditar(u) {
 async function salvarUsuario() {
     const id = document.getElementById('edit-usuario-id').value;
     const nome = document.getElementById('campo-nome').value.trim();
+    const email = document.getElementById('campo-email').value.trim();
     const cpf = document.getElementById('campo-cpf').value.replace(/\D/g, '');
     const tipo = document.getElementById('campo-tipo').value;
     const cargo = document.getElementById('campo-cargo').value;
@@ -140,8 +154,9 @@ async function salvarUsuario() {
     const is_sac_mobile = document.getElementById('campo-is-sac-mobile').checked;
     
     if (!nome) return Swal.fire('Erro', 'Informe o nome', 'error');
+    if (!email && !id) return Swal.fire('Erro', 'Informe o E-mail', 'error');
     
-    const body = { nome, cpf, tipo_usuario: tipo, cargo: cargo, is_sac_mobile: is_sac_mobile };
+    const body = { nome, email, cpf, tipo_usuario: tipo, cargo: cargo, is_sac_mobile: is_sac_mobile };
     if (filial) body.filial_id = parseInt(filial);
     
     let url, method;
@@ -248,6 +263,32 @@ async function confirmarExclusao() {
     } catch (err) {
         console.error(err);
         Swal.fire('Erro', 'Falha na conexao', 'error');
+    }
+}
+
+}
+
+// === ENVIAR REDEFINICAO DE SENHA ===
+async function enviarRedefinicaoSenha(id) {
+    if(!confirm("Deseja enviar um link de redefinição de senha para o e-mail cadastrado deste usuário?")) return;
+    
+    try {
+        const response = await fetch(`/usuarios/reset-senha/${id}/`, {
+            method: 'POST',
+            headers: { 
+                'X-CSRFToken': getCSRF(),
+                'Content-Type': 'application/json'
+            }
+        });
+        const data = await response.json();
+        if (data.success) {
+            Swal.fire({ icon: 'success', title: 'Sucesso!', text: 'E-mail de redefinição enviado com sucesso!', timer: 2000, showConfirmButton: false });
+        } else {
+            Swal.fire('Erro', data.message || 'Erro ao enviar e-mail', 'error');
+        }
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Erro', 'Falha na conexao ao servidor', 'error');
     }
 }
 

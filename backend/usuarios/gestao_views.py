@@ -93,6 +93,8 @@ def api_listar_usuarios(request):
             'id': m.id,
             'nome': m.nome_completo,
             'cpf': m.cpf,
+            'email': m.email if m.email else None,
+            'ultimo_acesso': m.user.last_login.strftime('%d/%m/%Y %H:%M') if m.user and m.user.last_login else None,
             'tipo_usuario': m.tipo_usuario,
             'cargo': m.cargo,
             'filial_id': m.filial_id,
@@ -120,13 +122,14 @@ def api_criar_usuario(request):
     
     nome = data.get('nome', '').strip()
     cpf = data.get('cpf', '').replace('.', '').replace('-', '').strip()
+    email = data.get('email', '').strip()
     tipo_usuario = data.get('tipo_usuario', 'OPERACIONAL')
     cargo_novo = data.get('cargo', 'MEMBRO')
     filial_id = data.get('filial_id', perfil.filial_id)
     is_sac_mobile = data.get('is_sac_mobile', False)
     
-    if not nome or not cpf or len(cpf) != 11:
-        return JsonResponse({'erro': 'Nome e CPF (11 digitos) sao obrigatorios'}, status=400)
+    if not nome or not cpf or len(cpf) != 11 or not email:
+        return JsonResponse({'erro': 'Nome, CPF (11 digitos) e E-mail sao obrigatorios'}, status=400)
     
     # Validacao de hierarquia
     nivel_logado = CARGO_NIVEL.get(perfil.cargo, 0)
@@ -148,12 +151,36 @@ def api_criar_usuario(request):
             motorista = Motorista.objects.create(
                 cpf=cpf,
                 nome_completo=nome,
+                email=email,
                 tipo_usuario=tipo_usuario,
                 cargo=cargo_novo,
                 filial_id=filial_id or perfil.filial_id,
                 is_sac_mobile=is_sac_mobile,
             )
             # Permissoes sao criadas automaticamente pelo signal
+            
+        # Send Welcome Email
+        try:
+            from django.core.mail import send_mail
+            from django.template.loader import render_to_string
+            from django.utils.html import strip_tags
+            from django.conf import settings
+            
+            dominio = f"{request.scheme}://{request.get_host()}"
+            context = {'nome': nome, 'cpf': cpf, 'dominio': dominio}
+            html_message = render_to_string('emails/boas_vindas.html', context)
+            plain_message = strip_tags(html_message)
+            
+            send_mail(
+                'Bem-vindo ao QuickTrack',
+                plain_message,
+                settings.DEFAULT_FROM_EMAIL,
+                [email],
+                html_message=html_message,
+                fail_silently=True
+            )
+        except Exception as e:
+            print(f"Erro ao enviar email: {e}")
         
         return JsonResponse({'status': 'ok', 'id': motorista.id, 'mensagem': f'{nome} criado com sucesso!'})
     except Exception as e:
@@ -207,6 +234,9 @@ def api_editar_usuario(request, usuario_id):
         
     if 'is_sac_mobile' in data:
         alvo.is_sac_mobile = bool(data['is_sac_mobile'])
+        
+    if 'email' in data:
+        alvo.email = data['email']
     
     alvo.save()
     
