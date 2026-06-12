@@ -192,6 +192,48 @@
         .search-container-card .card {
             width: 100%;
         }
+
+        /* --- MODO SELEÇÃO (WHATSAPP STYLE) --- */
+        .card-nf.selecionavel {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .card-nf.selecionavel.selecionado {
+            background-color: #e8f4fd !important;
+            border-left-color: #0d6efd !important;
+            transform: scale(0.98);
+        }
+        .card-nf .checkbox-selecao {
+            display: none;
+            pointer-events: none; /* Deixa o clique passar para o card inteiro */
+        }
+        .modo-selecao-ativo .card-nf .checkbox-selecao {
+            display: block;
+        }
+        .modo-selecao-ativo .btn-baixa-individual {
+            display: none !important;
+        }
+
+        #fab-baixa-massa {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            z-index: 9999;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            border-radius: 50px;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: none;
+            padding: 15px 25px;
+            font-size: 1.1rem;
+        }
+        #fab-baixa-massa.show {
+            display: flex !important;
+            animation: slideUpFab 0.4s forwards;
+        }
+        @keyframes slideUpFab {
+            from { transform: translateY(100px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
     </style>
 </head>
 
@@ -373,12 +415,18 @@
     </div>
 
     <!-- Footer Modernizado e Limpo -->
-    <div class="fixed-bottom p-2 bg-light border-top d-flex justify-content-center align-items-center shadow-sm">
+    <div class="fixed-bottom p-2 bg-light border-top d-flex justify-content-center align-items-center shadow-sm" style="z-index: 1030;">
         <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-4 fw-bold" data-bs-toggle="modal"
             data-bs-target="#modalAjuda">
             <i class="bi bi-headset me-1"></i> Precisa de Ajuda?
         </button>
     </div>
+
+    <!-- BOTÃO FLUTUANTE DE BAIXA EM MASSA (WHATSAPP STYLE) -->
+    <button id="fab-baixa-massa" class="btn btn-primary fw-bold align-items-center" onclick="abrirModalBaixaMassa()">
+        <span id="badge-selecionadas" class="badge bg-white text-primary rounded-circle me-2 px-2 py-1 fs-6">0</span>
+        Registrar Selecionadas
+    </button>
 
     <!-- MODAL DE AJUDA ESPECÍFICA -->
     <div class="modal fade" id="modalAjuda" tabindex="-1" aria-hidden="true">
@@ -1062,6 +1110,88 @@
         </div>
     </div>
 
+    <!-- MODAL DE BAIXA EM MASSA (WHATSAPP STYLE) -->
+    <div class="modal fade" id="modalBaixaMassa" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
+                <div class="modal-header bg-primary text-white" style="border-radius: 20px 20px 0 0;">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-stack me-2"></i>Baixa Múltipla</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" onclick="cancelarModoSelecao()"></button>
+                </div>
+                <div class="modal-body p-4 bg-light">
+                    <div class="alert alert-info border-0 shadow-sm d-flex align-items-center mb-4">
+                        <i class="bi bi-info-circle-fill fs-3 me-3 text-info"></i>
+                        <div>
+                            <strong>Você selecionou <span id="qtd-massa-selecionadas">0</span> notas.</strong><br>
+                            <small>Escolha o motivo da baixa para todas elas de uma vez.</small>
+                        </div>
+                    </div>
+
+                    <!-- TIPO DE BAIXA -->
+                    <h6 class="fw-bold mb-3 text-dark">Qual será a ocorrência?</h6>
+                    
+                    <div class="card border-0 shadow-sm mb-3 cursor-pointer" onclick="selecionarTipoMassa('retida')" id="card-tipo-retida">
+                        <div class="card-body d-flex align-items-center p-3">
+                            <div class="form-check fs-4 m-0 p-0">
+                                <input class="form-check-input ms-0 me-3" type="radio" name="tipo_baixa_massa" value="retida" id="radio-retida" style="cursor: pointer;">
+                            </div>
+                            <div>
+                                <label class="fw-bold text-danger mb-0" for="radio-retida" style="cursor: pointer;">⚠️ Nota Fiscal Retida</label>
+                                <p class="small text-muted mb-0">Canhoto retido para conferência no cliente.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card border-0 shadow-sm mb-4 cursor-pointer" onclick="selecionarTipoMassa('ocorrencia')" id="card-tipo-ocorrencia">
+                        <div class="card-body d-flex align-items-center p-3">
+                            <div class="form-check fs-4 m-0 p-0">
+                                <input class="form-check-input ms-0 me-3" type="radio" name="tipo_baixa_massa" value="ocorrencia" id="radio-ocorrencia" style="cursor: pointer;">
+                            </div>
+                            <div class="w-100">
+                                <label class="fw-bold text-dark mb-1" for="radio-ocorrencia" style="cursor: pointer;">❌ Outro Insucesso (Não Entregue)</label>
+                                <select class="form-select form-select-sm w-100 mt-1" id="select-ocorrencia-massa" disabled onclick="event.stopPropagation()">
+                                    <option value="" selected disabled>Escolha o Motivo...</option>
+                                    {% for oc in problemas %}
+                                    <option value="{{ oc.codigo_tms }}">{{ oc.codigo_tms }} - {{ oc.descricao }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CAMPO DE OBSERVAÇÃO CONDICIONAL (SÓ PARA RETIDA) -->
+                    <div id="campo-observacao-massa" class="mb-4" style="display: none;">
+                        <label class="form-label fw-bold text-primary">Motivo da Retenção (Obrigatório):</label>
+                        <textarea class="form-control" id="input-observacao-massa" rows="3"
+                            placeholder="Ex: Todas essas notas ficaram retidas para conferência do setor X."></textarea>
+                    </div>
+
+                    <!-- LISTA RESUMO (ACORDEON) -->
+                    <div class="accordion accordion-flush rounded overflow-hidden shadow-sm border" id="accordionNotasMassa">
+                        <div class="accordion-item bg-white border-0">
+                            <h2 class="accordion-header" id="flush-headingMassa">
+                                <button class="accordion-button collapsed py-2 fw-bold text-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapseMassa" style="font-size: 0.9rem;">
+                                    <i class="bi bi-list-ul me-2"></i> Ver Notas Selecionadas
+                                </button>
+                            </h2>
+                            <div id="flush-collapseMassa" class="accordion-collapse collapse" data-bs-parent="#accordionNotasMassa">
+                                <div class="accordion-body p-2" id="lista-resumo-massa" style="max-height: 150px; overflow-y: auto;">
+                                    <!-- Preenchido via JS -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-white border-top-0 pt-0 pb-3">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Voltar</button>
+                    <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm" onclick="salvarBaixaMassa()">
+                        <i class="bi bi-send-fill me-2"></i> Enviar Registros
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL ESPECÍFICO PARA COLETA (SIM/NÃO) -->
     <div class="modal fade" id="modalColeta" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
         <div class="modal-dialog modal-dialog-centered">
@@ -1639,9 +1769,9 @@
     </div>
 
 
-    <script src="{% static 'js/serviceworker.js' %}?v=1.35"></script>
+    <script src="{% static 'js/serviceworker.js' %}?v=1.38"></script>
     <script src="/static/js/login_motorista/authFetch.js"></script>
-    <script src="{% static 'js/manifesto_v18.js' %}"></script>
+    <script src="{% static 'js/manifesto_v19.js' %}"></script>
     <script src="{% static 'js/pwa_tracking.js' %}"></script>
     <script src="{% static 'js/offiline.js' %}"></script>
     <script src="{% static 'js/historico_v1.js' %}"></script>

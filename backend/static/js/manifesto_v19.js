@@ -31,6 +31,109 @@ let socketTracking = null;
 let filialIdMotorista = 'todas';
 let heartbeatInterval = null;
 
+// =====================================================
+// MODO SELEÇÃO MÚLTIPLA (WHATSAPP STYLE)
+// =====================================================
+let modoSelecaoAtivo = false;
+let notasSelecionadas = new Set();
+let longPressTimer;
+
+function iniciarLongPress(e, numeroNF) {
+    if (modoSelecaoAtivo) return; // Se já tá ativo, ignora
+    
+    // Suporte para touch e mouse
+    const element = e.currentTarget;
+    longPressTimer = setTimeout(() => {
+        ativarModoSelecao(numeroNF, element);
+        // Vibração leve se o celular suportar
+        if (navigator.vibrate) navigator.vibrate(50);
+    }, 600); // 600ms = long press
+}
+
+function cancelarLongPress() {
+    clearTimeout(longPressTimer);
+}
+
+function ativarModoSelecao(numeroNFInicial, cardElement) {
+    modoSelecaoAtivo = true;
+    notasSelecionadas.clear();
+    
+    // Adiciona a classe global para mostrar os checkboxes
+    document.getElementById('area-lista-dinamica').classList.add('modo-selecao-ativo');
+    
+    // Seleciona a nota que originou o long-press
+    toggleSelecaoCard(numeroNFInicial, cardElement);
+}
+
+function cancelarModoSelecao() {
+    modoSelecaoAtivo = false;
+    notasSelecionadas.clear();
+    
+    const area = document.getElementById('area-lista-dinamica');
+    if (area) area.classList.remove('modo-selecao-ativo');
+    
+    const cards = document.querySelectorAll('.card-nf.selecionavel');
+    cards.forEach(c => {
+        c.classList.remove('selecionado');
+        const chk = c.querySelector('.checkbox-selecao');
+        if(chk) chk.checked = false;
+    });
+    
+    const fab = document.getElementById('fab-baixa-massa');
+    if (fab) fab.classList.remove('show');
+}
+
+function toggleSelecaoCard(numeroNF, cardElement) {
+    if (!modoSelecaoAtivo) return;
+
+    // Apenas permite seleção de entregas pendentes
+    if (!cardElement.classList.contains('tipo-entrega')) return;
+
+    const checkbox = cardElement.querySelector('.checkbox-selecao');
+    
+    if (notasSelecionadas.has(numeroNF)) {
+        notasSelecionadas.delete(numeroNF);
+        cardElement.classList.remove('selecionado');
+        if(checkbox) checkbox.checked = false;
+    } else {
+        notasSelecionadas.add(numeroNF);
+        cardElement.classList.add('selecionado');
+        if(checkbox) checkbox.checked = true;
+    }
+
+    // Atualiza botão flutuante
+    const fab = document.getElementById('fab-baixa-massa');
+    const badge = document.getElementById('badge-selecionadas');
+    
+    if (notasSelecionadas.size > 0) {
+        if(badge) badge.innerText = notasSelecionadas.size;
+        if(fab) fab.classList.add('show');
+    } else {
+        cancelarModoSelecao(); // Se desmarcar tudo, sai do modo seleção automaticamente
+    }
+}
+
+// =====================================================
+// INTERCEPTORES DE CLIQUE
+// =====================================================
+function handleCardClick(e, numeroNF, chaveAcesso, tipo) {
+    if (modoSelecaoAtivo) {
+        // Modo WhatsApp: Apenas seleciona/deseleciona
+        toggleSelecaoCard(numeroNF, e.currentTarget);
+    } else {
+        // Comportamento normal: abre modal de baixa individual
+        if (tipo === 'ENTREGA') {
+            abrirModalBaixa(numeroNF, chaveAcesso, tipo);
+        } else if (tipo === 'COLETA') {
+            abrirModalColeta(numeroNF, numeroNF, tipo);
+        } else if (tipo === 'TRANSFERENCIA') {
+            confirmarTransferenciaIndividual(numeroNF, chaveAcesso);
+        } else {
+            abrirModalPerguntaOperacional(numeroNF, chaveAcesso, tipo);
+        }
+    }
+}
+
 function abrirDB() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -539,14 +642,31 @@ function gerarCardHTML(nf, config, baixada, sincronizando = false) {
     // Classe especial para o card que está subindo
     const classeSincronizando = sincronizando ? 'opacity-75 shadow-none border-dashed' : '';
 
+    const isEntrega = tipo === 'ENTREGA';
+    
     return `
-        <div class="card mb-3 shadow-sm border-start border-${cor} border-4 animate__animated ${baixada || sincronizando ? '' : 'animate__fadeInUp'} ${classeSincronizando}" 
+        <div class="card card-nf mb-3 shadow-sm border-start border-${cor} border-4 animate__animated ${baixada || sincronizando ? '' : 'animate__fadeInUp selecionavel'} ${classeSincronizando} ${isEntrega && !baixada ? 'tipo-entrega' : ''}" 
         id="card-nf-${numero}"
         data-chave="${chave}"
-        data-numero="${numero}">
+        data-numero="${numero}"
+        ${(!baixada && !sincronizando) ? `
+        onmousedown="iniciarLongPress(event, '${numero}')" 
+        onmouseup="cancelarLongPress()" 
+        onmouseleave="cancelarLongPress()" 
+        ontouchstart="iniciarLongPress(event, '${numero}')" 
+        ontouchend="cancelarLongPress()" 
+        ontouchcancel="cancelarLongPress()"
+        onclick="handleCardClick(event, '${numero}', '${chave}', '${tipo}')"
+        oncontextmenu="event.preventDefault();"
+        ` : ''}>
             <div class="card-body p-3">
                 <div class="d-flex justify-content-between align-items-start">
-                    <h6 class="fw-bold mb-1">${tipo === 'COLETA' ? '📦COLETA' : '📝NF'} ${numero}</h6>
+                    <div class="d-flex align-items-center">
+                        ${!baixada && !sincronizando && isEntrega ? `
+                        <input class="form-check-input checkbox-selecao fs-4 me-3 mt-0" type="checkbox" onclick="event.preventDefault();">
+                        ` : ''}
+                        <h6 class="fw-bold mb-1">${tipo === 'COLETA' ? '📦COLETA' : '📝NF'} ${numero}</h6>
+                    </div>
                     <span>
                         <i class="bi ${icone} text-${cor} ${sincronizando ? 'animate__animated animate__flash animate__infinite' : ''}" 
                            style="font-size: 1.2rem;"></i>
@@ -561,20 +681,12 @@ function gerarCardHTML(nf, config, baixada, sincronizando = false) {
                         <span class="fw-bold text-uppercase">Sincronizando...</span>
                     </div>
                 ` : !baixada ? `
-                    <button class="btn btn-sm btn-${config.color} w-100 fw-bold" 
-                        onclick="${tipo === 'ENTREGA'
-                ? `abrirModalBaixa('${numero}', '${chave}', '${tipo}')`
-                : tipo === 'COLETA'
-                    ? `abrirModalColeta('${numero}', '${nf.numero_coleta || numero}', '${tipo}')`
-                    : tipo === 'TRANSFERENCIA'
-                        ? `confirmarTransferenciaIndividual('${numero}', '${chave}')`
-                        : `abrirModalPerguntaOperacional('${numero}', '${chave}', '${tipo}')`
-            }">
+                    <button class="btn btn-sm btn-${config.color} w-100 fw-bold btn-baixa-individual">
                         ${config.label}
                     </button>
                 ` : `
-                    <button class="btn btn-sm btn-outline-success w-100" 
-                        onclick='abrirModalDetalhes(${JSON.stringify(nf.dados_baixa)})'>
+                    <button class="btn btn-sm btn-outline-success w-100 btn-baixa-individual" 
+                        onclick='event.stopPropagation(); abrirModalDetalhes(${JSON.stringify(nf.dados_baixa)})'>
                         Ver Detalhes
                     </button>
                 `}
@@ -1137,6 +1249,203 @@ async function handleCameraNativa(event) {
         img.src = imgUrl;
     }
 }
+
+// =========================================================================
+// LÓGICA DE BAIXA EM MASSA (MODAL E SALVAMENTO)
+// =========================================================================
+
+function selecionarTipoMassa(tipo) {
+    const rRetida = document.getElementById('radio-retida');
+    const rOcorrencia = document.getElementById('radio-ocorrencia');
+    const sOcorrencia = document.getElementById('select-ocorrencia-massa');
+    const divObs = document.getElementById('campo-observacao-massa');
+
+    if (tipo === 'retida') {
+        rRetida.checked = true;
+        sOcorrencia.disabled = true;
+        divObs.style.display = 'block';
+    } else {
+        rOcorrencia.checked = true;
+        sOcorrencia.disabled = false;
+        divObs.style.display = 'none';
+    }
+}
+
+function abrirModalBaixaMassa() {
+    if (notasSelecionadas.size === 0) return;
+
+    // Atualiza contadores
+    document.getElementById('qtd-massa-selecionadas').innerText = notasSelecionadas.size;
+
+    // Preenche lista de resumo
+    const listaHtml = Array.from(notasSelecionadas).map(numero => {
+        const card = document.getElementById(`card-nf-${numero}`);
+        const dest = card.querySelector('p.text-muted').innerText.replace('👤 ', '');
+        return `<div class="d-flex justify-content-between border-bottom py-1 small">
+            <span class="fw-bold">NF ${numero}</span>
+            <span class="text-truncate ms-2" style="max-width: 150px;">${dest}</span>
+        </div>`;
+    }).join('');
+    
+    document.getElementById('lista-resumo-massa').innerHTML = listaHtml;
+
+    // Reset formulário
+    document.getElementById('input-observacao-massa').value = '';
+    selecionarTipoMassa('retida'); // Default
+
+    const modalBaixaMassa = new bootstrap.Modal(document.getElementById('modalBaixaMassa'));
+    modalBaixaMassa.show();
+}
+
+async function salvarBaixaMassa() {
+    const tipoSelecionado = document.querySelector('input[name="tipo_baixa_massa"]:checked').value;
+    const inputObsMassa = document.getElementById('input-observacao-massa').value;
+    const selectOc = document.getElementById('select-ocorrencia-massa').value;
+
+    let cod;
+    let isRetida = false;
+    let obsStr = '';
+
+    if (tipoSelecionado === 'retida') {
+        if (inputObsMassa.trim().length < 5) {
+            alert("Para Notas Retidas, é obrigatório digitar uma justificativa clara.");
+            return;
+        }
+        cod = "1"; // Ocorrência padrão de Entrega para reter canhoto
+        isRetida = true;
+        obsStr = inputObsMassa.trim();
+    } else {
+        if (!selectOc) {
+            alert("Selecione qual a ocorrência de Insucesso na lista.");
+            return;
+        }
+        cod = selectOc;
+        isRetida = false;
+        obsStr = ''; // Insucessos não exigem obs no campo obs retida
+    }
+
+    const mID = manifestoAtual || localStorage.getItem('manifesto_ativo');
+
+    // 1. Fecha o Modal de Baixa em Massa
+    const modalBaixaMassaEl = document.getElementById('modalBaixaMassa');
+    const modalBaixaMassaInstance = bootstrap.Modal.getInstance(modalBaixaMassaEl);
+    if (modalBaixaMassaInstance) modalBaixaMassaInstance.hide();
+
+    // 2. Abre a tela de carregamento (Reaproveita o statusModal da baixa unitária)
+    atualizarStatusUI('loading', 'Processando Lote...', `Aguarde, estamos processando as ${notasSelecionadas.size} notas...`);
+    statusModal.show();
+
+    // 3. Captura GPS (apenas 1 vez para todo o lote para poupar tempo)
+    let gpsCoords = { lat: "0.000000", lon: "0.000000" };
+    try {
+        const coords = await getCoords();
+        if (coords && coords.lat && coords.lon) {
+            gpsCoords = coords;
+        }
+    } catch (gpsErr) {
+        console.warn("GPS falhou, enviando zerado no lote");
+    }
+
+    let falhasLote = 0;
+
+    // 4. Itera e envia cada baixa sequencialmente para não matar a memória do celular
+    // A promessa de cada nota é resolvida antes de ir pra próxima (importante para SQLite/Rede Mobile lenta)
+    const arrayNotas = Array.from(notasSelecionadas);
+    
+    for (const numeroNF of arrayNotas) {
+        const card = document.getElementById(`card-nf-${numeroNF}`);
+        const chaveNF = card ? card.dataset.chave : '';
+
+        const formData = new FormData();
+        formData.append('ocorrencia_codigo', cod);
+        formData.append('chave_acesso', chaveNF);
+        formData.append('numero_nota', numeroNF);
+        formData.append('manifesto_id', mID);
+        formData.append('recebedor', 'BAIXA EM LOTE');
+        formData.append('nota_retida', isRetida);
+        formData.append('observacao_retida', obsStr);
+        formData.append('latitude', gpsCoords.lat);
+        formData.append('longitude', gpsCoords.lon);
+
+        try {
+            const response = await authFetch(`${API_BASE}manifesto/registrar-baixa/`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok && response.status >= 500) {
+                throw new Error("Erro 500 Lote");
+            }
+
+            const data = await response.json();
+            if (response.ok) {
+                // Sucesso na API
+                processarSumiçoNotaSilencioso(numeroNF);
+            } else {
+                falhasLote++;
+                console.error("Erro nota", numeroNF, data.erro);
+            }
+        } catch (err) {
+            // Falha de rede ou 500: Salva local (Offline Mode)
+            console.warn("Salvando offline NF", numeroNF);
+            try {
+                const db = await abrirDB();
+                const transaction = db.transaction('baixas_pendentes', 'readwrite');
+                const store = transaction.objectStore('baixas_pendentes');
+
+                const objOffline = {
+                    id: Date.now().toString() + '_' + numeroNF,
+                    numeroNF: numeroNF,
+                    chaveNF: chaveNF,
+                    mID: mID,
+                    campos: {
+                        ocorrencia_codigo: cod,
+                        recebedor: 'BAIXA EM LOTE',
+                        nota_retida: isRetida,
+                        observacao_retida: obsStr,
+                        latitude: gpsCoords.lat,
+                        longitude: gpsCoords.lon
+                    },
+                    foto: null // Baixa em massa NUNCA tem foto
+                };
+
+                store.add(objOffline);
+                processarSumiçoNotaSilencioso(numeroNF);
+            } catch (dbErr) {
+                console.error("Erro crítico salvar offline lote:", dbErr);
+                falhasLote++;
+            }
+        }
+    }
+
+    // 5. Finalização
+    cancelarModoSelecao();
+    atualizarListaViva(mID);
+    await atualizarIconeNuvem(); // Atualiza a nuvem caso alguma tenha ficado offline
+
+    if (falhasLote === 0) {
+        atualizarStatusUI('success', 'Lote Concluído', `Todas as notas foram baixadas com sucesso.`);
+    } else {
+        atualizarStatusUI('warning', 'Lote com Alertas', `O lote terminou, mas ${falhasLote} notas não conseguiram ser salvas.`);
+    }
+
+    setTimeout(() => {
+        statusModal.hide();
+        verificarFimDoManifesto(); // Checa se acabaram as notas
+    }, 3000);
+}
+
+function processarSumiçoNotaSilencioso(numeroNF) {
+    const cardParaRemover = document.getElementById(`card-nf-${numeroNF}`);
+    if (cardParaRemover) {
+        cardParaRemover.classList.add('animate__fadeOutRight');
+        setTimeout(() => {
+            cardParaRemover.remove();
+            atualizarContadorVisual();
+        }, 500);
+    }
+}
+
 // =========================================================================
 // Abre o modal de baixa com os dados da nota e configurações específicas
 // =========================================================================
