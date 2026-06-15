@@ -105,49 +105,6 @@ Para resolver o problema definitivamente, o sistema foi dividido em dois PWA ins
 ---
 
 > [!IMPORTANT]
-> **ANÁLISE ARQUITETURAL E DIRETRIZES FUTURAS (PROJETO MULTI-SAAS):**
-> 
-> Durante a etapa de refinamento e isolamento de dados do dia 09/06/2026, foi realizada uma avaliação técnica crítica quanto à expansão do sistema para o modelo **Multi-Tenant SaaS** (múltiplas empresas no mesmo painel com isolamento via subdomínios).
-> 
-> A conclusão estabelecida foi de que o atual banco de dados **MySQL não possui suporte nativo à separação por schemas lógicos** da maneira como a arquitetura moderna do Django (ex: biblioteca `django-tenants`) exige para realizar o roteamento seguro e escalável. 
-> 
-> Sendo assim, **é mandatório que a infraestrutura realize a migração dos dados do MySQL para um banco de dados PostgreSQL** (versão 13 ou superior) antes que a transição para Multi-SaaS seja implementada. A tentativa de forçar o modelo Multi-SaaS no MySQL ("Row-level Multi-tenancy") exigiria a reescrita maciça de todas as QuerySets do sistema, adicionando chaves estrangeiras de `empresa_id` em todos os modelos (altíssimo custo de engenharia e altíssimo risco de vazamento de dados). O PostgreSQL resolverá este desafio "por baixo dos panos" garantindo segurança, escalabilidade e menor necessidade de reescrita do código fonte.
-
----
-
-**Data:** 11/06/2026
-**Hora:** 11:30
-
-## Atualizações Aplicadas (10/06 a 11/06):
-
-1. **Migração Oficial Concluída (MySQL para PostgreSQL):**
-   - Transição definitiva e bem-sucedida do MySQL para o PostgreSQL na infraestrutura da VPS, cumprindo o pré-requisito arquitetural para o futuro modelo Multi-SaaS.
-   - Atualização do `backend/core/settings.py` para usar dinamicamente a engine e opções do PostgreSQL a partir das variáveis de ambiente (`.env`).
-   - Reestruturação do script `entrypoint.sh` do Docker para monitorar a disponibilidade do PostgreSQL (utilizando `psycopg2`) antes de disparar o Django, prevenindo falhas de inicialização do Nginx (Erro 404).
-
-2. **Novos Módulos Dinâmicos (Painel Operacional):**
-   - **Central de Treinamentos:** Nova página implementada e integrada dinamicamente. Os administradores agora cadastram vídeos pelo Django Admin, que são renderizados em modais dinâmicos no portal com suporte a rastreamento de engajamento (likes e visualizações de vídeos por usuário).
-   - **Central de Ajuda (Suporte):** O painel de tickets de suporte foi dinamizado, garantindo o acompanhamento visual do status do chamado e restringindo a criação excessiva de tickets baseada em lógicas do perfil de usuário.
-
-3. **Correções de Permissões (SAC):**
-   - Resolvido um bug crítico que causava bloqueio indevido de usuários com nível de "Gestor" no painel do SAC. A checagem de cargos no backend foi priorizada e corrigida (`09ed582`).
-
-4. **Direitos Autorais e Licenciamento (Legal):**
-   - Criação e inclusão de uma licença de software proprietário (`LICENSE`) na raiz do repositório para proteção jurídica do código fonte.
-   - Injeção de cabeçalhos formais de Copyright nos arquivos vitais e de configuração do backend.
-
----
-
-**Data:** 11/06/2026
-**Hora:** 16:30
-
-## Ajustes de Timezone, E-mails e Central de Ajuda:
-
-1. **Gestão de Usuários e Automação de E-mails:**
-   - Adicionadas as colunas de **E-mail** e **Último Acesso** na tabela principal de Gestão de Usuários.
-   - Inserido um novo botão de ação rápida (ícone de envelope) para disparar **E-mails de Redefinição de Senha** para usuários operacionais e motoristas com apenas um clique.
-   - Corrigido o envio de **E-mails de Boas Vindas** e **Convite SAC**, alterando o remetente padrão para a conta autenticada no servidor (SMTP) a fim de evitar bloqueios de *spoofing* do Gmail.
-   - Removido o bloqueio silencioso (`fail_silently=False`) para exibir avisos reais caso haja falha no provedor de envio de e-mails.
 <div align="center">
   <img src="backend/static/images/logo_app.png" alt="Quick Track Logo" width="150" />
 </div>
@@ -286,26 +243,10 @@ Para resolver o problema definitivamente, o sistema foi dividido em dois PWA ins
    - Criação e inclusão de uma licença de software proprietário (`LICENSE`) na raiz do repositório para proteção jurídica do código fonte.
    - Injeção de cabeçalhos formais de Copyright nos arquivos vitais e de configuração do backend.
 
----
-
-**Data:** 11/06/2026
-**Hora:** 16:30
-
-## Ajustes de Timezone, E-mails e Central de Ajuda:
-
-1. **Gestão de Usuários e Automação de E-mails:**
-   - Adicionadas as colunas de **E-mail** e **Último Acesso** na tabela principal de Gestão de Usuários.
-   - Inserido um novo botão de ação rápida (ícone de envelope) para disparar **E-mails de Redefinição de Senha** para usuários operacionais e motoristas com apenas um clique.
-   - Corrigido o envio de **E-mails de Boas Vindas** e **Convite SAC**, alterando o remetente padrão para a conta autenticada no servidor (SMTP) a fim de evitar bloqueios de *spoofing* do Gmail.
-   - Removido o bloqueio silencioso (`fail_silently=False`) para exibir avisos reais caso haja falha no provedor de envio de e-mails.
-
-2. **Correção Definitiva de Timezone (Fuso Horário):**
-   - Restaurada a integridade global do banco de dados mantendo `USE_TZ = True`.
-   - Corrigido o **bug da virada de dia antecipada** às 21h no painel `DashboardView`, convertendo explicitamente o objeto de tempo para o fuso local do Brasil (`timezone.localtime()`) antes dos cálculos de métricas.
-   - Corrigida a exibição do **Último Acesso** na listagem de usuários, subtraindo o avanço incorreto de 3 horas gerado pela leitura direta em UTC.
-
-3. **Correção de Erro na Central de Ajuda:**
-   - Resolvido o *Erro 500* que derrubava a renderização da Central de Ajuda devido a uma falha de referência (importação) do modelo `TicketSuporte` no controller da view operacional.
+5. **Ajustes de Timezone, E-mails e Central de Ajuda:**
+   - **Gestão de Usuários e Automação de E-mails:** Adicionadas as colunas de **E-mail** e **Último Acesso** na tabela principal de Gestão de Usuários. Inserido um novo botão de ação rápida (ícone de envelope) para disparar **E-mails de Redefinição de Senha**. Corrigido o envio de **E-mails de Boas Vindas** e **Convite SAC**, alterando o remetente padrão para evitar bloqueios de *spoofing*.
+   - **Correção Definitiva de Timezone:** Restaurada a integridade global mantendo `USE_TZ = True`. Corrigido o bug da virada de dia antecipada às 21h no painel `DashboardView` e exibição do **Último Acesso** na listagem de usuários.
+   - **Correção de Erro na Central de Ajuda:** Resolvido o *Erro 500* que derrubava a renderização devido a uma falha de referência (importação) do modelo `TicketSuporte`.
 
 ---
 
