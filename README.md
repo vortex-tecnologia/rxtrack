@@ -1,6 +1,4 @@
 
-
-> [!IMPORTANT]
 <div align="center">
   <img src="backend/static/images/logo_app.png" alt="Quick Track Logo" width="150" />
 </div>
