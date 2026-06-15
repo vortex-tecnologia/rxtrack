@@ -49,14 +49,16 @@ TENANT_APPS = [
     'django.contrib.auth',
     'django.contrib.sessions',
     'django.contrib.messages',
+
+    'unfold',
+    'unfold.contrib.filters',
+    'unfold.contrib.forms',
+
     'django.contrib.admin',
     'django.contrib.staticfiles',
 
     'daphne',
     'channels',
-    'unfold',
-    'unfold.contrib.filters',
-    'unfold.contrib.forms',
     
     'manifesto.apps.ManifestoConfig',
     
@@ -194,7 +196,7 @@ USE_TZ = True
 
 
 # Static files (CSS, JavaScript, Images)
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 
 # CORREÇÃO CRÍTICA: Diretório onde o collectstatic vai copiar todos os arquivos
 STATIC_ROOT = BASE_DIR / 'staticfiles' 
