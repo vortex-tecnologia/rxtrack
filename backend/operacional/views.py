@@ -5,7 +5,8 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login
 from usuarios.models import Motorista , Filial
 from manifesto.models import Manifesto, Ocorrencia , NotaFiscal , BaixaNF , ManifestoBuscaLog, HistoricoOcorrencia
-from suporte.models import VideoTreinamento, TicketSuporte
+from suporte.models import TicketSuporte
+from tutoriais.models import VideoTreinamento
 import json
 from django.views.generic import TemplateView, ListView
 from usuarios.decorators import apenas_operacional

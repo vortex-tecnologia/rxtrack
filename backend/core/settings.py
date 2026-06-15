@@ -25,35 +25,52 @@ CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(',') if o.strip()
 
 # Application definition
 
-INSTALLED_APPS = [
-    'daphne',                  # 1º: SEMPRE o Daphne (para habilitar ASGI)
-    'channels',                # 2º: Camada de comunicação
-    'unfold',                  # 3º: O Admin bonito (ele continua funcionando 100%)
+SHARED_APPS = [
+    'django_tenants',          # 1º: Obrigatório primeiro para roteamento
+    'tenants',                 # Novo app de gestão de clientes/domínios
+    'tutoriais',               # Novo app de vídeos de treinamento compartilhados
+    
+    'daphne',                  # Daphne (ASGI)
+    'channels',                # Camada de comunicação
+    'unfold',                  # Admin bonito
     'unfold.contrib.filters',
-    'unfold.contrib.forms',  
+    'unfold.contrib.forms',
+    
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'manifesto.apps.ManifestoConfig',
+]
+
+TENANT_APPS = [
+    'django.contrib.contenttypes',
+    'django.contrib.auth',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.admin',
+    'django.contrib.staticfiles',
+
+    'daphne',
+    'channels',
+    'unfold',
+    'unfold.contrib.filters',
+    'unfold.contrib.forms',
     
+    'manifesto.apps.ManifestoConfig',
     
     # Terceiros
     'rest_framework',
     'rest_framework.authtoken',
-    'rest_framework_simplejwt', # Adicionado para JWT
+    'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'django_celery_beat',
     'corsheaders',
-    
     'pwa',
-
     
     # Nossas Apps
     'usuarios',
-    #'manifesto',   # CORREÇÃO: Deve ser 'manifestos' (plural)
     'mobile',
     'operacional',
     'AgenteIa',
@@ -62,6 +79,17 @@ INSTALLED_APPS = [
     'sac_mobile',
     'auditoria',
 ]
+
+INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
+
+TENANT_MODEL = 'tenants.Client'
+TENANT_DOMAIN_MODEL = 'tenants.Domain'
+
+DATABASE_ROUTERS = (
+    'django_tenants.routers.TenantSyncRouter',
+)
+
+PUBLIC_SCHEMA_URLCONF = 'core.urls_public'
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0')
 
 CHANNEL_LAYERS = {
@@ -87,6 +115,7 @@ LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/app/'
 
 MIDDLEWARE = [
+    'django_tenants.middleware.main.TenantMainMiddleware', # Roteador do Multi-SaaS
     'corsheaders.middleware.CorsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -133,7 +162,7 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.postgresql'),
+        'ENGINE': 'django_tenants.postgresql_backend',
         'NAME': os.getenv('DB_NAME', 'quicktrack_homolog'),
         'USER': os.getenv('DB_USER', 'quicktrack'),
         'PASSWORD': os.getenv('DB_PASSWORD', 'VxQtHom2026#Pg'),

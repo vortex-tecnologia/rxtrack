@@ -24,3 +24,4 @@ cryptography==41.0.7
 ultralytics
 pytesseract
 opencv-python-headless
+django-tenants~=3.6.0
