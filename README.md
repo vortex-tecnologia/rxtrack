@@ -212,3 +212,31 @@ Execute as migrações gerais de tenant para que o novo app de `tutoriais` e alt
 ```bash
 python manage.py migrate_schemas --tenant
 ```
+
+---
+
+**Data:** 16/06/2026
+**Hora:** 15:35
+
+## Correção Crítica: Celery + Multi-SaaS (Tenant-Aware Workers)
+
+Após a transição para a arquitetura Multi-SaaS, foi detectado um bug crítico que impedia a sincronização de manifestos via Celery. Os workers do Celery não possuíam consciência do contexto de tenant, fazendo com que todas as tasks fossem executadas no schema `public` ao invés do schema do cliente correto.
+
+### Sintoma Identificado
+```
+ERROR: relation "manifesto_manifestobuscalog" does not exist
+UnboundLocalError: cannot access local variable 'log' where it is not associated with a value
+```
+O Celery procurava as tabelas operacionais no schema `public` (onde elas não existem), pois o worker não sabia para qual cliente (tenant) a task havia sido disparada.
+
+### Solução Aplicada
+1. **Nova dependência:** Adicionada a biblioteca `tenant-schemas-celery~=2.1.0` ao `requirements.txt`.
+2. **Atualização do `core/celery.py`:** Substituída a classe padrão `Celery` pela classe `TenantAwareCelery` (importada de `tenant_schemas_celery.app`). Essa classe injeta automaticamente o `schema_name` do tenant atual em cada task disparada, e ao executar a task, o worker alterna para o schema correto antes de acessar o banco de dados.
+
+### Deploy na VPS (Rebuild obrigatório)
+Como uma nova biblioteca foi adicionada, é necessário reconstruir a imagem Docker:
+```bash
+docker-compose down
+docker-compose build
+docker-compose up -d
+```
