@@ -196,7 +196,7 @@ STATIC_URL = '/static/'
 
 # CORREÇÃO CRÍTICA: Diretório onde o collectstatic vai copiar todos os arquivos
 STATIC_ROOT = BASE_DIR / 'staticfiles' 
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
     # Caso precise de arquivos estáticos globais
