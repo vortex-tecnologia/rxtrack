@@ -1,6 +1,6 @@
-from django.contrib import admin
 from django.urls import path
 from django.http import HttpResponse
+from core.admin_public import public_admin_site
 
 def public_index(request):
     html = """
@@ -73,5 +73,6 @@ def public_index(request):
 
 urlpatterns = [
     path('', public_index, name='public_index'),
-    path('admin/', admin.site.urls),
+    path('admin/', public_admin_site.urls),
 ]
+
