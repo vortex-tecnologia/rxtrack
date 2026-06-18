@@ -1,12 +1,12 @@
 # core/admin_public.py
 # Admin Site exclusivo para o Painel Global (Schema Public)
 # Só mostra os models que existem no banco público: Tenants + Auth + Tutoriais
+# Usa o Django Admin padrão (sem Unfold) para evitar conflitos de template
 
 from django.contrib import admin
 from django.contrib.admin import AdminSite
 from django.contrib.auth.models import User, Group
 from django.contrib.auth.admin import UserAdmin, GroupAdmin
-from unfold.admin import ModelAdmin
 
 from tenants.models import Client, Domain
 from tutoriais.models import VideoTreinamento
@@ -36,13 +36,13 @@ class DomainInline(admin.TabularInline):
     extra = 1
 
 
-class PublicClientAdmin(ModelAdmin):
+class PublicClientAdmin(admin.ModelAdmin):
     list_display = ('schema_name', 'name', 'created_on')
     search_fields = ('schema_name', 'name')
     inlines = [DomainInline]
 
 
-class PublicDomainAdmin(ModelAdmin):
+class PublicDomainAdmin(admin.ModelAdmin):
     list_display = ('domain', 'tenant', 'is_primary')
     search_fields = ('domain', 'tenant__name')
 
@@ -52,7 +52,7 @@ public_admin_site.register(Domain, PublicDomainAdmin)
 
 
 # --- Tutoriais (Vídeos de treinamento compartilhados) ---
-class PublicVideoTreinamentoAdmin(ModelAdmin):
+class PublicVideoTreinamentoAdmin(admin.ModelAdmin):
     list_display = ('titulo', 'url_youtube', 'visualizacoes', 'likes', 'dislikes', 'ativo', 'created_at')
     list_filter = ('ativo', 'created_at')
     search_fields = ('titulo', 'descricao')
