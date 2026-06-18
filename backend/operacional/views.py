@@ -850,10 +850,12 @@ class TreinamentosView(TemplateView):
     template_name = 'desktop/paginas/treinamentos.html'
 
     def get_context_data(self, **kwargs):
+        from django_tenants.utils import schema_context
         context = super().get_context_data(**kwargs)
         context['titulo'] = "Treinamentos e Tutoriais"
         context['usuario_nome'] = self.request.user.get_full_name() or self.request.user.username
-        context['videos'] = VideoTreinamento.objects.filter(ativo=True)
+        with schema_context('public'):
+            context['videos'] = list(VideoTreinamento.objects.filter(ativo=True))
         return context
 
 from django.views.decorators.csrf import csrf_exempt
@@ -863,11 +865,14 @@ from django.http import JsonResponse
 @login_required(login_url='/login/')
 def registrar_view_treinamento(request, video_id):
     if request.method == 'POST':
+        from django_tenants.utils import schema_context
         try:
-            video = VideoTreinamento.objects.get(id=video_id)
-            video.visualizacoes += 1
-            video.save(update_fields=['visualizacoes'])
-            return JsonResponse({'status': 'success', 'views': video.visualizacoes})
+            with schema_context('public'):
+                video = VideoTreinamento.objects.get(id=video_id)
+                video.visualizacoes += 1
+                video.save(update_fields=['visualizacoes'])
+                views_count = video.visualizacoes
+            return JsonResponse({'status': 'success', 'views': views_count})
         except VideoTreinamento.DoesNotExist:
             return JsonResponse({'status': 'error', 'message': 'Vídeo não encontrado'}, status=404)
     return JsonResponse({'status': 'error', 'message': 'Método inválido'}, status=405)
@@ -876,24 +881,24 @@ def registrar_view_treinamento(request, video_id):
 @login_required(login_url='/login/')
 def avaliar_treinamento(request, video_id):
     if request.method == 'POST':
+        from django_tenants.utils import schema_context
         try:
-
             import json
             data = json.loads(request.body)
             tipo = data.get('tipo') # 'like' ou 'dislike'
             
-            video = VideoTreinamento.objects.get(id=video_id)
-            
-            if tipo == 'like':
-                video.likes += 1
-                video.save(update_fields=['likes'])
-                return JsonResponse({'status': 'success', 'likes': video.likes})
-            elif tipo == 'dislike':
-                video.dislikes += 1
-                video.save(update_fields=['dislikes'])
-                return JsonResponse({'status': 'success', 'dislikes': video.dislikes})
-            else:
-                return JsonResponse({'status': 'error', 'message': 'Tipo inválido'}, status=400)
+            with schema_context('public'):
+                video = VideoTreinamento.objects.get(id=video_id)
+                if tipo == 'like':
+                    video.likes += 1
+                    video.save(update_fields=['likes'])
+                    return JsonResponse({'status': 'success', 'likes': video.likes})
+                elif tipo == 'dislike':
+                    video.dislikes += 1
+                    video.save(update_fields=['dislikes'])
+                    return JsonResponse({'status': 'success', 'dislikes': video.dislikes})
+                else:
+                    return JsonResponse({'status': 'error', 'message': 'Tipo inválido'}, status=400)
                 
         except VideoTreinamento.DoesNotExist:
             return JsonResponse({'status': 'error', 'message': 'Vídeo não encontrado'}, status=404)
