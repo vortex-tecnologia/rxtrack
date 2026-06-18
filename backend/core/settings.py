@@ -287,50 +287,114 @@ PWA_APP_ICONS = [
 PWA_SERVICE_WORKER_PATH = 'static/js/serviceworker.js'
 
 JAZZMIN_SETTINGS = {
-    "site_title": "QuickTrack Admin",
+    # ── Branding ──
+    "site_title": "QuickTrack",
     "site_header": "QuickTrack",
     "site_brand": "QuickTrack",
-    "welcome_sign": "Bem-vindo ao QuickTrack",
+    "welcome_sign": "Bem-vindo ao painel QuickTrack",
     "copyright": "Vortex Tecnologia",
-    
-    # Tema visual
+    "search_model": ["manifesto.Manifesto", "manifesto.NotaFiscal", "usuarios.Motorista"],
+
+    # ── Layout ──
     "show_ui_builder": False,
-    "navigation_expanded": True,
-    "hide_apps": [],
-    "hide_models": [],
-    
-    # Ícones do menu lateral (Font Awesome)
+    "navigation_expanded": False,
+    "topmenu_links": [
+        {"name": "Início", "url": "admin:index", "permissions": ["auth.view_user"]},
+    ],
+    "changeform_format": "horizontal_tabs",
+    "related_modal_active": True,
+
+    # ── Organização do Menu Lateral ──
+    "order_with_respect_to": [
+        "configuracao",
+        "manifesto",
+        "usuarios",
+        "sac_mobile",
+        "mobile",
+        "suporte",
+        "tutoriais",
+        "auth",
+        "tenants",
+        "django_celery_beat",
+        "token_blacklist",
+    ],
+
+    # ── Esconder models técnicos/desnecessários ──
+    "hide_apps": [
+        "token_blacklist",
+        "authtoken",
+    ],
+    "hide_models": [
+        "auth.Group",
+        "manifesto.WebhookTokenControl",
+        "mobile.WebPushSubscription",
+    ],
+
+    # ── Ícones (Font Awesome 5) ──
     "icons": {
-        "auth": "fas fa-users-cog",
-        "auth.user": "fas fa-user",
+        # Sistema
+        "auth": "fas fa-shield-alt",
+        "auth.user": "fas fa-user-shield",
         "auth.Group": "fas fa-users",
-        "tenants.Client": "fas fa-building",
-        "tenants.Domain": "fas fa-globe",
-        "tutoriais.VideoTreinamento": "fas fa-video",
-        "manifesto.Manifesto": "fas fa-file-alt",
-        "manifesto.NotaFiscal": "fas fa-file-invoice",
-        "manifesto.Ocorrencia": "fas fa-exclamation-triangle",
-        "manifesto.BaixaNF": "fas fa-check-double",
-        "usuarios.Motorista": "fas fa-truck",
-        "usuarios.Filial": "fas fa-map-marker-alt",
+        "configuracao": "fas fa-sliders-h",
         "configuracao.ConfiguracaoSistema": "fas fa-cogs",
-        "sac_mobile.HistoricoBaixaSAC": "fas fa-headset",
+
+        # Tenants (Painel Global)
+        "tenants": "fas fa-server",
+        "tenants.Client": "fas fa-building",
+        "tenants.Domain": "fas fa-globe-americas",
+
+        # Operação de Manifestos
+        "manifesto": "fas fa-shipping-fast",
+        "manifesto.Manifesto": "fas fa-file-alt",
+        "manifesto.NotaFiscal": "fas fa-file-invoice-dollar",
+        "manifesto.BaixaNF": "fas fa-check-double",
+        "manifesto.Ocorrencia": "fas fa-exclamation-triangle",
+        "manifesto.HistoricoOcorrencia": "fas fa-history",
+        "manifesto.ManifestoBuscaLog": "fas fa-search",
+        "manifesto.WebhookEventoManifestoESL": "fas fa-satellite-dish",
+        "manifesto.WebhookTokenControl": "fas fa-key",
+
+        # Equipe & Motoristas
+        "usuarios": "fas fa-users",
+        "usuarios.Motorista": "fas fa-id-card",
+        "usuarios.Filial": "fas fa-map-marker-alt",
+        "usuarios.PermissaoUsuario": "fas fa-user-lock",
+        "usuarios.PreCadastroSAC": "fas fa-user-plus",
+
+        # SAC & Suporte
+        "sac_mobile": "fas fa-headset",
+        "sac_mobile.HistoricoBaixaSAC": "fas fa-clipboard-check",
+        "suporte": "fas fa-life-ring",
         "suporte.TicketSuporte": "fas fa-ticket-alt",
+
+        # Mobile & Notificações
+        "mobile": "fas fa-mobile-alt",
+        "mobile.BuscaDiariaManifestos": "fas fa-sync-alt",
+        "mobile.ManifestoNotificado": "fas fa-bell",
+        "mobile.WebPushSubscription": "fas fa-paper-plane",
+
+        # Tutoriais
+        "tutoriais": "fas fa-graduation-cap",
+        "tutoriais.VideoTreinamento": "fas fa-video",
+
+        # Celery Beat
+        "django_celery_beat": "fas fa-clock",
     },
-    "default_icon_parents": "fas fa-folder",
-    "default_icon_children": "fas fa-circle",
+    "default_icon_parents": "fas fa-folder-open",
+    "default_icon_children": "fas fa-angle-right",
 }
 
-# Tema escuro premium
+# ── Tema Visual Escuro Premium ──
 JAZZMIN_UI_TWEAKS = {
     "navbar_small_text": False,
-    "footer_small_text": False,
+    "footer_small_text": True,
     "body_small_text": False,
     "brand_small_text": False,
-    "brand_colour": False,
+    "brand_colour": "navbar-dark",
     "accent": "accent-primary",
     "navbar": "navbar-dark",
-    "no_navbar_border": False,
+    "no_navbar_border": True,
     "navbar_fixed": True,
     "layout_boxed": False,
     "footer_fixed": False,
@@ -338,15 +402,15 @@ JAZZMIN_UI_TWEAKS = {
     "sidebar": "sidebar-dark-primary",
     "sidebar_nav_small_text": False,
     "sidebar_disable_expand": False,
-    "sidebar_nav_child_indent": False,
-    "sidebar_nav_compact_style": False,
+    "sidebar_nav_child_indent": True,
+    "sidebar_nav_compact_style": True,
     "sidebar_nav_legacy_style": False,
     "sidebar_nav_flat_style": False,
     "theme": "darkly",
     "dark_mode_theme": "darkly",
     "button_classes": {
         "primary": "btn-primary",
-        "secondary": "btn-secondary",
+        "secondary": "btn-outline-secondary",
         "info": "btn-info",
         "warning": "btn-warning",
         "danger": "btn-danger",
