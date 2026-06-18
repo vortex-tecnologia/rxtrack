@@ -40,15 +40,28 @@ class ConfiguracaoSistemaAdmin(admin.ModelAdmin):
     )
 
     def has_add_permission(self, request):
+        from django.db import connection
+        if connection.schema_name == 'public':
+            return False
         # Só permite adicionar se não existir nenhum registro
-        return not ConfiguracaoSistema.objects.exists()
+        try:
+            return not ConfiguracaoSistema.objects.exists()
+        except Exception:
+            return False
 
     def has_delete_permission(self, request, obj=None):
         # Nunca permite deletar
         return False
 
     def changelist_view(self, request, extra_context=None):
-        # Se já existe, redireciona direto para o formulário de edição
-        obj = ConfiguracaoSistema.load()
+        from django.db import connection
         from django.shortcuts import redirect
-        return redirect(f'/admin/configuracao/configuracaosistema/{obj.pk}/change/')
+        if connection.schema_name == 'public':
+            return redirect('/admin/')
+            
+        # Se já existe, redireciona direto para o formulário de edição
+        try:
+            obj = ConfiguracaoSistema.load()
+            return redirect(f'/admin/configuracao/configuracaosistema/{obj.pk}/change/')
+        except Exception:
+            return super().changelist_view(request, extra_context=extra_context)
