@@ -32,9 +32,7 @@ SHARED_APPS = [
     
     'daphne',                  # Daphne (ASGI)
     'channels',                # Camada de comunicação
-    'unfold',                  # Admin bonito
-    'unfold.contrib.filters',
-    'unfold.contrib.forms',
+    'jazzmin',                 # Admin bonito (Bootstrap)
     
     'django.contrib.admin',
     'django.contrib.auth',
@@ -50,9 +48,7 @@ TENANT_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
 
-    'unfold',
-    'unfold.contrib.filters',
-    'unfold.contrib.forms',
+    'jazzmin',
 
     'django.contrib.admin',
     'django.contrib.staticfiles',
@@ -290,21 +286,72 @@ PWA_APP_ICONS = [
 
 PWA_SERVICE_WORKER_PATH = 'static/js/serviceworker.js'
 
-UNFOLD = {
-    "SITE_TITLE": "Quick Track",
-    "SITE_HEADER": "Painel Logístico",
-    "COLORS": {
-        "primary": {
-            "50": "250 252 255",
-            "100": "240 247 255",
-            "500": "13 110 253", # Seu azul padrão
-            "900": "10 30 100",
-        },
+JAZZMIN_SETTINGS = {
+    "site_title": "QuickTrack Admin",
+    "site_header": "QuickTrack",
+    "site_brand": "QuickTrack",
+    "welcome_sign": "Bem-vindo ao QuickTrack",
+    "copyright": "Vortex Tecnologia",
+    
+    # Tema visual
+    "show_ui_builder": False,
+    "navigation_expanded": True,
+    "hide_apps": [],
+    "hide_models": [],
+    
+    # Ícones do menu lateral (Font Awesome)
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "auth.user": "fas fa-user",
+        "auth.Group": "fas fa-users",
+        "tenants.Client": "fas fa-building",
+        "tenants.Domain": "fas fa-globe",
+        "tutoriais.VideoTreinamento": "fas fa-video",
+        "manifesto.Manifesto": "fas fa-file-alt",
+        "manifesto.NotaFiscal": "fas fa-file-invoice",
+        "manifesto.Ocorrencia": "fas fa-exclamation-triangle",
+        "manifesto.BaixaNF": "fas fa-check-double",
+        "usuarios.Motorista": "fas fa-truck",
+        "usuarios.Filial": "fas fa-map-marker-alt",
+        "configuracao.ConfiguracaoSistema": "fas fa-cogs",
+        "sac_mobile.HistoricoBaixaSAC": "fas fa-headset",
+        "suporte.TicketSuporte": "fas fa-ticket-alt",
     },
-    "SIDEBAR": {
-        "show_search": True,
-        "show_all_applications": True,
-    }
+    "default_icon_parents": "fas fa-folder",
+    "default_icon_children": "fas fa-circle",
+}
+
+# Tema escuro premium
+JAZZMIN_UI_TWEAKS = {
+    "navbar_small_text": False,
+    "footer_small_text": False,
+    "body_small_text": False,
+    "brand_small_text": False,
+    "brand_colour": False,
+    "accent": "accent-primary",
+    "navbar": "navbar-dark",
+    "no_navbar_border": False,
+    "navbar_fixed": True,
+    "layout_boxed": False,
+    "footer_fixed": False,
+    "sidebar_fixed": True,
+    "sidebar": "sidebar-dark-primary",
+    "sidebar_nav_small_text": False,
+    "sidebar_disable_expand": False,
+    "sidebar_nav_child_indent": False,
+    "sidebar_nav_compact_style": False,
+    "sidebar_nav_legacy_style": False,
+    "sidebar_nav_flat_style": False,
+    "theme": "darkly",
+    "dark_mode_theme": "darkly",
+    "button_classes": {
+        "primary": "btn-primary",
+        "secondary": "btn-secondary",
+        "info": "btn-info",
+        "warning": "btn-warning",
+        "danger": "btn-danger",
+        "success": "btn-success",
+    },
 }
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

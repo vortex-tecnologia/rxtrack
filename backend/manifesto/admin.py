@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from unfold.admin import ModelAdmin
+from django.contrib.admin import ModelAdmin
 from .models import (
     Manifesto, NotaFiscal, Ocorrencia, BaixaNF, 
     HistoricoOcorrencia, ManifestoBuscaLog, WebhookEventoManifestoESL, WebhookTokenControl

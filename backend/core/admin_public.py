@@ -1,7 +1,6 @@
 # core/admin_public.py
 # Admin Site exclusivo para o Painel Global (Schema Public)
 # Só mostra os models que existem no banco público: Tenants + Auth + Tutoriais
-# Usa o Django Admin padrão (sem Unfold) para evitar conflitos de template
 
 from django.contrib import admin
 from django.contrib.admin import AdminSite

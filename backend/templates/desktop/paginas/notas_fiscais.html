@@ -20,9 +20,9 @@
             <div class="col-md-2">
                 <label class="small fw-bold text-muted">Filial</label>
                 <select name="filial" class="form-select">
-                    <option value="todas">Todas as Filiais</option>
+                    <option value="todas" {% if filial_selecionada == 'todas' %}selected{% endif %}>Todas as Filiais</option>
                     {% for f in filiais %}
-                    <option value="{{ f.id }}" {% if request.GET.filial == f.id|stringformat:"i" %}selected{% endif %}>
+                    <option value="{{ f.id }}" {% if filial_selecionada == f.id|stringformat:"i" %}selected{% endif %}>
                         {{ f.nome }}
                     </option>
                     {% endfor %}
