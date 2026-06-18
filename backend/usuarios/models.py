@@ -209,9 +209,14 @@ class PermissaoUsuario(models.Model):
 
 
 # 2. Sinal (Signal) para Criacao Automatica do Perfil e Permissoes
+from django.db import connection
 
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):
+    # Ignora no schema public, pois a tabela de motorista não existe lá
+    if connection.schema_name == 'public':
+        return
+        
     try:
         instance.motorista_perfil.save()
     except Motorista.DoesNotExist:
