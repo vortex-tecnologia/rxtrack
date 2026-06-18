@@ -69,13 +69,11 @@
             <div class="modal-body p-0">
                 <!-- Wrapper responsivo para Iframe -->
                 <div class="ratio ratio-16x9">
-                    <iframe id="videoIframe" src="" title="Treinamento" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen style="pointer-events: none;"></iframe>
+                    <iframe id="videoIframe" src="" title="Treinamento" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
                 </div>
-                <!-- Bloqueador de overlay para dificultar clique direito -->
-                <div style="position: absolute; top:0; left:0; width:100%; height:100%; z-index: 10; pointer-events: none; box-shadow: inset 0 0 50px rgba(0,0,0,0.5);"></div>
             </div>
             <div class="modal-footer border-0 d-flex justify-content-between align-items-center bg-dark">
-                <small class="text-muted"><i class="bi bi-shield-lock-fill text-success"></i> Visualização Protegida</small>
+                <small class="text-muted"><i class="bi bi-play-btn-fill text-success"></i> Reprodução Padrão</small>
                 <div class="d-flex gap-2">
                     <button class="btn btn-outline-light rounded-pill px-3" onclick="avaliarVideo('like')">
                         <i class="bi bi-hand-thumbs-up-fill text-primary"></i> <span id="modal-likes">0</span>
@@ -116,12 +114,10 @@
             return;
         }
 
-        // Configuração de blindagem: sem controles, sem titulo, sem videos relacionados
-        let iframeUrl = `https://www.youtube.com/embed/${ytId}?autoplay=1&controls=0&modestbranding=1&rel=0&showinfo=0&fs=0&disablekb=1`;
+        // Devolve os controles básicos para evitar bloqueio do YouTube e erro 153
+        let iframeUrl = `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1`;
         
-        // Atribui ao iframe e permite eventos para play, mas o overlay por cima bloqueia clicks direitos
         let iframe = document.getElementById('videoIframe');
-        iframe.style.pointerEvents = 'auto'; 
         iframe.src = iframeUrl;
         
         // Pega likes e dislikes atuais da DOM (guardados data-attributes se quisermos, ou iniciamos em ??)
