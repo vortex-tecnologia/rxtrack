@@ -1,39 +1,55 @@
 /**
  * pwa_tracking.js - Lógica isolada de rastreamento (Heartbeat)
- * Responsável por coletar GPS, bateria e sinal e enviar via WebSocket.
+ * Responsável por coletar GPS, bateria e sinal e enviar via WebSocket ou REST API.
  */
 
+let heartbeatInterval = null;
+let socketTracking = null;
+
 async function iniciarCoracaoTracking() {
-    // Só inicia se houver manifesto ativo e não estiver conectado
-    if (socketTracking || !manifestoAtual) return; 
+    // Inicia o loop de envio a cada 30 segundos (se não iniciado)
+    if (!heartbeatInterval && typeof manifestoAtual !== 'undefined' && manifestoAtual) {
+        heartbeatInterval = setInterval(enviarHeartbeat, 30000);
+        enviarHeartbeat(); // Envia o primeiro imediatamente
+    }
 
-    const token = localStorage.getItem('accessToken');
-    const ws_scheme = window.location.protocol === "https:" ? "wss" : "ws";
-    // Usamos a filial do motorista ou 'todas'
-    const filial = typeof filialIdMotorista !== 'undefined' ? filialIdMotorista : 'todas';
-    const ws_url = `${ws_scheme}://${window.location.host}/ws/painel-logistico/${filial}/?token=${token}`;
+    // Tenta conectar o WebSocket para real-time leve (se não estiver conectado)
+    if (!socketTracking && typeof manifestoAtual !== 'undefined' && manifestoAtual) {
+        const token = localStorage.getItem('accessToken');
+        const ws_scheme = window.location.protocol === "https:" ? "wss" : "ws";
+        const filial = typeof filialIdMotorista !== 'undefined' ? filialIdMotorista : 'todas';
+        const ws_url = `${ws_scheme}://${window.location.host}/ws/painel-logistico/${filial}/?token=${token}`;
 
-    // Log removido por segurança (expunha token JWT na URL)
-    socketTracking = new WebSocket(ws_url);
+        socketTracking = new WebSocket(ws_url);
 
-    socketTracking.onopen = () => {
-        console.log("💓 [PWA Tracking] Conectado ao servidor");
-        if (heartbeatInterval) clearInterval(heartbeatInterval);
-        heartbeatInterval = setInterval(enviarHeartbeat, 30000); // 30 segundos
-        enviarHeartbeat(); 
-    };
+        socketTracking.onopen = () => {
+            console.log("💓 [PWA Tracking] WS Conectado ao servidor");
+        };
 
-    socketTracking.onclose = () => {
-        console.warn("💓 [PWA Tracking] Conexão perdida. Reconectando em 10s...");
-        socketTracking = null;
-        if (heartbeatInterval) clearInterval(heartbeatInterval);
-        setTimeout(iniciarCoracaoTracking, 10000);
-    };
+        socketTracking.onclose = () => {
+            console.warn("💓 [PWA Tracking] WS Conexão perdida. Tentando reconectar em 10s...");
+            socketTracking = null;
+            setTimeout(iniciarCoracaoTracking, 10000);
+        };
+
+        socketTracking.onerror = (err) => {
+            console.error("💓 [PWA Tracking] WS erro:", err);
+        };
+    }
 }
 
 async function enviarHeartbeat() {
-    if (!socketTracking || socketTracking.readyState !== WebSocket.OPEN) {
-        console.warn("💓 [PWA Tracking] Socket não pronto.");
+    // Auto-limpeza caso o manifesto seja finalizado ou limpo
+    if (typeof manifestoAtual === 'undefined' || !manifestoAtual) {
+        console.log("💓 [PWA Tracking] Sem manifesto ativo. Parando heartbeat.");
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval);
+            heartbeatInterval = null;
+        }
+        if (socketTracking) {
+            socketTracking.close();
+            socketTracking = null;
+        }
         return;
     }
 
@@ -68,8 +84,22 @@ async function enviarHeartbeat() {
             manifesto_id: manifestoAtual
         };
 
-        // Log removido por segurança (expunha GPS e bateria)
-        socketTracking.send(JSON.stringify(payload));
+        if (socketTracking && socketTracking.readyState === WebSocket.OPEN) {
+            socketTracking.send(JSON.stringify(payload));
+            console.log("💓 [PWA Tracking] Heartbeat enviado via WS");
+        } else {
+            console.log("💓 [PWA Tracking] WS offline. Enviando via REST...");
+            const url = `${window.API_BASE}manifesto/app/tracking-heartbeat/`;
+            const response = await authFetch(url, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            if (response && response.ok) {
+                console.log("💓 [PWA Tracking] Heartbeat enviado via REST com sucesso");
+            } else {
+                console.warn("💓 [PWA Tracking] Falha ao enviar via REST:", response ? response.status : 'sem resposta');
+            }
+        }
     } catch (err) {
         console.error("❌ [PWA Tracking] Erro no batimento:", err);
     }
@@ -79,3 +109,4 @@ async function enviarHeartbeat() {
 if (typeof manifestoAtual !== 'undefined' && manifestoAtual) {
     iniciarCoracaoTracking();
 }
+
