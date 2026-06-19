@@ -315,6 +315,7 @@ JAZZMIN_SETTINGS = {
         "suporte",
         "tutoriais",
         "auth",
+        "authtoken",
         "tenants",
         "django_celery_beat",
         "token_blacklist",
@@ -323,7 +324,6 @@ JAZZMIN_SETTINGS = {
     # ── Esconder models técnicos/desnecessários ──
     "hide_apps": [
         "token_blacklist",
-        "authtoken",
     ],
     "hide_models": [
         "auth.Group",
@@ -337,6 +337,8 @@ JAZZMIN_SETTINGS = {
         "auth": "fas fa-shield-alt",
         "auth.user": "fas fa-user-shield",
         "auth.Group": "fas fa-users",
+        "authtoken": "fas fa-key",
+        "authtoken.Token": "fas fa-key",
         "configuracao": "fas fa-sliders-h",
         "configuracao.ConfiguracaoSistema": "fas fa-cogs",
 
