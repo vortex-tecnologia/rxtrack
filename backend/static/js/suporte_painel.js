@@ -9,6 +9,13 @@ let pollingIntervalTickets = null;
 let pollingIntervalMessages = null;
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Verifica se há ticket_id na URL para auto-seleção
+    const urlParams = new URLSearchParams(window.location.search);
+    const ticketIdParam = urlParams.get('ticket_id');
+    if (ticketIdParam) {
+        window._autoselectTicketId = parseInt(ticketIdParam);
+    }
+
     // Inicializa a contagem dos tickets com polling ativo de 4 segundos
     carregarTicketsIniciais();
     pollingIntervalTickets = setInterval(carregarTicketsIniciais, 4000);
@@ -41,6 +48,36 @@ async function carregarTicketsIniciais() {
             todosTickets = await resp.json();
             renderizarListaTickets();
             atualizarBadges();
+            
+            // Auto-seleciona o ticket se o parâmetro foi informado
+            if (window._autoselectTicketId) {
+                const tId = window._autoselectTicketId;
+                window._autoselectTicketId = null; // Executa apenas uma vez no load
+                
+                const ticketObj = todosTickets.find(t => t.id === tId);
+                if (ticketObj) {
+                    // Troca de aba baseando-se no status do ticket
+                    if (ticketObj.status === 'CANAL_ABERTO') {
+                        abaAtiva = 'abertos';
+                    } else if (ticketObj.status === 'EM_ATENDIMENTO') {
+                        abaAtiva = 'meus';
+                    } else if (ticketObj.status === 'FECHADO') {
+                        abaAtiva = 'fechados';
+                    }
+                    
+                    // Sincroniza visualmente as abas
+                    document.querySelectorAll('#pills-tab .nav-link').forEach(btn => {
+                        if (btn.getAttribute('data-status') === abaAtiva) {
+                            btn.classList.add('active');
+                        } else {
+                            btn.classList.remove('active');
+                        }
+                    });
+                    
+                    renderizarListaTickets();
+                    selecionarTicket(tId);
+                }
+            }
         }
     } catch(e) {
         console.error("Erro ao buscar tickets", e);

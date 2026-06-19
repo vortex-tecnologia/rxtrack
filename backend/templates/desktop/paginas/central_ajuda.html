@@ -67,7 +67,9 @@
                         {% endif %}
                     </td>
                     <td class="text-end pe-4">
-                        <button class="btn btn-sm btn-light border" title="Em breve: visualizar histórico" onclick="Swal.fire('Em Breve', 'O painel de chat do chamado será liberado em breve. Acompanhe a resposta pelo sistema principal ou aguarde o retorno.', 'info')"><i class="bi bi-chat-dots"></i> Histórico</button>
+                        <a href="{% url 'suporte:painel_sac' %}?ticket_id={{ ticket.id }}" class="btn btn-sm btn-light border" title="Visualizar histórico">
+                            <i class="bi bi-chat-dots"></i> Histórico
+                        </a>
                     </td>
                 </tr>
                 {% empty %}
