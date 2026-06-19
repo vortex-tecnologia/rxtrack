@@ -243,6 +243,9 @@
         </div>
     </div>
 
+    <!-- Toast Container para Notificações do SAC -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100; margin-top: 60px;"></div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -289,6 +292,107 @@
             document.getElementById('sidebar').classList.remove('active');
             document.getElementById('main-content').style.marginLeft = "0";
         }
+    });
+</script>
+
+<!-- Script para Monitoramento de Notificações de Suporte do SAC -->
+<script>
+    const STORAGE_KEY = 'sac_notified_messages';
+
+    function getNotifiedMessages() {
+        try {
+            const data = sessionStorage.getItem(STORAGE_KEY);
+            return data ? JSON.parse(data) : [];
+        } catch(e) {
+            return [];
+        }
+    }
+
+    function showSACNotificationToast(ticketId, motoristaNome, textoMensagem) {
+        const container = document.querySelector('.toast-container');
+        if (!container) return;
+
+        // Limita a quantidade de toasts visíveis
+        while (container.children.length >= 5) {
+            container.removeChild(container.firstChild);
+        }
+
+        const toastId = 'toast-' + Date.now();
+        const toastHtml = `
+            <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="7000">
+                <div class="toast-header bg-primary text-white border-0">
+                    <i class="bi bi-headset me-2"></i>
+                    <strong class="me-auto">Mensagem de Suporte</strong>
+                    <small class="text-white-50">agora</small>
+                    <button type="button" class="btn-close btn-close-white" data-bs-toast="close" aria-label="Close" onclick="bootstrap.Toast.getInstance(document.getElementById('${toastId}')).hide()"></button>
+                </div>
+                <div class="toast-body d-flex justify-content-between align-items-center bg-white shadow-sm" style="border-radius: 0 0 var(--bs-toast-border-radius) var(--bs-toast-border-radius);">
+                    <div class="flex-grow-1 me-3">
+                        <span class="fw-bold d-block text-dark" style="font-size: 0.85rem;">${motoristaNome}</span>
+                        <span class="text-muted text-truncate d-block small" style="max-width: 250px;">${textoMensagem}</span>
+                    </div>
+                    <a href="/suporte/" class="btn btn-outline-primary btn-sm fw-bold px-3 rounded-pill flex-shrink-0">
+                        Atender
+                    </a>
+                </div>
+            </div>
+        `;
+
+        container.insertAdjacentHTML('beforeend', toastHtml);
+        const toastEl = document.getElementById(toastId);
+        if (toastEl) {
+            const bsToast = new bootstrap.Toast(toastEl);
+            bsToast.show();
+
+            toastEl.addEventListener('hidden.bs.toast', function () {
+                toastEl.remove();
+            });
+        }
+    }
+
+    async function verificarNovasMensagensSAC() {
+        try {
+            const response = await fetch('/suporte/api/tickets/');
+            if (!response.ok) return;
+
+            const tickets = await response.json();
+            const notifiedList = getNotifiedMessages();
+            let updatedNotified = false;
+
+            tickets.forEach(ticket => {
+                if (ticket.status !== 'FECHADO' && ticket.mensagens) {
+                    ticket.mensagens.forEach(msg => {
+                        // Só notifica se foi enviada pelo motorista, não lida e ainda não notificada nesta sessão
+                        if (msg.enviado_por_motorista && !msg.lida && !notifiedList.includes(msg.id)) {
+                            showSACNotificationToast(
+                                ticket.id,
+                                ticket.motorista_str || "Motorista",
+                                msg.texto || (msg.tipo !== 'TEXTO' ? '[Mídia]' : '') || "Enviou uma mensagem"
+                            );
+                            notifiedList.push(msg.id);
+                            updatedNotified = true;
+                        }
+                    });
+                }
+            });
+
+            if (updatedNotified) {
+                sessionStorage.setItem(STORAGE_KEY, JSON.stringify(notifiedList));
+            }
+        } catch (error) {
+            console.error('Erro ao verificar novas mensagens do SAC:', error);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        if (window.location.pathname.includes('/suporte/')) {
+            return;
+        }
+
+        {% if request.user.motorista_perfil.tipo_usuario == 'SAC' or request.user.motorista_perfil.cargo == 'GESTOR' or request.user.motorista_perfil.cargo == 'ADMINISTRADOR' or request.user.motorista_perfil.cargo == 'GERENTE' %}
+            setTimeout(verificarNovasMensagensSAC, 3000);
+            setInterval(verificarNovasMensagensSAC, 15000);
+        {% endif %}
     });
 </script>
 
