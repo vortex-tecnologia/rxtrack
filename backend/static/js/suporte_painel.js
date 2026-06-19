@@ -39,7 +39,7 @@ async function carregarTicketsIniciais() {
 
 function conectarWSFilial() {
     const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
-    const token = localStorage.getItem('access_token') || '';
+    const token = localStorage.getItem('accessToken') || '';
     wsFilial = new WebSocket(`${wsScheme}://${window.location.host}/ws/suporte/filial/${filialId}/?token=${token}`);
 
     wsFilial.onopen = () => {
@@ -265,7 +265,8 @@ async function confirmarEncerramento() {
 function conectarWSTicket(ticketId) {
     if (wsTicketAtivo) wsTicketAtivo.close();
     const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
-    wsTicketAtivo = new WebSocket(`${wsScheme}://${window.location.host}/ws/suporte/ticket/${ticketId}/`);
+    const token = localStorage.getItem('accessToken') || '';
+    wsTicketAtivo = new WebSocket(`${wsScheme}://${window.location.host}/ws/suporte/ticket/${ticketId}/?token=${token}`);
 
     wsTicketAtivo.onmessage = function(e) {
         const data = JSON.parse(e.data);
