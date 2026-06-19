@@ -95,7 +95,27 @@ class ConfiguracaoSistema(models.Model):
         help_text="Se ligado, o ícone de chat flutuante será visível para os motoristas no app Mobile."
     )
 
-
+    # ===== PROVEDOR TMS =====
+    TMS_CHOICES = [
+        ('esl_cloud', 'ESL Cloud'),
+        ('totvs', 'TOTVS'),
+        ('sap_tm', 'SAP TM'),
+        ('intelipost', 'Intelipost'),
+        ('nenhum', 'Sem integração TMS'),
+    ]
+    tms_provider = models.CharField(
+        max_length=30,
+        choices=TMS_CHOICES,
+        default='esl_cloud',
+        verbose_name="🔗 Provedor TMS",
+        help_text="Define qual sistema TMS este cliente usa para integração de manifestos."
+    )
+    tms_config = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="⚙️ Configuração JSON do TMS",
+        help_text="Parâmetros de configuração extras específicos para o TMS (ex: tokens secundários, credenciais, etc)."
+    )
 
     # ===== CÓDIGOS DE OCORRÊNCIA QUE ATIVAM A IA =====
     codigos_ocorrencia_yolo = models.CharField(

@@ -104,22 +104,26 @@ class RegistrarBaixaView(APIView):
                 else:
                     nf = NotaFiscal.objects.get(**filtros)
 
-                try:
-                    # Busca exata (ex: '01' ou '1')
-                    ocorrencia = Ocorrencia.objects.get(codigo_tms=codigo_tms)
-                except Ocorrencia.DoesNotExist:
-                    # Tenta o inverso: se mandou '01' busca '1', se mandou '1' busca '01'
-                    if codigo_tms.isdigit():
-                        cod_int = int(codigo_tms)
-                        # Tenta as duas formas mais comuns
-                        ocorrencia = Ocorrencia.objects.filter(
-                            Q(codigo_tms=str(cod_int)) | Q(codigo_tms=f"{cod_int:02d}")
-                        ).first()
-                        
-                        if not ocorrencia:
-                            raise Ocorrencia.DoesNotExist(f"Ocorrência {codigo_tms} não encontrada em nenhuma forma.")
-                    else:
-                        raise
+                # 1. Tenta buscar primeiro pelo mapeamento de referência do App
+                ocorrencia = Ocorrencia.objects.filter(codigo_referencia=codigo_tms).first()
+
+                # 2. Caso não encontre por referência, busca pelo código TMS (fallback)
+                if not ocorrencia:
+                    try:
+                        ocorrencia = Ocorrencia.objects.get(codigo_tms=codigo_tms)
+                    except Ocorrencia.DoesNotExist:
+                        # Tenta o inverso para códigos numéricos (ex: se mandou '01' busca '1', se mandou '1' busca '01')
+                        if codigo_tms.isdigit():
+                            cod_int = int(codigo_tms)
+                            ocorrencia = Ocorrencia.objects.filter(
+                                Q(codigo_referencia=str(cod_int)) | Q(codigo_tms=str(cod_int)) |
+                                Q(codigo_referencia=f"{cod_int:02d}") | Q(codigo_tms=f"{cod_int:02d}")
+                            ).first()
+                            
+                            if not ocorrencia:
+                                raise Ocorrencia.DoesNotExist(f"Ocorrência {codigo_tms} não encontrada em nenhuma forma.")
+                        else:
+                            raise
 
                 # --- LÓGICA DE UPLOAD (SÓ SE NÃO FOR NOTA RETIDA) ---
                 url_final_foto = None

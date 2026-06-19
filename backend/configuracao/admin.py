@@ -10,12 +10,16 @@ class ConfiguracaoSistemaAdmin(admin.ModelAdmin):
     """
 
     fieldsets = (
+        ('🔗 Provedor TMS', {
+            'fields': ('tms_provider', 'tms_config'),
+            'description': 'Selecione qual provedor TMS esta filial/cliente utiliza e suas configurações específicas.'
+        }),
         ('🔑 Tokens da API ESL', {
             'fields': ('token_analytics', 'token_invoices'),
             'description': 'Tokens de autenticação para a API da ESL Cloud.'
         }),
         ('🌐 Domínio e Reports', {
-            'fields': ('dominio_esl', 'report_validacao', 'report_busca_nfe'),
+            'fields': ('dominio_esl', 'report_validacao', 'report_busca_nfe', 'report_coletas'),
             'description': 'Configurações de conexão com a plataforma ESL.'
         }),
         ('⚙️ Feature Flags - Ações Secundárias', {

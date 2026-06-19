@@ -240,3 +240,30 @@ docker-compose down
 docker-compose build
 docker-compose up -d
 ```
+
+---
+
+**Data:** 19/06/2026  
+**Hora:** 10:25  
+
+## Arquitetura Multi-TMS e Mapeamento Dinâmico de Ocorrências:
+
+1. **Camada de Adapters e Registry (Multi-TMS):**
+   - Criado o novo app `integracoes/` para centralizar a comunicação com diferentes sistemas de TMS.
+   - Definido o contrato [BaseTMSAdapter](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/integracoes/base.py) e a fábrica [registry.py](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/integracoes/registry.py).
+   - Isolada 100% da lógica legada específica da ESL Cloud dentro do [ESLCloudAdapter](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/integracoes/providers/esl_cloud.py).
+   - Preservados os nomes e assinaturas originais de todas as Celery tasks em [tasks.py](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/manifesto/tasks.py) (ex: `enviar_baixa_esl_task`), mantendo a compatibilidade 100% retroativa com o app mobile e telas operacionais.
+
+2. **Novas Configurações por Tenant/Schema:**
+   - Adicionados os campos `tms_provider` (Provedor TMS) e `tms_config` (JSON de configurações dinâmicas) ao modelo `ConfiguracaoSistema` em [models.py](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/configuracao/models.py).
+   - Seção **🔗 Provedor TMS** adicionada ao Django Admin de cada cliente, permitindo trocar o sistema TMS (ex: ESL Cloud, Brudam, TOTVS, ou Sem Integração) sem mexer em código.
+
+3. **Mapeamento de Ocorrências no Painel Admin:**
+   - Adicionado o campo `codigo_referencia` no modelo `Ocorrencia` em [models.py](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/manifesto/models.py).
+   - O gestor pode associar as ocorrências do seu próprio TMS (sejam strings como `"entregue"`, `"recusado"` ou números como `'25'`) às referências padronizadas do aplicativo (como `'01'` para Entrega e `'02'` para Recusa).
+   - Atualizada a view de recebimento de baixas [baixa.py](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/manifesto/rotas/baixa.py) e o validador [serializers.py](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/manifesto/serializers.py) para buscar primeiro pelo mapeamento de referência (`codigo_referencia`), com fallback para o código do TMS antigo se não configurado.
+
+4. **Banco de Dados e Dependências:**
+   - Geradas migrações de banco no app `configuracao` e `manifesto`.
+   - Ajustadas as dependências no ambiente virtual da VPS de modo a assegurar total estabilidade dos pacotes de segurança (`cryptography` e `pyopenssl`).
+

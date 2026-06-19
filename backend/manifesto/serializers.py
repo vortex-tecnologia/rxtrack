@@ -1,6 +1,7 @@
 # manifestos/serializers.py
 
 from rest_framework import serializers
+from django.db.models import Q
 from .models import Manifesto, NotaFiscal, BaixaNF, Ocorrencia, HistoricoOcorrencia
 from usuarios.serializers import MotoristaPerfilSerializer 
 from django.utils import timezone
@@ -114,11 +115,20 @@ class BaixaNFCreateSerializer(serializers.Serializer):
         if not codigo:
              raise serializers.ValidationError({"codigo_ocorrencia": "O código de ocorrência é obrigatório."})
         
-        # Validação para garantir que o código exista no DB
-        try:
-            Ocorrencia.objects.get(codigo_tms=codigo)
-        except Ocorrencia.DoesNotExist:
-             raise serializers.ValidationError({"codigo_ocorrencia": "Código de ocorrência inválido ou inexistente."})
+        # Validação para garantir que o código exista no DB (como código de referência ou código TMS)
+        exists = Ocorrencia.objects.filter(
+            Q(codigo_referencia=codigo) | Q(codigo_tms=codigo)
+        ).exists()
+        
+        if not exists and codigo.isdigit():
+            cod_int = int(codigo)
+            exists = Ocorrencia.objects.filter(
+                Q(codigo_referencia=str(cod_int)) | Q(codigo_tms=str(cod_int)) |
+                Q(codigo_referencia=f"{cod_int:02d}") | Q(codigo_tms=f"{cod_int:02d}")
+            ).exists()
+
+        if not exists:
+             raise serializers.ValidationError({"codigo_ocorrencia": f"Código de ocorrência '{codigo}' inválido ou inexistente."})
 
         # Validação: Se for ENTREGA, a foto é geralmente esperada
         if data.get('tipo') == 'ENTREGA' and not data.get('comprovante_foto'):

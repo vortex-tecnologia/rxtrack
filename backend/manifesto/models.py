@@ -87,7 +87,14 @@ class Ocorrencia(models.Model):
     """
     Tabela para mapear todos os códigos de retorno (Entrega, Coleta, Problema) exigidos pelo TMS.
     """
-    codigo_tms = models.CharField(max_length=10, unique=True, verbose_name="Código TMS") 
+    codigo_tms = models.CharField(max_length=30, unique=True, verbose_name="Código TMS") 
+    codigo_referencia = models.CharField(
+        max_length=20, 
+        blank=True, 
+        null=True, 
+        verbose_name="Código de Referência do App",
+        help_text="Código fixo padrão enviado pelo aplicativo (ex: '01' para entrega de sucesso)."
+    )
     descricao = models.CharField(max_length=255)
     
     TIPO_CHOICES = [
@@ -99,7 +106,8 @@ class Ocorrencia(models.Model):
     is_entrega = models.BooleanField(default=False, verbose_name="Exibir em Entregas", help_text="Marque se esta ocorrência deve aparecer nas opções do aplicativo para problemas de entrega (NÃO ENTREGA).")
 
     def __str__(self):
-        return f"[{self.codigo_tms}] {self.descricao}"
+        ref_str = f" | Ref: {self.codigo_referencia}" if self.codigo_referencia else ""
+        return f"[{self.codigo_tms}]{ref_str} {self.descricao}"
     
     class Meta:
         verbose_name = "Código de Ocorrência"
