@@ -34,6 +34,16 @@ function conectarWebSocket() {
 
                 console.log("💓 Status recebido para:", mID, status);
 
+                // Salva os dados no elemento tr da tabela para acesso rápido ao abrir o modal
+                const tr = document.querySelector(`tr[data-manifesto-id="${mID}"]`);
+                if (tr) {
+                    if (status.lat !== undefined && status.lat !== null) tr.setAttribute('data-lat', status.lat);
+                    if (status.lng !== undefined && status.lng !== null) tr.setAttribute('data-lng', status.lng);
+                    if (status.battery !== undefined && status.battery !== null) tr.setAttribute('data-bateria', status.battery);
+                    if (status.network !== undefined && status.network !== null) tr.setAttribute('data-rede', status.network);
+                    if (status.last_seen) tr.setAttribute('data-ultimo-acesso', status.last_seen);
+                }
+
                 // Atualiza Tabela (se existir no DOM)
                 updateBatteryIcon(mID, status.battery);
                 updateNetworkStatus(mID, status.network);
@@ -242,12 +252,42 @@ function abrirRastreamentoRealTime(manifestoId, motoristaNome, initialLat, initi
     document.getElementById('rastreamento-titulo').innerText = `Rastreando: ${motoristaNome}`;
     document.getElementById('rastreamento-mft').innerText = manifestoId;
 
+    // Carrega dados em tempo real da tabela, se disponíveis
+    const tr = document.querySelector(`tr[data-manifesto-id="${manifestoId}"]`);
+    let lat = initialLat;
+    let lng = initialLng;
+    let battery = null;
+    let network = '';
+    let lastSeen = null;
+
+    if (tr) {
+        lat = tr.getAttribute('data-lat') || lat;
+        lng = tr.getAttribute('data-lng') || lng;
+        battery = tr.getAttribute('data-bateria') || null;
+        network = tr.getAttribute('data-rede') || '';
+        lastSeen = tr.getAttribute('data-ultimo-acesso') || null;
+    }
+
     const modal = new bootstrap.Modal(document.getElementById('modalRastreamento'));
     modal.show();
 
     // Aguarda o modal abrir para inicializar o mapa (Leaflet precisa do container visível)
     document.getElementById('modalRastreamento').addEventListener('shown.bs.modal', function () {
-        initMapaRastreamento(initialLat, initialLng);
+        initMapaRastreamento(lat, lng);
+
+        // Preenche o overlay de status com as últimas informações conhecidas
+        document.getElementById('mapa-status-bat').innerText = battery ? battery + '%' : '--%';
+        document.getElementById('mapa-status-rede').innerText = network || '--';
+        if (lastSeen) {
+            try {
+                const timeStr = new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                document.getElementById('mapa-status-visto').innerText = timeStr;
+            } catch (e) {
+                document.getElementById('mapa-status-visto').innerText = '--';
+            }
+        } else {
+            document.getElementById('mapa-status-visto').innerText = '--';
+        }
     }, { once: true });
 
     // Limpeza ao fechar

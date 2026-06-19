@@ -141,7 +141,12 @@
                 </thead>
                 <tbody>
                     {% for m in manifestos %}
-                    <tr data-manifesto-id="{{ m.numero_manifesto }}">
+                    <tr data-manifesto-id="{{ m.numero_manifesto }}"
+                        data-lat="{{ m.ultima_lat|default:'' }}"
+                        data-lng="{{ m.ultima_lng|default:'' }}"
+                        data-bateria="{{ m.ultima_bateria|default:'' }}"
+                        data-rede="{{ m.ultima_rede|default:'' }}"
+                        data-ultimo-acesso="{{ m.ultimo_acesso|date:'c'|default:'' }}">
                         <td class="fw-bold text-primary">#{{ m.numero_manifesto }}</td>
                         <td>
                             <div class="small fw-bold">{{ m.motorista.nome_completo }}</div>
