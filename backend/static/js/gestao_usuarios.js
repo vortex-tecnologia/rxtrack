@@ -63,6 +63,29 @@ function renderUserRow(u) {
     
     const iniciais = u.nome.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
     
+    let tokenHTML = '';
+    if (CARGO_LOGADO === 'GESTOR' || CARGO_LOGADO === 'ADMINISTRADOR') {
+        if (u.token) {
+            tokenHTML = `
+            <div class="d-flex align-items-center gap-2 mt-1" style="font-size: 0.75rem;">
+                <span class="text-muted fw-bold">Token:</span>
+                <span class="font-monospace text-secondary" id="token-text-${u.id}" style="letter-spacing: 2px;">••••••••••••••••</span>
+                <button class="btn btn-sm btn-link p-0 text-muted" onclick="toggleTokenVisibility(event, ${u.id}, '${u.token}')" title="Mostrar/Ocultar Token" style="text-decoration: none;">
+                    <i class="bi bi-eye" id="token-eye-${u.id}"></i>
+                </button>
+                <button class="btn btn-sm btn-link p-0 text-muted" onclick="copyToken(event, '${u.token}')" title="Copiar Token" style="text-decoration: none;">
+                    <i class="bi bi-clipboard"></i>
+                </button>
+            </div>`;
+        } else {
+            tokenHTML = `
+            <div class="d-flex align-items-center gap-2 mt-1" style="font-size: 0.75rem;">
+                <span class="text-muted fw-bold">Token:</span>
+                <span class="text-muted font-monospace">Sem token gerado</span>
+            </div>`;
+        }
+    }
+    
     return `
     <tr data-id="${u.id}">
         <td class="px-4 py-3">
@@ -71,7 +94,8 @@ function renderUserRow(u) {
                      style="width: 40px; height: 40px; font-size: 0.85rem;">${iniciais}</div>
                 <div>
                     <div class="fw-semibold mb-1">${u.nome}</div>
-                    <div class="small text-muted" title="E-mail"><i class="bi bi-envelope"></i> ${u.email || 'Não informado'}</div>
+                    <div class="small text-muted mb-1" title="E-mail"><i class="bi bi-envelope"></i> ${u.email || 'Não informado'}</div>
+                    ${tokenHTML}
                 </div>
             </div>
         </td>
@@ -294,3 +318,60 @@ async function enviarRedefinicaoSenha(id) {
 document.addEventListener('DOMContentLoaded', () => {
     carregarUsuarios();
 });
+
+// === VISIBILIDADE DO TOKEN ===
+function toggleTokenVisibility(event, userId, tokenValue) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const tokenSpan = document.getElementById(`token-text-${userId}`);
+    const eyeIcon = document.getElementById(`token-eye-${userId}`);
+    if (!tokenSpan || !eyeIcon) return;
+
+    if (tokenSpan.textContent.includes('•')) {
+        tokenSpan.textContent = tokenValue;
+        tokenSpan.style.letterSpacing = 'normal';
+        eyeIcon.className = 'bi bi-eye-slash';
+    } else {
+        tokenSpan.textContent = '••••••••••••••••';
+        tokenSpan.style.letterSpacing = '2px';
+        eyeIcon.className = 'bi bi-eye';
+    }
+}
+
+// === COPIAR TOKEN ===
+function copyToken(event, tokenValue) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    if (!navigator.clipboard) {
+        // Fallback para navegadores antigos ou sem HTTPS local
+        const el = document.createElement('textarea');
+        el.value = tokenValue;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        Swal.fire({
+            icon: 'success',
+            title: 'Copiado!',
+            text: 'Token copiado para a área de transferência',
+            timer: 1500,
+            showConfirmButton: false
+        });
+        return;
+    }
+    navigator.clipboard.writeText(tokenValue).then(() => {
+        Swal.fire({
+            icon: 'success',
+            title: 'Copiado!',
+            text: 'Token copiado para a área de transferência',
+            timer: 1500,
+            showConfirmButton: false
+        });
+    }).catch(err => {
+        console.error('Falha ao copiar token:', err);
+    });
+}

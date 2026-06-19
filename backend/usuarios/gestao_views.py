@@ -64,6 +64,14 @@ def api_listar_usuarios(request):
     if cargo:
         qs = qs.filter(cargo=cargo)
     
+    # Busca tokens em lote apenas se o perfil logado for GESTOR ou ADMINISTRADOR
+    pode_ver_tokens = perfil.cargo in ['GESTOR', 'ADMINISTRADOR']
+    tokens_map = {}
+    if pode_ver_tokens:
+        from rest_framework.authtoken.models import Token
+        user_ids = [m.user_id for m in qs if m.user_id]
+        tokens_map = {t.user_id: t.key for t in Token.objects.filter(user_id__in=user_ids)}
+    
     usuarios = []
     for m in qs.order_by('nome_completo'):
         # Busca permissoes
@@ -112,6 +120,7 @@ def api_listar_usuarios(request):
             'tem_user': m.user is not None,
             'is_sac_mobile': getattr(m, 'is_sac_mobile', False),
             'permissoes': perms,
+            'token': tokens_map.get(m.user_id) if (pode_ver_tokens and m.user) else None,
         })
     
     return JsonResponse({'usuarios': usuarios})
