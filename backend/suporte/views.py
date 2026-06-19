@@ -79,6 +79,25 @@ class TicketSuporteViewSet(viewsets.ModelViewSet):
         else:
             return TicketSuporte.objects.filter(motorista=perfil).order_by('-updated_at')
 
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        user = request.user
+        
+        # Se o usuário logado for o motorista associado ao ticket,
+        # marca as mensagens do SAC/Sistema como lidas.
+        if hasattr(user, 'motorista_perfil') and instance.motorista == user.motorista_perfil:
+            instance.mensagens.filter(enviado_por_motorista=False, lida=False).update(lida=True)
+            
+        # Se o usuário logado for SAC, Gestor ou Administrador,
+        # marca as mensagens do motorista como lidas.
+        elif hasattr(user, 'motorista_perfil') and (
+            user.motorista_perfil.tipo_usuario == 'SAC' or 
+            user.motorista_perfil.cargo in ['GESTOR', 'ADMINISTRADOR']
+        ):
+            instance.mensagens.filter(enviado_por_motorista=True, lida=False).update(lida=True)
+            
+        return super().retrieve(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         # Quando criar um ticket, vincula automaticamente ao motorista logado e a sua filial
         if hasattr(self.request.user, 'motorista_perfil'):

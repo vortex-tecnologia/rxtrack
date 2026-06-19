@@ -100,6 +100,9 @@ function renderListaTickets(tickets) {
         `;
     });
     container.innerHTML = html;
+    if (typeof atualizarBadgeSuporte === 'function') {
+        atualizarBadgeSuporte(tickets);
+    }
 }
 
 function abrirNovoTicket() {
@@ -567,3 +570,52 @@ pulseStyle.textContent = `
     }
 `;
 document.head.appendChild(pulseStyle);
+
+// === BADGE DE NOTIFICAÇÕES (CHAMADOS NÃO LIDOS) ===
+function atualizarBadgeSuporte(tickets) {
+    const badge = document.getElementById('badge-suporte-unread');
+    if (!badge) return;
+
+    let totalUnread = 0;
+    (tickets || []).forEach(t => {
+        if (t.status !== 'FECHADO' && t.mensagens) {
+            t.mensagens.forEach(msg => {
+                if (!msg.enviado_por_motorista && !msg.lida) {
+                    totalUnread++;
+                }
+            });
+        }
+    });
+
+    if (totalUnread > 0) {
+        badge.innerText = totalUnread;
+        badge.style.display = 'inline-block';
+    } else {
+        badge.innerText = '0';
+        badge.style.display = 'none';
+    }
+}
+
+async function atualizarContagemNotificacoesApp() {
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
+
+    try {
+        const response = await fetch('/suporte/api/tickets/', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+            const data = await response.json();
+            atualizarBadgeSuporte(data);
+        }
+    } catch (error) {
+        console.error('Erro ao atualizar contagem de notificações do suporte', error);
+    }
+}
+
+// Inicializa a escuta de notificações
+document.addEventListener('DOMContentLoaded', function() {
+    atualizarContagemNotificacoesApp();
+    // Atualiza a cada 30 segundos
+    setInterval(atualizarContagemNotificacoesApp, 30000);
+});
