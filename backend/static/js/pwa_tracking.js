@@ -3,8 +3,12 @@
  * Responsável por coletar GPS, bateria e sinal e enviar via WebSocket ou REST API.
  */
 
-let heartbeatInterval = null;
-let socketTracking = null;
+if (typeof heartbeatInterval === 'undefined') {
+    window.heartbeatInterval = null;
+}
+if (typeof socketTracking === 'undefined') {
+    window.socketTracking = null;
+}
 
 async function iniciarCoracaoTracking() {
     // Inicia o loop de envio a cada 30 segundos (se não iniciado)
