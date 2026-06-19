@@ -5,6 +5,8 @@ let wsTicketAtivo = null;
 let currentTicketId = null;
 let abaAtiva = 'abertos'; // abertos, meus, fechados
 let todosTickets = [];
+let pollingIntervalTickets = null;
+let pollingIntervalMessages = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     conectarWSFilial();
@@ -45,6 +47,10 @@ function conectarWSFilial() {
     wsFilial.onopen = () => {
         document.getElementById('conexao-status').className = 'badge bg-success';
         document.getElementById('conexao-status').innerText = 'Online';
+        if (pollingIntervalTickets) {
+            clearInterval(pollingIntervalTickets);
+            pollingIntervalTickets = null;
+        }
     };
 
     wsFilial.onmessage = (e) => {
@@ -77,7 +83,11 @@ function conectarWSFilial() {
     wsFilial.onclose = () => {
         document.getElementById('conexao-status').className = 'badge bg-danger';
         document.getElementById('conexao-status').innerText = 'Offline';
-        setTimeout(conectarWSFilial, 3000); // Tenta reconectar
+        
+        if (!pollingIntervalTickets) {
+            pollingIntervalTickets = setInterval(carregarTicketsIniciais, 4000);
+        }
+        setTimeout(conectarWSFilial, 5000); // Tenta reconectar
     };
 }
 
@@ -263,10 +273,24 @@ async function confirmarEncerramento() {
 
 // === WS TICKET ESPECÍFICO ===
 function conectarWSTicket(ticketId) {
-    if (wsTicketAtivo) wsTicketAtivo.close();
+    if (wsTicketAtivo) {
+        try { wsTicketAtivo.close(); } catch(e) {}
+    }
+    if (pollingIntervalMessages) {
+        clearInterval(pollingIntervalMessages);
+        pollingIntervalMessages = null;
+    }
+
     const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
     const token = localStorage.getItem('accessToken') || '';
     wsTicketAtivo = new WebSocket(`${wsScheme}://${window.location.host}/ws/suporte/ticket/${ticketId}/?token=${token}`);
+
+    wsTicketAtivo.onopen = () => {
+        if (pollingIntervalMessages) {
+            clearInterval(pollingIntervalMessages);
+            pollingIntervalMessages = null;
+        }
+    };
 
     wsTicketAtivo.onmessage = function(e) {
         const data = JSON.parse(e.data);
@@ -276,6 +300,42 @@ function conectarWSTicket(ticketId) {
             msgContainer.scrollTop = msgContainer.scrollHeight;
         }
     };
+
+    wsTicketAtivo.onclose = () => {
+        if (!pollingIntervalMessages) {
+            pollingIntervalMessages = setInterval(() => {
+                if (currentTicketId === ticketId) {
+                    atualizarMensagensAtivasSilencioso(ticketId);
+                }
+            }, 4000);
+        }
+    };
+}
+
+async function atualizarMensagensAtivasSilencioso(id) {
+    try {
+        const resp = await fetch(`/suporte/api/tickets/${id}/`);
+        if(resp.ok) {
+            const ticket = await resp.json();
+            const container = document.getElementById('chat-mensagens');
+            if (!container) return;
+
+            const totalNaTela = container.querySelectorAll('.chat-bubble').length;
+            const totalNovas = (ticket.mensagens || []).length;
+
+            if (totalNovas !== totalNaTela) {
+                container.innerHTML = '';
+                if (ticket.mensagens && ticket.mensagens.length > 0) {
+                    ticket.mensagens.forEach(m => injetarMensagemChat(m));
+                } else {
+                    container.innerHTML = '<div class="text-center w-100 mt-4 text-muted small"><i class="bi bi-shield-lock me-1"></i> As mensagens são criptografadas de ponta a ponta.</div>';
+                }
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+    } catch(e) {
+        console.error("Erro no polling silencioso de mensagens:", e);
+    }
 }
 
 function injetarMensagemChat(msg) {

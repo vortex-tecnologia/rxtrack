@@ -2,6 +2,7 @@
 let suporteSocket = null;
 let currentTicketId = null;
 let originalInputHTML = null;
+let pollingAppMessages = null;
 
 // Ao abrir o modal, carregar a lista de chamados
 const modalSuporte = document.getElementById('modalSuporte');
@@ -32,6 +33,10 @@ function voltarListaTickets() {
     if (suporteSocket) {
         suporteSocket.close();
         suporteSocket = null;
+    }
+    if (pollingAppMessages) {
+        clearInterval(pollingAppMessages);
+        pollingAppMessages = null;
     }
     
     carregarListaTickets();
@@ -191,6 +196,11 @@ async function criarNovoTicket() {
 async function abrirChatTicket(id) {
     currentTicketId = id;
     
+    if (pollingAppMessages) {
+        clearInterval(pollingAppMessages);
+        pollingAppMessages = null;
+    }
+    
     // RESTAURAR AREA DE INPUT (Caso tenha vindo de um chamado fechado anteriormente)
     const inputArea = document.getElementById('suporte-chat-input-area');
     if (inputArea && originalInputHTML) {
@@ -274,7 +284,53 @@ function iniciarWebSocketChat(ticketId) {
     
     suporteSocket.onopen = function() {
         console.log("Conectado ao chat WS");
+        if (pollingAppMessages) {
+            clearInterval(pollingAppMessages);
+            pollingAppMessages = null;
+        }
     };
+
+    suporteSocket.onclose = function() {
+        if (!pollingAppMessages) {
+            pollingAppMessages = setInterval(() => {
+                if (currentTicketId === ticketId) {
+                    atualizarMensagensAppSilencioso(ticketId);
+                }
+            }, 4000);
+        }
+    };
+}
+
+async function atualizarMensagensAppSilencioso(id) {
+    const token = localStorage.getItem('accessToken');
+    try {
+        const respTicket = await fetch(`/suporte/api/tickets/${id}/?t=${new Date().getTime()}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (respTicket.ok) {
+            const ticket = await respTicket.json();
+            const container = document.getElementById('suporte-chat-mensagens');
+            if (container) {
+                const totalNaTela = container.querySelectorAll('.shadow-sm.p-3').length;
+                const totalNovas = (ticket.mensagens || []).length;
+                
+                if (totalNovas !== totalNaTela) {
+                    container.innerHTML = '';
+                    if (ticket.mensagens && ticket.mensagens.length > 0) {
+                        ticket.mensagens.forEach(msg => {
+                            renderizarMensagemNaTela(msg);
+                        });
+                    } else {
+                        container.innerHTML = '<p class="text-center text-muted mt-3 small opacity-50">Início da conversa</p>';
+                    }
+                    scrollToBottomChat();
+                }
+            }
+        }
+    } catch(e) {
+        console.error("Erro no polling silencioso de mensagens no app:", e);
+    }
 }
 
 function renderizarMensagemNaTela(msg) {

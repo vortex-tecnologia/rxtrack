@@ -122,16 +122,21 @@ class TicketSuporteViewSet(viewsets.ModelViewSet):
                 )
             
             # Notifica o painel SAC em tempo real
-            channel_layer = get_channel_layer()
-            async_to_sync(channel_layer.group_send)(
-                f'filial_suporte_{motorista.filial_id}',
-                {
-                    'type': 'ticket_updated',
-                    'ticket_id': ticket.id,
-                    'action': 'novo_ticket',
-                    'preview': f'Novo chamado de {motorista.nome_completo}'
-                }
-            )
+            try:
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    async_to_sync(channel_layer.group_send)(
+                        f'filial_suporte_{motorista.filial_id}',
+                        {
+                            'type': 'ticket_updated',
+                            'ticket_id': ticket.id,
+                            'action': 'novo_ticket',
+                            'preview': f'Novo chamado de {motorista.nome_completo}'
+                        }
+                    )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Erro ao notificar WebSocket de novo ticket: {e}")
         else:
             raise permissions.PermissionDenied("Apenas motoristas podem abrir chamados.")
             
@@ -160,33 +165,37 @@ class TicketSuporteViewSet(viewsets.ModelViewSet):
             texto=f"[SISTEMA] O agente {user.get_full_name() or user.username} assumiu o atendimento."
         )
         
-        channel_layer = get_channel_layer()
-        
-        # Notifica SACs da filial sobre remocao de status 'Aberto'
-        async_to_sync(channel_layer.group_send)(
-            f'filial_suporte_{ticket.filial_id}',
-            {
-                'type': 'ticket_updated',
-                'ticket_id': ticket.id,
-                'action': 'ticket_assumido',
-                'preview': f"Em atendimento por {user.username}"
-            }
-        )
-        
-        # Notifica Ticket pra Motorista ver
-        async_to_sync(channel_layer.group_send)(
-            f'ticket_{ticket.id}',
-            {
-                'type': 'chat_message',
-                'id': msg.id,
-                'ticket_id': ticket.id,
-                'remetente': 'Sistema',
-                'enviado_por_motorista': False,
-                'mensagem': msg.texto,
-                'tipo': msg.tipo,
-                'created_at': msg.created_at.isoformat()
-            }
-        )
+        try:
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                # Notifica SACs da filial sobre remocao de status 'Aberto'
+                async_to_sync(channel_layer.group_send)(
+                    f'filial_suporte_{ticket.filial_id}',
+                    {
+                        'type': 'ticket_updated',
+                        'ticket_id': ticket.id,
+                        'action': 'ticket_assumido',
+                        'preview': f"Em atendimento por {user.username}"
+                    }
+                )
+                
+                # Notifica Ticket pra Motorista ver
+                async_to_sync(channel_layer.group_send)(
+                    f'ticket_{ticket.id}',
+                    {
+                        'type': 'chat_message',
+                        'id': msg.id,
+                        'ticket_id': ticket.id,
+                        'remetente': 'Sistema',
+                        'enviado_por_motorista': False,
+                        'mensagem': msg.texto,
+                        'tipo': msg.tipo,
+                        'created_at': msg.created_at.isoformat()
+                    }
+                )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Erro ao notificar WebSocket ao assumir chamado: {e}")
         
         return Response({"status": "Assumido com sucesso."})
 
@@ -215,33 +224,37 @@ class TicketSuporteViewSet(viewsets.ModelViewSet):
             texto=f"[SISTEMA] O chat foi encerrado por {user.get_full_name() or user.username}."
         )
         
-        channel_layer = get_channel_layer()
-        
-        # Notifica SAC
-        async_to_sync(channel_layer.group_send)(
-            f'filial_suporte_{ticket.filial_id}',
-            {
-                'type': 'ticket_updated',
-                'ticket_id': ticket.id,
-                'action': 'ticket_encerrado',
-                'preview': "Atendimento Finalizado"
-            }
-        )
-        
-        # Notifica Chat WS
-        async_to_sync(channel_layer.group_send)(
-            f'ticket_{ticket.id}',
-            {
-                'type': 'chat_message',
-                'id': msg.id,
-                'ticket_id': ticket.id,
-                'remetente': 'Sistema',
-                'enviado_por_motorista': False,
-                'mensagem': msg.texto,
-                'tipo': msg.tipo,
-                'created_at': msg.created_at.isoformat()
-            }
-        )
+        try:
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                # Notifica SAC
+                async_to_sync(channel_layer.group_send)(
+                    f'filial_suporte_{ticket.filial_id}',
+                    {
+                        'type': 'ticket_updated',
+                        'ticket_id': ticket.id,
+                        'action': 'ticket_encerrado',
+                        'preview': "Atendimento Finalizado"
+                    }
+                )
+                
+                # Notifica Chat WS
+                async_to_sync(channel_layer.group_send)(
+                    f'ticket_{ticket.id}',
+                    {
+                        'type': 'chat_message',
+                        'id': msg.id,
+                        'ticket_id': ticket.id,
+                        'remetente': 'Sistema',
+                        'enviado_por_motorista': False,
+                        'mensagem': msg.texto,
+                        'tipo': msg.tipo,
+                        'created_at': msg.created_at.isoformat()
+                    }
+                )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Erro ao notificar WebSocket ao encerrar chamado: {e}")
 
         return Response({"status": "Encerrado com sucesso."})
 
@@ -338,21 +351,26 @@ class MensagemSuporteViewSet(viewsets.ModelViewSet):
             ticket.save(update_fields=['status', 'atendente', 'updated_at'])
             
             # Notifica motorista
-            channel_layer = get_channel_layer()
-            async_to_sync(channel_layer.group_send)(
-                f'ticket_{ticket.id}',
-                {
-                    'type': 'chat_message',
-                    'id': msg.id,
-                    'ticket_id': ticket.id,
-                    'remetente': user.get_full_name() or user.username,
-                    'enviado_por_motorista': msg.enviado_por_motorista,
-                    'mensagem': msg.texto,
-                    'tipo': msg.tipo,
-                    'arquivo_url': ftp_url or (str(msg.arquivo) if msg.arquivo else None),
-                    'created_at': msg.created_at.isoformat()
-                }
-            )
+            try:
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    async_to_sync(channel_layer.group_send)(
+                        f'ticket_{ticket.id}',
+                        {
+                            'type': 'chat_message',
+                            'id': msg.id,
+                            'ticket_id': ticket.id,
+                            'remetente': user.get_full_name() or user.username,
+                            'enviado_por_motorista': msg.enviado_por_motorista,
+                            'mensagem': msg.texto,
+                            'tipo': msg.tipo,
+                            'arquivo_url': ftp_url or (str(msg.arquivo) if msg.arquivo else None),
+                            'created_at': msg.created_at.isoformat()
+                        }
+                    )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Erro ao notificar WebSocket de nova resposta do SAC: {e}")
 
         elif is_dono_ticket:
             # Lógica para o motorista dono do chamado enviando mensagem
@@ -373,30 +391,35 @@ class MensagemSuporteViewSet(viewsets.ModelViewSet):
             ticket.updated_at = timezone.now()
             ticket.save(update_fields=['updated_at'])
             
-            channel_layer = get_channel_layer()
-            async_to_sync(channel_layer.group_send)(
-                f'filial_suporte_{ticket.filial_id}',
-                {
-                    'type': 'ticket_updated',
-                    'ticket_id': ticket.id,
-                    'action': 'nova_mensagem',
-                    'preview': msg.texto[:50] if msg.texto else f'[{msg.tipo}]'
-                }
-            )
-            async_to_sync(channel_layer.group_send)(
-                f'ticket_{ticket.id}',
-                {
-                    'type': 'chat_message',
-                    'id': msg.id,
-                    'ticket_id': ticket.id,
-                    'remetente': ticket.motorista.nome_completo,
-                    'enviado_por_motorista': msg.enviado_por_motorista,
-                    'mensagem': msg.texto,
-                    'tipo': msg.tipo,
-                    'arquivo_url': ftp_url or (str(msg.arquivo) if msg.arquivo else None),
-                    'created_at': msg.created_at.isoformat()
-                }
-            )
+            try:
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    async_to_sync(channel_layer.group_send)(
+                        f'filial_suporte_{ticket.filial_id}',
+                        {
+                            'type': 'ticket_updated',
+                            'ticket_id': ticket.id,
+                            'action': 'nova_mensagem',
+                            'preview': msg.texto[:50] if msg.texto else f'[{msg.tipo}]'
+                        }
+                    )
+                    async_to_sync(channel_layer.group_send)(
+                        f'ticket_{ticket.id}',
+                        {
+                            'type': 'chat_message',
+                            'id': msg.id,
+                            'ticket_id': ticket.id,
+                            'remetente': ticket.motorista.nome_completo,
+                            'enviado_por_motorista': msg.enviado_por_motorista,
+                            'mensagem': msg.texto,
+                            'tipo': msg.tipo,
+                            'arquivo_url': ftp_url or (str(msg.arquivo) if msg.arquivo else None),
+                            'created_at': msg.created_at.isoformat()
+                        }
+                    )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Erro ao notificar WebSocket de nova mensagem do motorista: {e}")
         else:
             raise permissions.PermissionDenied("Você não tem acesso a este ticket.")
 
