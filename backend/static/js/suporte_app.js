@@ -255,7 +255,7 @@ async function abrirChatTicket(id) {
                 const area = document.getElementById('suporte-chat-input-area');
                 if(area) area.innerHTML = '<div class="text-center text-muted py-3 w-100 fw-bold"><i class="bi bi-lock-fill me-2"></i>Este chamado foi encerrado.</div>';
             } else {
-                iniciarWebSocketChat(id);
+                iniciarPollingChatApp(id);
             }
         } else if (container) {
             container.innerHTML = '<p class="text-center text-danger mt-3 small opacity-50">Erro ao carregar mensagens</p>';
@@ -265,43 +265,22 @@ async function abrirChatTicket(id) {
     }
 }
 
-function iniciarWebSocketChat(ticketId) {
-    if (suporteSocket) {
-        try { suporteSocket.close(); } catch(e) {}
+function iniciarPollingChatApp(ticketId) {
+    if (pollingAppMessages) {
+        clearInterval(pollingAppMessages);
+        pollingAppMessages = null;
     }
-
-    const token = localStorage.getItem('accessToken') || '';
-    const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
-    
-    suporteSocket = new WebSocket(`${wsScheme}://${window.location.host}/ws/suporte/ticket/${ticketId}/?token=${token}`);
-
-    suporteSocket.onmessage = function(e) {
-        const data = JSON.parse(e.data);
-        if (data.type === 'chat_message') {
-            renderizarMensagemNaTela(data);
-            scrollToBottomChat();
-        } else if (data.type === 'erro') {
-            alert(data.mensagem);
+    // Faz a primeira atualizacao de imediato
+    atualizarMensagensAppSilencioso(ticketId);
+    pollingAppMessages = setInterval(() => {
+        if (currentTicketId === ticketId) {
+            atualizarMensagensAppSilencioso(ticketId);
         }
-    };
-    
-    suporteSocket.onopen = function() {
-        console.log("Conectado ao chat WS");
-        if (pollingAppMessages) {
-            clearInterval(pollingAppMessages);
-            pollingAppMessages = null;
-        }
-    };
+    }, 4000);
+}
 
-    suporteSocket.onclose = function() {
-        if (!pollingAppMessages) {
-            pollingAppMessages = setInterval(() => {
-                if (currentTicketId === ticketId) {
-                    atualizarMensagensAppSilencioso(ticketId);
-                }
-            }, 4000);
-        }
-    };
+function iniciarWebSocketChat(ticketId) {
+    // Desativado para evitar erros de conexao WebSocket no console. Usando polling ativo.
 }
 
 async function atualizarMensagensAppSilencioso(id) {
@@ -421,26 +400,19 @@ function enviarMensagemChat() {
     const msg = input.value.trim();
     if (!msg) return;
 
-    if (suporteSocket && suporteSocket.readyState === WebSocket.OPEN) {
-        suporteSocket.send(JSON.stringify({
-            mensagem: msg,
+    const token = localStorage.getItem('accessToken');
+    fetch('/suporte/api/mensagens/', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            ticket: currentTicketId,
+            texto: msg,
             tipo: 'TEXTO'
-        }));
+        })
+    }).then(() => {
         input.value = '';
-    } else {
-        const token = localStorage.getItem('accessToken');
-        fetch('/suporte/api/mensagens/', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                ticket: currentTicketId,
-                texto: msg,
-                tipo: 'TEXTO'
-            })
-        }).then(() => {
-            abrirChatTicket(currentTicketId);
-        });
-    }
+        atualizarMensagensAppSilencioso(currentTicketId); // atualiza o chat imediatamente apos enviar
+    });
 }
 
 // Delegated listener to avoid issues if element is replaced

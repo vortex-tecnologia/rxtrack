@@ -9,8 +9,16 @@ let pollingIntervalTickets = null;
 let pollingIntervalMessages = null;
 
 document.addEventListener('DOMContentLoaded', function() {
-    conectarWSFilial();
+    // Inicializa a contagem dos tickets com polling ativo de 4 segundos
     carregarTicketsIniciais();
+    pollingIntervalTickets = setInterval(carregarTicketsIniciais, 4000);
+    
+    // Configurar status verde/online de polling
+    const statusCon = document.getElementById('conexao-status');
+    if (statusCon) {
+        statusCon.className = 'badge bg-success';
+        statusCon.innerText = 'Online';
+    }
     
     // Configurar abas
     document.querySelectorAll('#pills-tab .nav-link').forEach(btn => {
@@ -40,55 +48,7 @@ async function carregarTicketsIniciais() {
 }
 
 function conectarWSFilial() {
-    const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
-    const token = localStorage.getItem('accessToken') || '';
-    wsFilial = new WebSocket(`${wsScheme}://${window.location.host}/ws/suporte/filial/${filialId}/?token=${token}`);
-
-    wsFilial.onopen = () => {
-        document.getElementById('conexao-status').className = 'badge bg-success';
-        document.getElementById('conexao-status').innerText = 'Online';
-        if (pollingIntervalTickets) {
-            clearInterval(pollingIntervalTickets);
-            pollingIntervalTickets = null;
-        }
-    };
-
-    wsFilial.onmessage = (e) => {
-        const data = JSON.parse(e.data);
-        if (data.type === 'novo_ticket' || data.type === 'atualizacao_ticket') {
-            const ticket = data.ticket;
-            const index = todosTickets.findIndex(t => t.id === ticket.id);
-            if(index > -1) {
-                todosTickets[index] = ticket;
-            } else {
-                todosTickets.unshift(ticket);
-            }
-            renderizarListaTickets();
-            atualizarBadges();
-        }
-        else if (data.type === 'ticket_updated') {
-            carregarTicketsIniciais();
-            // Flash the card if visible
-            if(data.ticket_id) {
-                setTimeout(() => {
-                    document.querySelectorAll('.ticket-card').forEach(card => {
-                        card.classList.add('flash-new');
-                        setTimeout(() => card.classList.remove('flash-new'), 3500);
-                    });
-                }, 500);
-            }
-        }
-    };
-
-    wsFilial.onclose = () => {
-        document.getElementById('conexao-status').className = 'badge bg-danger';
-        document.getElementById('conexao-status').innerText = 'Offline';
-        
-        if (!pollingIntervalTickets) {
-            pollingIntervalTickets = setInterval(carregarTicketsIniciais, 4000);
-        }
-        setTimeout(conectarWSFilial, 5000); // Tenta reconectar
-    };
+    // Desativado para evitar erros de conexao WebSocket no console. Usando polling ativo.
 }
 
 function renderizarListaTickets() {
@@ -211,7 +171,8 @@ async function selecionarTicket(id) {
             }
             msgContainer.scrollTop = msgContainer.scrollHeight;
 
-            conectarWSTicket(id);
+            // Inicia o polling de mensagens para o chamado ativo
+            iniciarPollingTicketAtivo(id);
 
         }
     } catch(e) {
@@ -271,45 +232,23 @@ async function confirmarEncerramento() {
     }
 }
 
-// === WS TICKET ESPECÍFICO ===
-function conectarWSTicket(ticketId) {
-    if (wsTicketAtivo) {
-        try { wsTicketAtivo.close(); } catch(e) {}
-    }
+function iniciarPollingTicketAtivo(ticketId) {
     if (pollingIntervalMessages) {
         clearInterval(pollingIntervalMessages);
         pollingIntervalMessages = null;
     }
-
-    const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
-    const token = localStorage.getItem('accessToken') || '';
-    wsTicketAtivo = new WebSocket(`${wsScheme}://${window.location.host}/ws/suporte/ticket/${ticketId}/?token=${token}`);
-
-    wsTicketAtivo.onopen = () => {
-        if (pollingIntervalMessages) {
-            clearInterval(pollingIntervalMessages);
-            pollingIntervalMessages = null;
+    // Faz a primeira atualizacao de imediato
+    atualizarMensagensAtivasSilencioso(ticketId);
+    pollingIntervalMessages = setInterval(() => {
+        if (currentTicketId === ticketId) {
+            atualizarMensagensAtivasSilencioso(ticketId);
         }
-    };
+    }, 4000);
+}
 
-    wsTicketAtivo.onmessage = function(e) {
-        const data = JSON.parse(e.data);
-        if (data.type === 'chat_message') {
-            injetarMensagemChat(data);
-            const msgContainer = document.getElementById('chat-mensagens');
-            msgContainer.scrollTop = msgContainer.scrollHeight;
-        }
-    };
-
-    wsTicketAtivo.onclose = () => {
-        if (!pollingIntervalMessages) {
-            pollingIntervalMessages = setInterval(() => {
-                if (currentTicketId === ticketId) {
-                    atualizarMensagensAtivasSilencioso(ticketId);
-                }
-            }, 4000);
-        }
-    };
+// === WS TICKET ESPECÍFICO ===
+function conectarWSTicket(ticketId) {
+    // Desativado para evitar erros de conexao WebSocket no console. Usando polling ativo.
 }
 
 async function atualizarMensagensAtivasSilencioso(id) {
@@ -411,27 +350,22 @@ function enviarMensagemPainel() {
     const txt = input.value.trim();
     if(!txt || !currentTicketId) return;
 
-    if (wsTicketAtivo && wsTicketAtivo.readyState === WebSocket.OPEN) {
-        wsTicketAtivo.send(JSON.stringify({
-            mensagem: txt,
+    // Sempre envia via REST API
+    fetch('/suporte/api/mensagens/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            ticket: currentTicketId,
+            texto: txt,
             tipo: 'TEXTO'
-        }));
+        })
+    }).then(() => {
         input.value = '';
-    } else {
-        // Fallback REST
-        fetch('/suporte/api/mensagens/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            body: JSON.stringify({
-                ticket: currentTicketId,
-                texto: txt,
-                tipo: 'TEXTO'
-            })
-        }).then(() => input.value = '');
-    }
+        atualizarMensagensAtivasSilencioso(currentTicketId); // atualiza o chat imediatamente apos enviar
+    });
 }
 
 document.getElementById('chat-input-texto').addEventListener('keypress', function(e){
@@ -463,14 +397,7 @@ async function uploadMidiaPainel() {
         });
 
         if(resp.ok) {
-            const data = await resp.json();
-            if (wsTicketAtivo && wsTicketAtivo.readyState === WebSocket.OPEN) {
-                wsTicketAtivo.send(JSON.stringify({
-                    mensagem: '',
-                    tipo: data.tipo,
-                    arquivo_url: data.arquivo
-                }));
-            }
+            atualizarMensagensAtivasSilencioso(currentTicketId);
         }
     } catch(e) {
         console.error(e);
