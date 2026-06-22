@@ -589,6 +589,10 @@ class ESLCloudAdapter(BaseTMSAdapter):
             ).get(id=baixa_id)
 
             nf = baixa.nota_fiscal
+            if not nf.chave_acesso:
+                logger.info(f"Redirecionando baixa {baixa_id} (minuta) para enviar_baixa_minuta")
+                return self.enviar_baixa_minuta(baixa_id, task=task)
+
             manifesto = nf.manifesto
             motorista = manifesto.motorista.nome_completo if manifesto.motorista else "Motorista não identificado"
             url_foto = baixa.comprovante_foto_url or ""
