@@ -142,7 +142,7 @@ def listar_manifestos_select(request):
 @login_required
 @require_POST # Garante que só aceite chamadas POST (segurança)
 def sincronizar_nota_tms_view(request, nota_id):
-    from manifesto.tasks import enviar_baixa_esl_task
+    from manifesto.tasks import enviar_baixa_esl_task, enviar_baixa_minuta_task
     try:
         # 1. Verifica se a nota existe
         # (Aqui usamos o ID da nota, a task buscará a 'baixa' vinculada)
@@ -157,12 +157,14 @@ def sincronizar_nota_tms_view(request, nota_id):
                 'mensagem': 'Esta nota ainda não possui uma baixa registrada pelo motorista.'
             }, status=400)
 
-        # 3. Dispara a Task do Celery correta (Entrega vs Coleta)
+        # 3. Dispara a Task do Celery correta (Entrega vs Coleta vs Minuta)
         if nota.tipo_operacao == 'COLETA':
             from manifesto.tasks import enviar_coleta_esl_task
             enviar_coleta_esl_task.delay(baixa.id)
-        else:
+        elif nota.chave_acesso:
             enviar_baixa_esl_task.delay(baixa.id)
+        else:
+            enviar_baixa_minuta_task.delay(baixa.id)
 
         return JsonResponse({
             'sucesso': True,

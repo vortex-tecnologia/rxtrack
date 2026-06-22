@@ -582,7 +582,7 @@ def api_registrar_baixa_auditoria_sac(request):
     """
     Registra baixa manual pelo app SAC com motivo de auditoria.
     """
-    from manifesto.tasks import enviar_baixa_esl_task
+    from manifesto.tasks import enviar_baixa_esl_task, enviar_baixa_minuta_task
     from manifesto.rotas.baixa import upload_via_ftp
     
     try:
@@ -627,7 +627,10 @@ def api_registrar_baixa_auditoria_sac(request):
             from configuracao.utils import get_config
             config = get_config()
             if config.enviar_tms:
-                enviar_baixa_esl_task.delay(baixa.id)
+                if nf.chave_acesso:
+                    enviar_baixa_esl_task.delay(baixa.id)
+                else:
+                    enviar_baixa_minuta_task.delay(baixa.id)
             
             return Response({
                 "status": "sucesso",
