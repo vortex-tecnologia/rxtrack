@@ -697,53 +697,108 @@ class ESLCloudAdapter(BaseTMSAdapter):
         TOKEN = self.config.token_invoices
         
         try:
-            baixa = BaixaNF.objects.select_related('nota_fiscal').get(id=baixa_id)
+            baixa = BaixaNF.objects.select_related(
+                'nota_fiscal',
+                'ocorrencia',
+                'nota_fiscal__manifesto',
+                'nota_fiscal__manifesto__motorista'
+            ).get(id=baixa_id)
             nf = baixa.nota_fiscal
             freight_id = nf.freight_id_tms
+            codigo_ocorrencia = limpar_codigo_ocorrencia(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else "1"
             
-            if not freight_id:
-                msg_erro = f"Erro: Documento {nf.numero_nota} não possui ID de Frete vinculado para integração."
-                baixa.log_erro_tms = msg_erro
-                baixa.save()
-                return msg_erro
-
-            URL_ESL_FRETE = f"https://{self.config.dominio_esl}/api/v1/freights/{freight_id}/invoice_occurrences"
-
             fuso_br = pytz.timezone('America/Sao_Paulo')
             data_ocorrencia_str = baixa.data_baixa.astimezone(fuso_br).strftime('%Y-%m-%dT%H:%M:%S.000-03:00')
+            
+            enviado_com_sucesso = False
+            msg_sucesso = ""
 
-            payload = {
-                "invoice_occurrence": {
-                    "receiver": baixa.recebedor or "Nao identificado",
-                    "document_number": baixa.documento_recebedor or "",
-                    "comments": f"Baixa Minuta via App - Obs: {baixa.observacao or ''}",
-                    "occurrence_at": data_ocorrencia_str,
-                    "latitude": float(baixa.latitude) if baixa.latitude else None,
-                    "longitude": float(baixa.longitude) if baixa.longitude else None,
-                    "occurrence": {
-                        "code": limpar_codigo_ocorrencia(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else "1"
+            # 1. Tenta enviar pelo endpoint específico de frete (V1) se tiver freight_id
+            if freight_id:
+                try:
+                    URL_ESL_FRETE = f"https://{self.config.dominio_esl}/api/v1/freights/{freight_id}/invoice_occurrences"
+                    payload = {
+                        "invoice_occurrence": {
+                            "receiver": baixa.recebedor or "Nao identificado",
+                            "document_number": baixa.documento_recebedor or "",
+                            "comments": f"Baixa Minuta via App - Obs: {baixa.observacao or ''}",
+                            "occurrence_at": data_ocorrencia_str,
+                            "latitude": float(baixa.latitude) if baixa.latitude else None,
+                            "longitude": float(baixa.longitude) if baixa.longitude else None,
+                            "occurrence": {
+                                "code": codigo_ocorrencia
+                            }
+                        }
+                    }
+                    headers = {
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {TOKEN}"
+                    }
+                    response = requests.post(URL_ESL_FRETE, json=payload, headers=headers, timeout=30)
+                    response.raise_for_status()
+                    enviado_com_sucesso = True
+                    msg_sucesso = "Sucesso: Baixa de Minuta integrada via Freight ID"
+                except Exception as e:
+                    logger.warning(f"Falha ao enviar Minuta via Freight ID {freight_id}: {e}. Tentando fallback por número.")
+
+            # 2. Se não tinha freight_id ou se o envio por ID falhou, usa o fallback geral por número de documento (V2)
+            if not enviado_com_sucesso:
+                URL_ESL_GERAL = f"https://{self.config.dominio_esl}/api/invoice_occurrences"
+                manifesto = nf.manifesto
+                motorista = manifesto.motorista.nome_completo if (manifesto and manifesto.motorista) else "Motorista não identificado"
+                url_foto = baixa.comprovante_foto_url or ""
+
+                if codigo_ocorrencia in ["1", "2", 1, 2]:
+                    invoice_data = {
+                        "number": nf.numero_nota,
+                        "delivery_receipt_url": url_foto
+                    }
+                    freight_data = {}
+                else:
+                    invoice_data = {
+                        "number": nf.numero_nota,
+                        "delivery_receipt_url": ""
+                    }
+                    freight_data = {
+                        "delivery_receipt_url": url_foto
+                    } if url_foto else {}
+
+                prefixo_retida = "[NOTA RETIDA] " if not url_foto and codigo_ocorrencia in [1, 2] else ""
+                comentario_final = f"{prefixo_retida}Baixa Minuta via App - Motorista: {motorista}. Obs: {baixa.observacao or ''}"
+
+                payload = {
+                    "invoice_occurrence": {
+                        "receiver": baixa.recebedor or "Nao identificado",
+                        "document_number": baixa.documento_recebedor or "",
+                        "comments": comentario_final,
+                        "occurrence_at": data_ocorrencia_str,
+                        "occurrence": {
+                            "code": codigo_ocorrencia
+                        },
+                        "invoice": invoice_data,
+                        "manifest": {
+                            "id": int(manifesto.manifesto_id_tms) if (manifesto and manifesto.manifesto_id_tms) else None
+                        }
                     }
                 }
-            }
 
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {TOKEN}"
-            }
+                if freight_data:
+                    payload["invoice_occurrence"]["freight"] = freight_data
 
-            response = requests.post(
-                URL_ESL_FRETE,
-                json=payload,
-                headers=headers,
-                timeout=30
-            )
-            
-            response.raise_for_status()
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {TOKEN}"
+                }
+
+                response = requests.post(URL_ESL_GERAL, json=payload, headers=headers, timeout=30)
+                response.raise_for_status()
+                enviado_com_sucesso = True
+                msg_sucesso = "Sucesso: Baixa de Minuta integrada via número de documento"
 
             baixa.processado_tms = True
             baixa.integrado_tms = True
             baixa.data_integracao = timezone.now()
-            baixa.log_erro_tms = "Sucesso: Baixa de Minuta integrada via Freight ID"
+            baixa.log_erro_tms = msg_sucesso
             baixa.save()
             
             return f"Baixa de Minuta {nf.numero_nota} enviada com sucesso."
