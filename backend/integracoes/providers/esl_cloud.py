@@ -579,7 +579,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             manifesto = nf.manifesto
             motorista = manifesto.motorista.nome_completo if manifesto.motorista else "Motorista não identificado"
             url_foto = baixa.comprovante_foto_url or ""
-            codigo_ocorrencia = int(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else 1
+            codigo_ocorrencia = baixa.ocorrencia.codigo_tms.strip() if (baixa.ocorrencia and baixa.ocorrencia.codigo_tms) else "1"
 
             tms_manifest_id = manifesto.numero_manifesto 
             
@@ -587,7 +587,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             data_br = baixa.data_baixa.astimezone(fuso_brasilia)
             data_ocorrencia_str = data_br.strftime('%Y-%m-%dT%H:%M:%S.000-03:00')
 
-            if codigo_ocorrencia in [1, 2]:
+            if codigo_ocorrencia in ["1", "2", 1, 2]:
                 invoice_data = {
                     "key": nf.chave_acesso,
                     "delivery_receipt_url": url_foto
@@ -704,7 +704,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     "latitude": float(baixa.latitude) if baixa.latitude else None,
                     "longitude": float(baixa.longitude) if baixa.longitude else None,
                     "occurrence": {
-                        "code": int(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else 1
+                        "code": baixa.ocorrencia.codigo_tms.strip() if (baixa.ocorrencia and baixa.ocorrencia.codigo_tms) else "1"
                     }
                 }
             }
@@ -783,7 +783,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         "latitude": float(baixa.latitude) if baixa.latitude else 0.0,
                         "longitude": float(baixa.longitude) if baixa.longitude else 0.0,
                         "occurrence": {
-                            "code": int(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else 1
+                            "code": baixa.ocorrencia.codigo_tms.strip() if (baixa.ocorrencia and baixa.ocorrencia.codigo_tms) else "1"
                         }
                     }
                 }
@@ -794,7 +794,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     "invoice_occurrence": {
                         "occurrence_at": data_iso_v2,
                         "occurrence": {
-                            "code": int(baixa.ocorrencia.codigo_tms)
+                            "code": baixa.ocorrencia.codigo_tms.strip() if (baixa.ocorrencia and baixa.ocorrencia.codigo_tms) else "1"
                         },
                         "invoice": {
                             "number": identificador

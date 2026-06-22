@@ -81,7 +81,8 @@ def processar_envio_sac_tms_task(self, dados_baixa):
             else:
                 URL_ESL = f"https://{config.dominio_esl}/api/invoice_occurrences"
             
-            codigo_ocorrencia = int(dados_baixa.get('ocorrencia_codigo', 1))
+            codigo_ocorrencia = dados_baixa.get('ocorrencia_codigo')
+            codigo_ocorrencia = str(codigo_ocorrencia).strip() if codigo_ocorrencia else "1"
             nome_autor = dados_baixa.get('nome_autor', 'SAC')
             observacao = dados_baixa.get('observacao', '')
             data_ocorrencia_str = dados_baixa.get('data_ocorrencia') # Já deve vir no formato YYYY-MM-DDTHH:MM:SS.000-03:00
