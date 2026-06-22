@@ -16,6 +16,19 @@ from configuracao.utils import notificar_falha_tms
 logger = logging.getLogger(__name__)
 
 
+def limpar_codigo_ocorrencia(codigo):
+    """Remove zeros à esquerda do código de ocorrência para a ESL (ex: 098 -> 98, 050 -> 50)."""
+    if not codigo:
+        return "1"
+    codigo_str = str(codigo).strip()
+    try:
+        return str(int(codigo_str))
+    except ValueError:
+        limpo = codigo_str.lstrip('0')
+        return limpo if limpo else "0"
+
+
+
 class ESLCloudAdapter(BaseTMSAdapter):
     """Implementação para o TMS ESL Cloud."""
 
@@ -579,7 +592,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             manifesto = nf.manifesto
             motorista = manifesto.motorista.nome_completo if manifesto.motorista else "Motorista não identificado"
             url_foto = baixa.comprovante_foto_url or ""
-            codigo_ocorrencia = baixa.ocorrencia.codigo_tms.strip() if (baixa.ocorrencia and baixa.ocorrencia.codigo_tms) else "1"
+            codigo_ocorrencia = limpar_codigo_ocorrencia(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else "1"
 
             tms_manifest_id = manifesto.numero_manifesto 
             
@@ -704,7 +717,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     "latitude": float(baixa.latitude) if baixa.latitude else None,
                     "longitude": float(baixa.longitude) if baixa.longitude else None,
                     "occurrence": {
-                        "code": baixa.ocorrencia.codigo_tms.strip() if (baixa.ocorrencia and baixa.ocorrencia.codigo_tms) else "1"
+                        "code": limpar_codigo_ocorrencia(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else "1"
                     }
                 }
             }
@@ -783,7 +796,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         "latitude": float(baixa.latitude) if baixa.latitude else 0.0,
                         "longitude": float(baixa.longitude) if baixa.longitude else 0.0,
                         "occurrence": {
-                            "code": baixa.ocorrencia.codigo_tms.strip() if (baixa.ocorrencia and baixa.ocorrencia.codigo_tms) else "1"
+                            "code": limpar_codigo_ocorrencia(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else "1"
                         }
                     }
                 }
@@ -794,7 +807,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     "invoice_occurrence": {
                         "occurrence_at": data_iso_v2,
                         "occurrence": {
-                            "code": baixa.ocorrencia.codigo_tms.strip() if (baixa.ocorrencia and baixa.ocorrencia.codigo_tms) else "1"
+                            "code": limpar_codigo_ocorrencia(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else "1"
                         },
                         "invoice": {
                             "number": identificador

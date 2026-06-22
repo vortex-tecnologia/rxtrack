@@ -8,6 +8,19 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def limpar_codigo_ocorrencia(codigo):
+    """Remove zeros à esquerda do código de ocorrência para a ESL (ex: 098 -> 98, 050 -> 50)."""
+    if not codigo:
+        return "1"
+    codigo_str = str(codigo).strip()
+    try:
+        return str(int(codigo_str))
+    except ValueError:
+        limpo = codigo_str.lstrip('0')
+        return limpo if limpo else "0"
+
+
+
 @shared_task(bind=True, max_retries=2)
 def processar_envio_sac_tms_task(self, dados_baixa):
     """
@@ -82,7 +95,7 @@ def processar_envio_sac_tms_task(self, dados_baixa):
                 URL_ESL = f"https://{config.dominio_esl}/api/invoice_occurrences"
             
             codigo_ocorrencia = dados_baixa.get('ocorrencia_codigo')
-            codigo_ocorrencia = str(codigo_ocorrencia).strip() if codigo_ocorrencia else "1"
+            codigo_ocorrencia = limpar_codigo_ocorrencia(codigo_ocorrencia)
             nome_autor = dados_baixa.get('nome_autor', 'SAC')
             observacao = dados_baixa.get('observacao', '')
             data_ocorrencia_str = dados_baixa.get('data_ocorrencia') # Já deve vir no formato YYYY-MM-DDTHH:MM:SS.000-03:00
