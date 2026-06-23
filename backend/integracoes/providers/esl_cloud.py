@@ -743,7 +743,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
         porque o endpoint geral (/api/invoice_occurrences) exige 'key' que minutas não possuem.
         """
         TOKEN = self.config.token_invoices
-        
+        payload = None
         try:
             baixa = BaixaNF.objects.select_related(
                 'nota_fiscal',
@@ -813,6 +813,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             }
             
             logger.info(f"Enviando Minuta {nf.numero_nota} via Freight V1 (ID: {freight_id})")
+            logger.info(f"Payload: {json.dumps(payload)}")
             response = requests.post(URL_ESL_FRETE, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
 
@@ -825,9 +826,10 @@ class ESLCloudAdapter(BaseTMSAdapter):
             return f"Baixa de Minuta {nf.numero_nota} enviada com sucesso (Freight: {freight_id})."
 
         except Exception as e:
-            msg_falha = f"Erro na integração da Minuta: {str(e)}"
+            payload_str = f" | Payload: {json.dumps(payload)}" if payload else ""
+            msg_falha = f"Erro na integração da Minuta: {str(e)}{payload_str}"
             if hasattr(e, 'response') and e.response is not None:
-                msg_falha = f"Erro na integração da Minuta ({e.response.status_code}): {e.response.text}"
+                msg_falha = f"Erro na integração da Minuta ({e.response.status_code}): {e.response.text}{payload_str}"
             baixa.log_erro_tms = msg_falha[:500]
             baixa.integrado_tms = False
             baixa.save()
