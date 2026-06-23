@@ -435,7 +435,7 @@ def api_registrar_baixa_sac(request):
         codigo_tms = None
         if not somente_comprovante:
             ocorrencia = Ocorrencia.objects.get(id=ocorrencia_id)
-            codigo_tms = ocorrencia.codigo_tms
+            codigo_tms = ocorrencia.codigo_tms or ocorrencia.codigo_referencia
         
         # Upload da foto para o FTP (mesma lógica do app do motorista)
         url_final_foto = ""
