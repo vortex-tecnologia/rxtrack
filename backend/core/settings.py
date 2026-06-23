@@ -125,6 +125,11 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# Configurações de Sessão para manter o motorista logado no PWA/APK
+SESSION_COOKIE_AGE = 31536000  # 1 ano
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_SAVE_EVERY_REQUEST = True
 _cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', '')
 if _cors_origins:
     CORS_ALLOW_ALL_ORIGINS = False

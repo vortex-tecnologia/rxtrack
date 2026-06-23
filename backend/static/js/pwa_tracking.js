@@ -9,12 +9,44 @@ if (typeof heartbeatInterval === 'undefined') {
 if (typeof socketTracking === 'undefined') {
     window.socketTracking = null;
 }
+if (typeof capacitorWatcherId === 'undefined') {
+    window.capacitorWatcherId = null;
+}
 
 async function iniciarCoracaoTracking() {
-    // Inicia o loop de envio a cada 30 segundos (se não iniciado)
-    if (!heartbeatInterval && typeof manifestoAtual !== 'undefined' && manifestoAtual) {
-        heartbeatInterval = setInterval(enviarHeartbeat, 30000);
-        enviarHeartbeat(); // Envia o primeiro imediatamente
+    // Se o app estiver rodando via APK (Capacitor), usamos o serviço de fundo nativo.
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation) {
+        if (!capacitorWatcherId && typeof manifestoAtual !== 'undefined' && manifestoAtual) {
+            console.log("💓 [PWA Tracking] Iniciando Background Geolocation Nativo...");
+            const BackgroundGeolocation = window.Capacitor.Plugins.BackgroundGeolocation;
+            BackgroundGeolocation.addWatcher(
+                {
+                    backgroundMessage: "Rastreando sua rota para o manifesto ativo.",
+                    backgroundTitle: "QuickTrack",
+                    requestPermissions: true,
+                    stale: false,
+                    distanceFilter: 50 // Atualiza a cada 50 metros percorridos
+                },
+                function (location, error) {
+                    if (error) {
+                        console.error("❌ [PWA Tracking] Erro no BackgroundGeolocation:", error);
+                        return;
+                    }
+                    console.log("💓 [PWA Tracking] GPS Nativo disparado:", location.latitude, location.longitude);
+                    enviarHeartbeat(location.latitude, location.longitude);
+                }
+            ).then(function (watcher_id) {
+                capacitorWatcherId = watcher_id;
+            });
+            // Envia o primeiro imediatamente
+            enviarHeartbeat();
+        }
+    } else {
+        // Fallback web tradicional
+        if (!heartbeatInterval && typeof manifestoAtual !== 'undefined' && manifestoAtual) {
+            heartbeatInterval = setInterval(enviarHeartbeat, 30000);
+            enviarHeartbeat(); // Envia o primeiro imediatamente
+        }
     }
 
     // Tenta conectar o WebSocket para real-time leve (se não estiver conectado)
@@ -42,13 +74,17 @@ async function iniciarCoracaoTracking() {
     }
 }
 
-async function enviarHeartbeat() {
+async function enviarHeartbeat(overrideLat = null, overrideLng = null) {
     // Auto-limpeza caso o manifesto seja finalizado ou limpo
     if (typeof manifestoAtual === 'undefined' || !manifestoAtual) {
         console.log("💓 [PWA Tracking] Sem manifesto ativo. Parando heartbeat.");
         if (heartbeatInterval) {
             clearInterval(heartbeatInterval);
             heartbeatInterval = null;
+        }
+        if (window.capacitorWatcherId && window.Capacitor && window.Capacitor.Plugins.BackgroundGeolocation) {
+            window.Capacitor.Plugins.BackgroundGeolocation.removeWatcher({ id: capacitorWatcherId });
+            capacitorWatcherId = null;
         }
         if (socketTracking) {
             socketTracking.close();
@@ -58,11 +94,15 @@ async function enviarHeartbeat() {
     }
 
     try {
-        console.log("💓 [PWA Tracking] Obtendo localização...");
-        const coords = await getCoords();
-        
-        const lat = coords ? coords.lat : null;
-        const lng = coords ? coords.lon : null;
+        let lat = overrideLat;
+        let lng = overrideLng;
+
+        if (lat === null || lng === null) {
+            console.log("💓 [PWA Tracking] Obtendo localização...");
+            const coords = await getCoords();
+            lat = coords ? coords.lat : null;
+            lng = coords ? coords.lon : null;
+        }
 
         let batteryLevel = null;
         if ('getBattery' in navigator) {
