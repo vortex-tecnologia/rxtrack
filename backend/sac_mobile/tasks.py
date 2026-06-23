@@ -106,7 +106,10 @@ def processar_envio_sac_tms_task(self, dados_baixa):
             if not chave_acesso and freight_id:
                 invoice_data = None
                 freight_data = {
-                    "delivery_receipt_url": url_foto
+                    "delivery_receipt_url": url_foto,
+                    "occurrence": {
+                        "code": codigo_ocorrencia
+                    }
                 } if url_foto else {}
             else:
                 if codigo_ocorrencia in [1, 2]:
@@ -121,7 +124,10 @@ def processar_envio_sac_tms_task(self, dados_baixa):
                         "delivery_receipt_url": ""
                     }
                     freight_data = {
-                        "delivery_receipt_url": url_foto
+                        "delivery_receipt_url": url_foto,
+                        "occurrence": {
+                            "code": codigo_ocorrencia
+                        }
                     } if url_foto else {}
 
             comentario = f"[BAIXA SAC] Operador: {nome_autor}. Obs: {observacao}"

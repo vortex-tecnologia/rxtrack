@@ -616,7 +616,10 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     "delivery_receipt_url": ""
                 }
                 freight_data = {
-                    "delivery_receipt_url": url_foto
+                    "delivery_receipt_url": url_foto,
+                    "occurrence": {
+                        "code": codigo_ocorrencia
+                    }
                 } if url_foto else {}
 
             prefixo_retida = "[NOTA RETIDA] " if not url_foto and codigo_ocorrencia in [1, 2] else ""
@@ -760,7 +763,10 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         "delivery_receipt_url": ""
                     }
                     freight_data = {
-                        "delivery_receipt_url": url_foto
+                        "delivery_receipt_url": url_foto,
+                        "occurrence": {
+                            "code": codigo_ocorrencia
+                        }
                     } if url_foto else {}
 
                 prefixo_retida = "[NOTA RETIDA] " if not url_foto and codigo_ocorrencia in [1, 2] else ""
