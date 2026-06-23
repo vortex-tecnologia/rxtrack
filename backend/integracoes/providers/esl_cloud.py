@@ -653,6 +653,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
             if freight_data:
                 payload["invoice_occurrence"]["freight"] = freight_data
 
+            baixa.payload_enviado = payload
+
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {TOKEN}"
@@ -807,6 +809,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
             if url_foto:
                 payload["invoice_occurrence"]["delivery_receipt_url"] = url_foto
             
+            baixa.payload_enviado = payload
+            
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {TOKEN}"
@@ -815,6 +819,37 @@ class ESLCloudAdapter(BaseTMSAdapter):
             logger.info(f"Enviando Minuta {nf.numero_nota} via Freight V1 (ID: {freight_id})")
             logger.info(f"Payload: {json.dumps(payload)}")
             response = requests.post(URL_ESL_FRETE, json=payload, headers=headers, timeout=30)
+            
+            # Se falhar com 422 (Unprocessable Entity), verifica se o erro é de ocorrência inválida/em branco
+            # e tenta novamente com o código padrão 1 (sucesso de entrega)
+            if response.status_code == 422 and codigo_ocorrencia != 1:
+                try:
+                    error_data = response.json()
+                    errors = error_data.get("errors", {})
+                    is_occurrence_error = False
+                    
+                    if isinstance(errors, dict):
+                        for key, val in errors.items():
+                            val_str = str(val).lower()
+                            if "ocorrência" in val_str or "occurrence" in val_str or "branco" in val_str or "blank" in val_str:
+                                is_occurrence_error = True
+                                break
+                    elif isinstance(errors, str):
+                        errors_lower = errors.lower()
+                        if "ocorrência" in errors_lower or "occurrence" in errors_lower or "branco" in errors_lower or "blank" in errors_lower:
+                            is_occurrence_error = True
+                            
+                    if is_occurrence_error:
+                        logger.warning(
+                            f"Ocorrência {codigo_ocorrencia} rejeitada pela ESL para a Minuta {nf.numero_nota}. "
+                            "Tentando novamente com o código padrão 1 (sucesso)."
+                        )
+                        payload["invoice_occurrence"]["occurrence"]["code"] = 1
+                        logger.info(f"Payload de Fallback: {json.dumps(payload)}")
+                        response = requests.post(URL_ESL_FRETE, json=payload, headers=headers, timeout=30)
+                except Exception as ex_fallback:
+                    logger.error(f"Erro ao processar fallback de ocorrência na Minuta {nf.numero_nota}: {ex_fallback}")
+            
             response.raise_for_status()
 
             baixa.processado_tms = True

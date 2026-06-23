@@ -156,6 +156,43 @@ def processar_envio_sac_tms_task(self, dados_baixa):
 
         # ENVIO
         response = requests.post(URL_ESL, json=payload, headers=headers, timeout=30)
+        
+        # Se falhar com 422 (Unprocessable Entity) devido a ocorrência rejeitada/em branco,
+        # e o código enviado não for o padrão, tenta novamente com o código 1
+        if response.status_code == 422 and codigo_ocorrencia != 1:
+            try:
+                error_data = response.json()
+                errors = error_data.get("errors", {})
+                is_occurrence_error = False
+                
+                if isinstance(errors, dict):
+                    for key, val in errors.items():
+                        val_str = str(val).lower()
+                        if "ocorrência" in val_str or "occurrence" in val_str or "branco" in val_str or "blank" in val_str:
+                            is_occurrence_error = True
+                            break
+                elif isinstance(errors, str):
+                    errors_lower = errors.lower()
+                    if "ocorrência" in errors_lower or "occurrence" in errors_lower or "branco" in errors_lower or "blank" in errors_lower:
+                        is_occurrence_error = True
+                        
+                if is_occurrence_error:
+                    logger.warning(
+                        f"[SAC] Ocorrência {codigo_ocorrencia} rejeitada pela ESL. "
+                        "Tentando novamente com o código padrão 1."
+                    )
+                    # Atualiza o código tanto no nível raiz quanto no nível freight (se houver)
+                    codigo_ocorrencia = 1
+                    if "occurrence" in payload["invoice_occurrence"]:
+                        payload["invoice_occurrence"]["occurrence"]["code"] = 1
+                    if "freight" in payload["invoice_occurrence"] and "occurrence" in payload["invoice_occurrence"]["freight"]:
+                        payload["invoice_occurrence"]["freight"]["occurrence"]["code"] = 1
+                        
+                    logger.info(f"[SAC] Payload de Fallback: {json.dumps(payload)}")
+                    response = requests.post(URL_ESL, json=payload, headers=headers, timeout=30)
+            except Exception as ex_fallback:
+                logger.error(f"[SAC] Erro ao processar fallback de ocorrência: {ex_fallback}")
+                
         response.raise_for_status()
 
         atualizar_historico('SUCESSO')
