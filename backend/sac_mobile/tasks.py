@@ -9,15 +9,17 @@ logger = logging.getLogger(__name__)
 
 
 def limpar_codigo_ocorrencia(codigo):
-    """Remove zeros à esquerda do código de ocorrência para a ESL (ex: 098 -> 98, 050 -> 50)."""
+    """Remove zeros à esquerda do código de ocorrência para a ESL (ex: 098 -> 98, 050 -> 50).
+    Nunca retorna '0' pois a ESL não aceita - usa '1' (entrega) como padrão."""
     if not codigo:
         return "1"
     codigo_str = str(codigo).strip()
     try:
-        return str(int(codigo_str))
+        resultado = str(int(codigo_str))
+        return resultado if resultado != "0" else "1"
     except ValueError:
         limpo = codigo_str.lstrip('0')
-        return limpo if limpo else "0"
+        return limpo if limpo else "1"
 
 
 

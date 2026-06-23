@@ -17,15 +17,18 @@ logger = logging.getLogger(__name__)
 
 
 def limpar_codigo_ocorrencia(codigo):
-    """Remove zeros à esquerda do código de ocorrência para a ESL (ex: 098 -> 98, 050 -> 50)."""
+    """Remove zeros à esquerda do código de ocorrência para a ESL (ex: 098 -> 98, 050 -> 50).
+    Nunca retorna '0' pois a ESL não aceita - usa '1' (entrega) como padrão."""
     if not codigo:
         return "1"
     codigo_str = str(codigo).strip()
     try:
-        return str(int(codigo_str))
+        resultado = str(int(codigo_str))
+        # ESL não aceita código 0, usa padrão de entrega
+        return resultado if resultado != "0" else "1"
     except ValueError:
         limpo = codigo_str.lstrip('0')
-        return limpo if limpo else "0"
+        return limpo if limpo else "1"
 
 
 
@@ -788,16 +791,21 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     "longitude": float(baixa.longitude) if baixa.longitude else None,
                     "occurrence": {
                         "code": codigo_ocorrencia
+                    },
+                    "freight": {
+                        "occurrence": {
+                            "code": codigo_ocorrencia
+                        }
                     }
                 }
             }
             
-            # Adiciona foto no nível correto
+            # Foto: entrega (1,2) vai no invoice_occurrence, demais vai no freight
             if url_foto:
                 if codigo_ocorrencia in ["1", "2"]:
                     payload["invoice_occurrence"]["delivery_receipt_url"] = url_foto
                 else:
-                    payload["invoice_occurrence"]["delivery_receipt_url"] = url_foto
+                    payload["invoice_occurrence"]["freight"]["delivery_receipt_url"] = url_foto
             
             headers = {
                 "Content-Type": "application/json",
