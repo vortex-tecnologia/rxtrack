@@ -966,7 +966,8 @@ def abrir_ticket_operacional(request):
             # Mensagem inicial do sistema
             MensagemSuporte.objects.create(
                 ticket=ticket,
-                enviado_por_motorista=False,
+                enviado_por_motorista=True,
+                atendente=request.user,
                 tipo='SISTEMA',
                 texto=f"Chamado aberto pelo Painel Operacional ({perfil.get_cargo_display()}). Assunto: {assunto}"
             )
@@ -976,6 +977,7 @@ def abrir_ticket_operacional(request):
                 MensagemSuporte.objects.create(
                     ticket=ticket,
                     enviado_por_motorista=True, # true porque foi quem abriu o chamado
+                    atendente=request.user,
                     tipo='TEXTO',
                     texto=mensagem.strip()
                 )

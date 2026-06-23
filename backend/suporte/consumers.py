@@ -218,6 +218,7 @@ class SupportConsumer(AsyncWebsocketConsumer):
         if hasattr(user, 'motorista_perfil'):
             if user.motorista_perfil.tipo_usuario == 'MOTORISTA':
                 enviado_por_motorista = True
+                atendente = user
                 remetente_nome = user.motorista_perfil.nome_completo
             else:
                 atendente = user

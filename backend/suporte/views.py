@@ -126,7 +126,8 @@ class TicketSuporteViewSet(viewsets.ModelViewSet):
             
             MensagemSuporte.objects.create(
                 ticket=ticket,
-                enviado_por_motorista=False,
+                enviado_por_motorista=True,
+                atendente=self.request.user,
                 tipo='SISTEMA',
                 texto=info_card_text
             )
@@ -136,6 +137,7 @@ class TicketSuporteViewSet(viewsets.ModelViewSet):
                 MensagemSuporte.objects.create(
                     ticket=ticket,
                     enviado_por_motorista=True,
+                    atendente=self.request.user,
                     tipo='TEXTO',
                     texto=detalhe.strip()
                 )
@@ -395,7 +397,7 @@ class MensagemSuporteViewSet(viewsets.ModelViewSet):
             # Lógica para o motorista dono do chamado enviando mensagem
             save_kwargs = {
                 'enviado_por_motorista': True,
-                'atendente': None,
+                'atendente': user,
             }
             if tipo_msg != 'TEXTO':
                 save_kwargs['tipo'] = tipo_msg
