@@ -18,17 +18,21 @@ logger = logging.getLogger(__name__)
 
 def limpar_codigo_ocorrencia(codigo):
     """Remove zeros à esquerda do código de ocorrência para a ESL (ex: 098 -> 98, 050 -> 50).
-    Nunca retorna '0' pois a ESL não aceita - usa '1' (entrega) como padrão."""
+    Nunca retorna 0 pois a ESL não aceita - usa 1 (entrega) como padrão.
+    Retorna um inteiro para compatibilidade com o TMS."""
     if not codigo:
-        return "1"
+        return 1
     codigo_str = str(codigo).strip()
     try:
-        resultado = str(int(codigo_str))
+        resultado = int(codigo_str)
         # ESL não aceita código 0, usa padrão de entrega
-        return resultado if resultado != "0" else "1"
+        return resultado if resultado != 0 else 1
     except ValueError:
         limpo = codigo_str.lstrip('0')
-        return limpo if limpo else "1"
+        try:
+            return int(limpo)
+        except ValueError:
+            return 1
 
 
 
@@ -599,7 +603,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             manifesto = nf.manifesto
             motorista = manifesto.motorista.nome_completo if manifesto.motorista else "Motorista não identificado"
             url_foto = baixa.comprovante_foto_url or ""
-            codigo_ocorrencia = limpar_codigo_ocorrencia(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else "1"
+            codigo_ocorrencia = limpar_codigo_ocorrencia(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else 1
 
             tms_manifest_id = manifesto.numero_manifesto 
             
@@ -607,7 +611,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             data_br = baixa.data_baixa.astimezone(fuso_brasilia)
             data_ocorrencia_str = data_br.strftime('%Y-%m-%dT%H:%M:%S.000-03:00')
 
-            if codigo_ocorrencia in ["1", "2", 1, 2]:
+            if codigo_ocorrencia in [1, 2]:
                 invoice_data = {
                     "key": nf.chave_acesso,
                     "delivery_receipt_url": url_foto
@@ -748,7 +752,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             nf = baixa.nota_fiscal
             freight_id = nf.freight_id_tms
             manifesto = nf.manifesto
-            codigo_ocorrencia = limpar_codigo_ocorrencia(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else "1"
+            codigo_ocorrencia = limpar_codigo_ocorrencia(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else 1
             
             fuso_br = pytz.timezone('America/Sao_Paulo')
             data_ocorrencia_str = baixa.data_baixa.astimezone(fuso_br).strftime('%Y-%m-%dT%H:%M:%S.000-03:00')
@@ -791,21 +795,13 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     "longitude": float(baixa.longitude) if baixa.longitude else None,
                     "occurrence": {
                         "code": codigo_ocorrencia
-                    },
-                    "freight": {
-                        "occurrence": {
-                            "code": codigo_ocorrencia
-                        }
                     }
                 }
             }
             
-            # Foto: entrega (1,2) vai no invoice_occurrence, demais vai no freight
+            # Adiciona foto
             if url_foto:
-                if codigo_ocorrencia in ["1", "2"]:
-                    payload["invoice_occurrence"]["delivery_receipt_url"] = url_foto
-                else:
-                    payload["invoice_occurrence"]["freight"]["delivery_receipt_url"] = url_foto
+                payload["invoice_occurrence"]["delivery_receipt_url"] = url_foto
             
             headers = {
                 "Content-Type": "application/json",
@@ -876,7 +872,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         "latitude": float(baixa.latitude) if baixa.latitude else 0.0,
                         "longitude": float(baixa.longitude) if baixa.longitude else 0.0,
                         "occurrence": {
-                            "code": limpar_codigo_ocorrencia(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else "1"
+                            "code": limpar_codigo_ocorrencia(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else 1
                         }
                     }
                 }
@@ -887,7 +883,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     "invoice_occurrence": {
                         "occurrence_at": data_iso_v2,
                         "occurrence": {
-                            "code": limpar_codigo_ocorrencia(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else "1"
+                            "code": limpar_codigo_ocorrencia(baixa.ocorrencia.codigo_tms) if baixa.ocorrencia else 1
                         },
                         "invoice": {
                             "number": identificador
