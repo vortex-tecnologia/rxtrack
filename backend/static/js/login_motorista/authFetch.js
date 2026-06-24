@@ -8,7 +8,69 @@ const API_BASE = `${BASE_URL}/api/`;
 const AUTH_BASE = `${BASE_URL}/auth/`;
 
 console.log("Servidor detectado:", BASE_URL);
+
+// =====================================================
+// COOKIE HELPERS — Backup persistente para APK (WebView)
+// No APK Android, o localStorage pode ser perdido ao fechar
+// 100% o app. Cookies sobrevivem no WebView via CookieManager.
+// =====================================================
+function setTokenCookie(name, value, days) {
+    const expires = new Date(Date.now() + days * 864e5).toUTCString();
+    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+function getTokenCookie(name) {
+    const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+    return match ? decodeURIComponent(match[1]) : null;
+}
+
+function clearTokenCookies() {
+    const cookieNames = ['qt_access_token', 'qt_refresh_token', 'qt_motorista_id'];
+    cookieNames.forEach(name => {
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
+    });
+}
+
+/**
+ * Salva tokens tanto em localStorage quanto em cookies (backup)
+ */
+function salvarTokens(access, refresh) {
+    localStorage.setItem('accessToken', access);
+    setTokenCookie('qt_access_token', access, 1); // 1 dia (mesmo do JWT)
+
+    if (refresh) {
+        localStorage.setItem('refreshToken', refresh);
+        setTokenCookie('qt_refresh_token', refresh, 365); // 365 dias
+    }
+}
+
+/**
+ * Tenta restaurar tokens de cookies quando o localStorage está vazio.
+ * Isso salva o motorista de ter que logar de novo no APK.
+ */
+function restaurarTokensDeCookies() {
+    const temRefreshLocal = localStorage.getItem('refreshToken');
+    if (temRefreshLocal) return; // Já tem no localStorage, não precisa restaurar
+
+    const cookieRefresh = getTokenCookie('qt_refresh_token');
+    const cookieAccess = getTokenCookie('qt_access_token');
+    const cookieMotorista = getTokenCookie('qt_motorista_id');
+
+    if (cookieRefresh) {
+        console.log("🔄 [APK Recovery] Tokens restaurados de cookies backup!");
+        localStorage.setItem('refreshToken', cookieRefresh);
+        if (cookieAccess) localStorage.setItem('accessToken', cookieAccess);
+        if (cookieMotorista) localStorage.setItem('motorista_id', cookieMotorista);
+    }
+}
+
+// =====================================================
+// AUTENTICAÇÃO PRINCIPAL
+// =====================================================
 async function initAuth() {
+    // 🔑 Tenta restaurar tokens de cookies (backup para APK)
+    restaurarTokensDeCookies();
+
     const refresh = localStorage.getItem('refreshToken');
 
     if (!refresh) {
@@ -79,10 +141,8 @@ async function refreshToken() {
 
         if (res.ok) {
             const data = await res.json();
-            localStorage.setItem('accessToken', data.access);
-            if (data.refresh) {
-                localStorage.setItem('refreshToken', data.refresh);
-            }
+            // Salva em localStorage + cookies (backup)
+            salvarTokens(data.access, data.refresh);
             return true;
         }
         
@@ -99,6 +159,7 @@ async function refreshToken() {
 
 function logout() {
     localStorage.clear();
+    clearTokenCookies(); // Limpa cookies de backup também
     if (!window.location.pathname.includes('/login/')) {
         window.location.href = '/login/';
     }
@@ -113,3 +174,5 @@ window.AUTH_BASE = AUTH_BASE;
 window.authFetch = authFetch;
 window.initAuth = initAuth;
 window.logout = logout;
+window.salvarTokens = salvarTokens;
+window.setTokenCookie = setTokenCookie;

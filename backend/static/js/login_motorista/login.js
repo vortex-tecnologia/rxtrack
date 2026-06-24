@@ -4,6 +4,19 @@
 const BASE_URL = window.location.origin;
 // =====================================================
 const API_BASE = `${BASE_URL}/api/auth/`;
+
+// =====================================================
+// COOKIE HELPERS — Backup de tokens para APK
+// =====================================================
+function setTokenCookie(name, value, days) {
+    const expires = new Date(Date.now() + days * 864e5).toUTCString();
+    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+function salvarTokensEmCookies(access, refresh) {
+    setTokenCookie('qt_access_token', access, 1);
+    if (refresh) setTokenCookie('qt_refresh_token', refresh, 365);
+}
 // =====================================================
 // ELEMENTOS DO DOM
 // =====================================================
@@ -49,6 +62,8 @@ async function carregarMotorista(accessToken) {
 
     // Salva o ID para uso em WebSockets ou filtros de API
     localStorage.setItem('motorista_id', data.id);
+    // Backup em cookie para APK (sobrevive ao app ser fechado)
+    setTokenCookie('qt_motorista_id', data.id, 365);
 }
 
 // =====================================================
@@ -111,7 +126,9 @@ form.addEventListener('submit', async (e) => {
 
             // 🔐 TOKENS: Salva tanto o de acesso quanto o de renovação
             localStorage.setItem('accessToken', data.access);
-            localStorage.setItem('refreshToken', data.refresh); // Alteração incluída
+            localStorage.setItem('refreshToken', data.refresh);
+            // 🔒 Backup em cookies para APK (WebView perde localStorage ao fechar)
+            salvarTokensEmCookies(data.access, data.refresh);
 
             // 🔥 BUSCA MOTORISTA
             await carregarMotorista(data.access);
@@ -137,7 +154,9 @@ form.addEventListener('submit', async (e) => {
 
             // 🔐 TOKENS: Salva tanto o de acesso quanto o de renovação
             localStorage.setItem('accessToken', data.access);
-            localStorage.setItem('refreshToken', data.refresh); // Alteração incluída
+            localStorage.setItem('refreshToken', data.refresh);
+            // 🔒 Backup em cookies para APK (WebView perde localStorage ao fechar)
+            salvarTokensEmCookies(data.access, data.refresh);
 
             // 🔥 BUSCA MOTORISTA
             const meRes = await fetch(API_BASE + 'me/', {
@@ -150,6 +169,7 @@ form.addEventListener('submit', async (e) => {
 
             const me = await meRes.json();
             localStorage.setItem('motorista_id', me.id);
+            setTokenCookie('qt_motorista_id', me.id, 365);
 
             window.location.href = '/app/';
         }

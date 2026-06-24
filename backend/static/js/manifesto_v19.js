@@ -2337,4 +2337,34 @@ setInterval(() => {
     }
 }, 5 * 60 * 1000); // 5 minutos em milissegundos
 
+// =====================================================
+// 3. REFRESH SUAVE AO VOLTAR DO BACKGROUND (APK / PWA)
+// Quando o motorista minimiza o app (ex: vai pro Waze) e volta,
+// fazemos um refresh dos dados SEM recarregar a página inteira.
+// =====================================================
+let _ultimoRetornoBackground = 0;
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        const agora = Date.now();
+        // Debounce: só executa se passou pelo menos 10 segundos desde o último refresh
+        if (agora - _ultimoRetornoBackground < 10000) return;
+        _ultimoRetornoBackground = agora;
+
+        console.log("🔄 [Background Return] App voltou ao foco! Atualizando dados...");
+
+        // 1. Tenta sincronizar baixas que ficaram pendentes
+        if (navigator.onLine) {
+            sincronizarBaixasPendentes();
+        }
+
+        // 2. Se tem manifesto ativo, atualiza a lista de notas (refresh suave)
+        const mID = manifestoAtual || localStorage.getItem('manifesto_ativo');
+        if (mID && navigator.onLine) {
+            atualizarListaViva(mID);
+        }
+
+        // 3. Atualiza ícone de nuvem (status de conexão)
+        atualizarIconeNuvem();
+    }
+});
 
