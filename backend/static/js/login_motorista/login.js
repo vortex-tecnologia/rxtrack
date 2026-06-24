@@ -142,6 +142,7 @@ form.addEventListener('submit', async (e) => {
         else if (modo === 'LOGIN') {
             const res = await fetch(API_BASE + 'login-session/', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: cpf, password: senha })
             });
@@ -172,6 +173,7 @@ form.addEventListener('submit', async (e) => {
         else if (modo === 'PRIMEIRO_ACESSO') {
             const res = await fetch(API_BASE + 'primeiro-acesso/', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     cpf,

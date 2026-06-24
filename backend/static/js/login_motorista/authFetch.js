@@ -139,7 +139,9 @@ async function initAuth() {
 
     // 1. TENTA VALIDAR PELA NOVA SESSÃO DJANGO (Inquebrável)
     try {
-        const res = await fetch(AUTH_BASE + 'me-session/');
+        const res = await fetch(AUTH_BASE + 'me-session/', {
+            credentials: 'same-origin'
+        });
         if (res.ok) {
             const data = await res.json();
             if (data.access && data.refresh) {
@@ -178,6 +180,9 @@ async function authFetch(url, options = {}) {
     options.headers = {
         ...options.headers
     };
+
+    // Garante que os cookies de sessão sejam enviados
+    options.credentials = 'same-origin';
 
     // Para compatibilidade, envia o JWT se existir
     if (access) {
@@ -227,9 +232,14 @@ async function refreshToken() {
     if (!refresh) return false;
 
     try {
+        const csrfToken = getCookie('csrftoken');
+        const headers = { 'Content-Type': 'application/json' };
+        if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+
         const res = await fetch(`${AUTH_BASE}token/refresh/`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            headers: headers,
             body: JSON.stringify({ refresh: refresh }) // O Django espera a chave "refresh"
         });
 
