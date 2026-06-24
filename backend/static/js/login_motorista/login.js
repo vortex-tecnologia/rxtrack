@@ -17,6 +17,20 @@ function salvarTokensEmCookies(access, refresh) {
     setTokenCookie('qt_access_token', access, 1);
     if (refresh) setTokenCookie('qt_refresh_token', refresh, 365);
 }
+
+// =====================================================
+// AUTO-LOGIN (Redireciona se já estiver logado via NativeStorage/Cookies)
+// =====================================================
+document.addEventListener("DOMContentLoaded", async () => {
+    if (typeof window.initAuth === 'function') {
+        const autenticado = await window.initAuth();
+        if (autenticado) {
+            console.log("Usuário já autenticado. Redirecionando para o app...");
+            window.location.href = '/app/';
+        }
+    }
+});
+
 // =====================================================
 // ELEMENTOS DO DOM
 // =====================================================

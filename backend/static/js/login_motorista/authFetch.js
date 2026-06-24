@@ -61,18 +61,12 @@ async function syncToNativePreferences() {
 }
 
 async function restaurarTokensDePreferences() {
-    // ALERT DE DEBUG PARA VER SE O JAVA INJETOU A INTERFACE
-    alert("NativeStorage está disponível? " + (typeof window.NativeStorage !== 'undefined'));
-
     if (window.NativeStorage) {
         try {
             const refresh = window.NativeStorage.get('refreshToken');
             const access = window.NativeStorage.get('accessToken');
             const motoristaId = window.NativeStorage.get('motorista_id');
             
-            // ALERT DE DEBUG 2
-            alert("Refresh do NativeStorage: " + refresh);
-
             if (refresh && refresh !== "null" && refresh !== "undefined") {
                 console.log("🔄 [Native Recovery] Tokens restaurados de Preferences nativas!");
                 localStorage.setItem('refreshToken', refresh);
