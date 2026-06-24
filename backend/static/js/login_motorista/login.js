@@ -140,7 +140,7 @@ form.addEventListener('submit', async (e) => {
 
         // ETAPA 2 — LOGIN EXISTENTE
         else if (modo === 'LOGIN') {
-            const res = await fetch(API_BASE + 'login/', {
+            const res = await fetch(API_BASE + 'login-session/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: cpf, password: senha })

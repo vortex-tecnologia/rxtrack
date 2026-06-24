@@ -118,13 +118,41 @@ function restaurarTokensDeCookies() {
 // =====================================================
 // AUTENTICAÇÃO PRINCIPAL
 // =====================================================
-async function initAuth() {
-    // 🔑 Tenta restaurar tokens de Preferences nativas (prioridade)
-    await restaurarTokensDePreferences();
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
 
-    // 🔑 Tenta restaurar tokens de cookies (backup para APK)
+async function initAuth() {
+    await restaurarTokensDePreferences();
     restaurarTokensDeCookies();
 
+    // 1. TENTA VALIDAR PELA NOVA SESSÃO DJANGO (Inquebrável)
+    try {
+        const res = await fetch(AUTH_BASE + 'me-session/');
+        if (res.ok) {
+            const data = await res.json();
+            if (data.access && data.refresh) {
+                salvarTokens(data.access, data.refresh);
+            }
+            return true; // Sucesso! Sessão ativa.
+        }
+        // Se retornar 403/401, a sessão expirou. Deixa cair pro JWT.
+    } catch (e) {
+        console.warn("Sem internet para validar sessão. Mantendo ativa.");
+    }
+
+    // 2. FALLBACK PARA JWT (Retrocompatibilidade)
     const refresh = localStorage.getItem('refreshToken');
 
     if (!refresh) {
@@ -135,13 +163,9 @@ async function initAuth() {
     const refreshed = await refreshToken();
 
     if (refreshed === false) {
-        // O servidor confirmou que o token é inválido (401)
         logout();
         return false;
     } else if (refreshed === null) {
-        // Falha de rede (sem internet ou servidor fora do ar)
-        // Não apagamos os tokens locais. Deixamos a pessoa tentar usar o PWA offline.
-        console.warn("Sem internet para validar o token. Mantendo sessão ativa.");
         return true;
     }
 
@@ -152,9 +176,19 @@ async function authFetch(url, options = {}) {
     let access = localStorage.getItem('accessToken');
 
     options.headers = {
-        ...options.headers,
-        'Authorization': `Bearer ${access}`
+        ...options.headers
     };
+
+    // Para compatibilidade, envia o JWT se existir
+    if (access) {
+        options.headers['Authorization'] = `Bearer ${access}`;
+    }
+
+    // Como usamos Sessão Django, precisamos enviar o CSRF Token nos POSTs
+    const csrfToken = getCookie('csrftoken');
+    if (csrfToken) {
+        options.headers['X-CSRFToken'] = csrfToken;
+    }
 
     if (!(options.body instanceof FormData)) {
         options.headers['Content-Type'] = 'application/json';
@@ -219,6 +253,7 @@ async function refreshToken() {
 
 
 function logout() {
+    fetch(AUTH_BASE + 'logout-session/', { method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') } }).catch(() => {});
     localStorage.clear();
     clearTokenCookies(); // Limpa cookies de backup também
     // Limpa Preferences nativas do Capacitor

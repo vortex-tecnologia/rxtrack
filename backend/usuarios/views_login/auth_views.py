@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.contrib.auth import authenticate, login, logout
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
@@ -117,11 +118,16 @@ class PrimeiroAcessoView(APIView):
                 cargo='GESTOR' if pre_cadastro.is_gestor else 'MEMBRO'
             )
 
+        # 1. Loga via Sessão Django
+        login(request, user_to_create)
+        
+        # 2. Retorna JWT para o GPS
         refresh = RefreshToken.for_user(user_to_create)
 
         return Response({
             "access": str(refresh.access_token),
-            "refresh": str(refresh)
+            "refresh": str(refresh),
+            "success": True
         })
 
 
@@ -147,6 +153,51 @@ class MeView(APIView):
             "tipo": motorista.tipo_usuario,
             "cargo": motorista.cargo
         })
+
+class LoginSessionView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        username = request.data.get('username') or request.data.get('cpf')
+        password = request.data.get('password') or request.data.get('senha')
+
+        user = authenticate(request, username=username, password=password)
+        
+        if user is not None:
+            # 1. Cria a Sessão Django (Seta o cookie 'sessionid')
+            login(request, user)
+            
+            # 2. Gera o JWT apenas para uso do APK (GPS nativo)
+            refresh = RefreshToken.for_user(user)
+            
+            return Response({
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "success": True,
+                "message": "Sessão criada e JWT gerado"
+            })
+        else:
+            return Response({"detail": "No active account found with the given credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+
+class MeSessionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "status": "online",
+            "access": str(refresh.access_token),
+            "refresh": str(refresh)
+        })
+
+class LogoutSessionView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        logout(request)
+        return Response({"success": True})
 
 @csrf_exempt
 @api_view(['GET', 'POST'])

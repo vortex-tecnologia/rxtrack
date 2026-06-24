@@ -2,17 +2,21 @@
 # Vem de path('auth/', include(('usuarios.urls', 'usuarios'), namespace='usuarios')),
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
-from usuarios.views_login.auth_views import CustomTokenObtainPairView
+from usuarios.views_login.auth_views import CustomTokenObtainPairView, LoginSessionView, MeSessionView, LogoutSessionView
 from .views import PerfilMotoristaView, CustomTokenRefreshView
 
 urlpatterns = [
-    # 1. Rota de Login: Recebe CPF (username) e Senha. Retorna Token.
+    # 1. Rota de Login Clássica (JWT)
     path('login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     
-    # 2. Rota de Renovação: Usa o Refresh Token para obter um novo Access Token.
-    #    Isso é o que mantém o motorista "sempre logado" sem digitar senha.
+    # Rota de Login Nova (Sessão HTTP + JWT Oculto)
+    path('login-session/', LoginSessionView.as_view(), name='login_session'),
+    path('me-session/', MeSessionView.as_view(), name='me_session'),
+    path('logout-session/', LogoutSessionView.as_view(), name='logout_session'),
+    
+    # 2. Rota de Renovação Clássica (JWT)
     path('token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
     
-    # 3. Rota de Validação/Perfil: Para o App confirmar quem é o usuário e buscar seus dados.
+    # 3. Rota de Validação/Perfil
     path('perfil/', PerfilMotoristaView.as_view(), name='motorista_perfil'),
 ]
