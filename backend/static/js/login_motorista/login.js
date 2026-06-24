@@ -23,10 +23,22 @@ function salvarTokensEmCookies(access, refresh) {
 // =====================================================
 document.addEventListener("DOMContentLoaded", async () => {
     if (typeof window.initAuth === 'function') {
-        const autenticado = await window.initAuth();
-        if (autenticado) {
-            console.log("Usuário já autenticado. Redirecionando para o app...");
-            window.location.href = '/app/';
+        try {
+            let temNative = window.NativeStorage ? true : false;
+            let tokenStr = temNative ? window.NativeStorage.get('refreshToken') : null;
+            let tokenExiste = (tokenStr && tokenStr !== "null" && tokenStr !== "undefined");
+            
+            alert(`[Debug Auto-Login]\nNativeStorage: ${temNative}\nToken Existe: ${tokenExiste}\nTamanho: ${tokenStr ? tokenStr.length : 0}`);
+            
+            const autenticado = await window.initAuth();
+            if (autenticado) {
+                alert("Autenticado com sucesso! Redirecionando...");
+                window.location.href = '/app/';
+            } else {
+                alert("Falha na autenticação (initAuth retornou false).");
+            }
+        } catch (e) {
+            alert("Erro no auto-login: " + e.message);
         }
     }
 });
