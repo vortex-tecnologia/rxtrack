@@ -33,28 +33,27 @@ function clearTokenCookies() {
 
 // Native preferences sync functions
 async function syncToNativePreferences() {
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences) {
-        const Preferences = window.Capacitor.Plugins.Preferences;
+    if (window.NativeStorage) {
         const access = localStorage.getItem('accessToken');
         const refresh = localStorage.getItem('refreshToken');
         const motoristaId = localStorage.getItem('motorista_id');
         try {
             if (access) {
-                await Preferences.set({ key: 'accessToken', value: access });
+                window.NativeStorage.save('accessToken', access);
             } else {
-                await Preferences.remove({ key: 'accessToken' });
+                window.NativeStorage.remove('accessToken');
             }
             if (refresh) {
-                await Preferences.set({ key: 'refreshToken', value: refresh });
+                window.NativeStorage.save('refreshToken', refresh);
             } else {
-                await Preferences.remove({ key: 'refreshToken' });
+                window.NativeStorage.remove('refreshToken');
             }
             if (motoristaId) {
-                await Preferences.set({ key: 'motorista_id', value: String(motoristaId) });
+                window.NativeStorage.save('motorista_id', String(motoristaId));
             } else {
-                await Preferences.remove({ key: 'motorista_id' });
+                window.NativeStorage.remove('motorista_id');
             }
-            console.log("💾 [Capacitor] Tokens sincronizados com as Preferences nativas.");
+            console.log("💾 [NativeStorage] Tokens sincronizados com as Preferences nativas.");
         } catch (e) {
             console.error("Erro ao sincronizar com as Preferences nativas:", e);
         }
@@ -62,14 +61,13 @@ async function syncToNativePreferences() {
 }
 
 async function restaurarTokensDePreferences() {
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences) {
-        const Preferences = window.Capacitor.Plugins.Preferences;
+    if (window.NativeStorage) {
         try {
-            const { value: refresh } = await Preferences.get({ key: 'refreshToken' });
-            const { value: access } = await Preferences.get({ key: 'accessToken' });
-            const { value: motoristaId } = await Preferences.get({ key: 'motorista_id' });
+            const refresh = window.NativeStorage.get('refreshToken');
+            const access = window.NativeStorage.get('accessToken');
+            const motoristaId = window.NativeStorage.get('motorista_id');
             if (refresh) {
-                console.log("🔄 [Capacitor Recovery] Tokens restaurados de Preferences nativas!");
+                console.log("🔄 [Native Recovery] Tokens restaurados de Preferences nativas!");
                 localStorage.setItem('refreshToken', refresh);
                 if (access) localStorage.setItem('accessToken', access);
                 if (motoristaId) localStorage.setItem('motorista_id', motoristaId);
@@ -216,8 +214,8 @@ function logout() {
     localStorage.clear();
     clearTokenCookies(); // Limpa cookies de backup também
     // Limpa Preferences nativas do Capacitor
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences) {
-        window.Capacitor.Plugins.Preferences.clear().catch(e => console.error(e));
+    if (window.NativeStorage) {
+        window.NativeStorage.clear();
     }
     if (!window.location.pathname.includes('/login/')) {
         window.location.href = '/login/';

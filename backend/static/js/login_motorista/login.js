@@ -133,8 +133,10 @@ form.addEventListener('submit', async (e) => {
             // 🔥 BUSCA MOTORISTA
             await carregarMotorista(data.access);
 
-            if (window.syncToNativePreferences) {
-                await window.syncToNativePreferences();
+            if (window.NativeStorage) {
+                window.NativeStorage.save('accessToken', data.access);
+                window.NativeStorage.save('refreshToken', data.refresh);
+                window.NativeStorage.save('motorista_id', localStorage.getItem('motorista_id') || '');
             }
 
             window.location.href = '/app/';
@@ -175,8 +177,10 @@ form.addEventListener('submit', async (e) => {
             localStorage.setItem('motorista_id', me.id);
             setTokenCookie('qt_motorista_id', me.id, 365);
 
-            if (window.syncToNativePreferences) {
-                await window.syncToNativePreferences();
+            if (window.NativeStorage) {
+                window.NativeStorage.save('accessToken', data.access);
+                window.NativeStorage.save('refreshToken', data.refresh);
+                window.NativeStorage.save('motorista_id', me.id);
             }
 
             window.location.href = '/app/';

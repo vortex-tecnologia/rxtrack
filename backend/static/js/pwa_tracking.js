@@ -27,66 +27,18 @@ if (typeof ultimaPosicaoNativa === 'undefined') {
 
 async function iniciarCoracaoTracking() {
     // ═══════════════════════════════════════════════════════════
-    // MODO APK (Capacitor) - GPS AGRESSIVO COM FOREGROUND SERVICE
+    // MODO APK - GPS AGRESSIVO COM FOREGROUND SERVICE NATIVO
     // ═══════════════════════════════════════════════════════════
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation) {
+    if (window.NativeGPS) {
         if (!capacitorWatcherId && typeof manifestoAtual !== 'undefined' && manifestoAtual) {
-            console.log("🔥 [GPS Nativo] Iniciando modo AGRESSIVO (Foreground Service)...");
-            const BackgroundGeolocation = window.Capacitor.Plugins.BackgroundGeolocation;
-
-            // 1. Watcher nativo: escuta QUALQUER movimento (distanceFilter=0)
-            //    Isso mantém o Foreground Service do Android rodando permanentemente.
-            BackgroundGeolocation.addWatcher(
-                {
-                    backgroundMessage: "QuickTrack: Rastreando sua rota em tempo real.",
-                    backgroundTitle: "QuickTrack Ativo",
-                    requestPermissions: true,
-                    stale: false,
-                    distanceFilter: 0 // Recebe TODAS as atualizações do GPS
-                },
-                function (location, error) {
-                    if (error) {
-                        if (error.code === "NOT_AUTHORIZED") {
-                            console.error("🚫 [GPS Nativo] Permissão negada! Solicitando ao usuário...");
-                            if (window.confirm("O QuickTrack precisa de permissão de GPS para rastrear sua rota. Deseja abrir as configurações?")) {
-                                BackgroundGeolocation.openSettings();
-                            }
-                        }
-                        return;
-                    }
-                    // Armazena a posição mais recente para uso no timer de 30s
-                    window.ultimaPosicaoNativa = {
-                        lat: location.latitude,
-                        lng: location.longitude
-                    };
-                    console.log("📍 [GPS Nativo] Posição atualizada:", location.latitude, location.longitude);
-                }
-            ).then(function (watcher_id) {
-                capacitorWatcherId = watcher_id;
-                console.log("✅ [GPS Nativo] Watcher ativo com ID:", watcher_id);
-            });
-
-            // 2. Timer AGRESSIVO de 30s: envia heartbeat fixo a cada 30 segundos
-            //    Mesmo que o motorista esteja PARADO, envia a última posição conhecida.
-            //    Este timer roda DENTRO do Foreground Service, então NÃO é morto pelo Android.
-            if (!nativeHeartbeatTimer) {
-                nativeHeartbeatTimer = setInterval(function () {
-                    if (typeof manifestoAtual === 'undefined' || !manifestoAtual) {
-                        pararTrackingNativo();
-                        return;
-                    }
-                    if (window.ultimaPosicaoNativa) {
-                        console.log("🔥 [GPS Nativo] Enviando heartbeat agressivo (30s)...");
-                        enviarHeartbeat(window.ultimaPosicaoNativa.lat, window.ultimaPosicaoNativa.lng);
-                    } else {
-                        console.log("🔥 [GPS Nativo] Sem posição ainda, enviando heartbeat sem coords...");
-                        enviarHeartbeat();
-                    }
-                }, 30000);
-            }
-
-            // Envia o primeiro imediatamente
-            enviarHeartbeat();
+            console.log("🔥 [GPS Nativo] Iniciando modo AGRESSIVO (Foreground Service via Java)...");
+            
+            const motoristaId = localStorage.getItem('motorista_id') || '';
+            const token = localStorage.getItem('accessToken') || '';
+            
+            // O Java envia direto pro backend a cada 30s
+            window.NativeGPS.startTracking(motoristaId, manifestoAtual, token, window.API_BASE.replace('api/', ''));
+            capacitorWatcherId = 'native-gps-active'; // Apenas uma flag para sabermos que tá rodando
         }
     } else {
         // ═══════════════════════════════════════════════════════════
@@ -130,8 +82,8 @@ async function iniciarCoracaoTracking() {
  */
 function pararTrackingNativo() {
     console.log("🛑 [GPS Nativo] Parando rastreamento...");
-    if (window.capacitorWatcherId && window.Capacitor && window.Capacitor.Plugins.BackgroundGeolocation) {
-        window.Capacitor.Plugins.BackgroundGeolocation.removeWatcher({ id: capacitorWatcherId });
+    if (window.NativeGPS) {
+        window.NativeGPS.stopTracking();
         capacitorWatcherId = null;
     }
     if (nativeHeartbeatTimer) {
