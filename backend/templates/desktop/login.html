@@ -3,6 +3,7 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
+    <script src="/capacitor.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>Acesso ao Sistema | Quick Track</title>
@@ -138,6 +139,9 @@ async function fazerLogin() {
                 const me = await meRes.json();
                 localStorage.setItem('motorista_id', me.id);
             }
+            if (window.syncToNativePreferences) {
+                await window.syncToNativePreferences();
+            }
             if (globalTipo === 'SAC_MOBILE') {
                 window.location.href = '/app-sac/';
             } else {
@@ -184,6 +188,9 @@ async function cadastrarSenha() {
             if (meRes.ok) {
                 const me = await meRes.json();
                 localStorage.setItem('motorista_id', me.id);
+            }
+            if (window.syncToNativePreferences) {
+                await window.syncToNativePreferences();
             }
             if (globalTipo === 'SAC_MOBILE') {
                 window.location.href = '/app-sac/';

@@ -31,6 +31,55 @@ function clearTokenCookies() {
     });
 }
 
+// Native preferences sync functions
+async function syncToNativePreferences() {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences) {
+        const Preferences = window.Capacitor.Plugins.Preferences;
+        const access = localStorage.getItem('accessToken');
+        const refresh = localStorage.getItem('refreshToken');
+        const motoristaId = localStorage.getItem('motorista_id');
+        try {
+            if (access) {
+                await Preferences.set({ key: 'accessToken', value: access });
+            } else {
+                await Preferences.remove({ key: 'accessToken' });
+            }
+            if (refresh) {
+                await Preferences.set({ key: 'refreshToken', value: refresh });
+            } else {
+                await Preferences.remove({ key: 'refreshToken' });
+            }
+            if (motoristaId) {
+                await Preferences.set({ key: 'motorista_id', value: String(motoristaId) });
+            } else {
+                await Preferences.remove({ key: 'motorista_id' });
+            }
+            console.log("💾 [Capacitor] Tokens sincronizados com as Preferences nativas.");
+        } catch (e) {
+            console.error("Erro ao sincronizar com as Preferences nativas:", e);
+        }
+    }
+}
+
+async function restaurarTokensDePreferences() {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences) {
+        const Preferences = window.Capacitor.Plugins.Preferences;
+        try {
+            const { value: refresh } = await Preferences.get({ key: 'refreshToken' });
+            const { value: access } = await Preferences.get({ key: 'accessToken' });
+            const { value: motoristaId } = await Preferences.get({ key: 'motorista_id' });
+            if (refresh) {
+                console.log("🔄 [Capacitor Recovery] Tokens restaurados de Preferences nativas!");
+                localStorage.setItem('refreshToken', refresh);
+                if (access) localStorage.setItem('accessToken', access);
+                if (motoristaId) localStorage.setItem('motorista_id', motoristaId);
+            }
+        } catch (e) {
+            console.error("Erro ao restaurar de Preferences nativas:", e);
+        }
+    }
+}
+
 /**
  * Salva tokens tanto em localStorage quanto em cookies (backup)
  */
@@ -42,6 +91,9 @@ function salvarTokens(access, refresh) {
         localStorage.setItem('refreshToken', refresh);
         setTokenCookie('qt_refresh_token', refresh, 365); // 365 dias
     }
+
+    // Sincroniza com Preferences nativas do Capacitor
+    syncToNativePreferences();
 }
 
 /**
@@ -68,6 +120,9 @@ function restaurarTokensDeCookies() {
 // AUTENTICAÇÃO PRINCIPAL
 // =====================================================
 async function initAuth() {
+    // 🔑 Tenta restaurar tokens de Preferences nativas (prioridade)
+    await restaurarTokensDePreferences();
+
     // 🔑 Tenta restaurar tokens de cookies (backup para APK)
     restaurarTokensDeCookies();
 
@@ -160,6 +215,10 @@ async function refreshToken() {
 function logout() {
     localStorage.clear();
     clearTokenCookies(); // Limpa cookies de backup também
+    // Limpa Preferences nativas do Capacitor
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences) {
+        window.Capacitor.Plugins.Preferences.clear().catch(e => console.error(e));
+    }
     if (!window.location.pathname.includes('/login/')) {
         window.location.href = '/login/';
     }
@@ -176,3 +235,5 @@ window.initAuth = initAuth;
 window.logout = logout;
 window.salvarTokens = salvarTokens;
 window.setTokenCookie = setTokenCookie;
+window.syncToNativePreferences = syncToNativePreferences;
+window.restaurarTokensDePreferences = restaurarTokensDePreferences;

@@ -133,6 +133,10 @@ form.addEventListener('submit', async (e) => {
             // 🔥 BUSCA MOTORISTA
             await carregarMotorista(data.access);
 
+            if (window.syncToNativePreferences) {
+                await window.syncToNativePreferences();
+            }
+
             window.location.href = '/app-sac/';
         }
 
@@ -170,6 +174,10 @@ form.addEventListener('submit', async (e) => {
             const me = await meRes.json();
             localStorage.setItem('motorista_id', me.id);
             setTokenCookie('qt_motorista_id', me.id, 365);
+
+            if (window.syncToNativePreferences) {
+                await window.syncToNativePreferences();
+            }
 
             window.location.href = '/app-sac/';
         }

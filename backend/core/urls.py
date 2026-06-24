@@ -4,9 +4,11 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static # Necessário para arquivos de mídia
 from django.views.generic import RedirectView
+from django.http import HttpResponse
 from usuarios.views_login.auth_views import login_sac_mobile_view
 
 urlpatterns = [
+    path('capacitor.js', lambda r: HttpResponse("", content_type="application/javascript")),
     # Redireciona a raiz (/) para /login/
     path('', RedirectView.as_view(url='/login/', permanent=True)),
     path('admin/', admin.site.urls),

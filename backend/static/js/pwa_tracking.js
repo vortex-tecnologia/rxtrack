@@ -1,6 +1,10 @@
 /**
  * pwa_tracking.js - Lógica isolada de rastreamento (Heartbeat)
  * Responsável por coletar GPS, bateria e sinal e enviar via WebSocket ou REST API.
+ * 
+ * MODO AGRESSIVO (estilo Uber/iFood/Waze):
+ * - No APK: Foreground Service nativo + loop de 30s que NUNCA para em background
+ * - No PWA: setInterval de 30s (funciona enquanto a aba estiver aberta)
  */
 
 if (typeof heartbeatInterval === 'undefined') {
@@ -12,44 +16,91 @@ if (typeof socketTracking === 'undefined') {
 if (typeof capacitorWatcherId === 'undefined') {
     window.capacitorWatcherId = null;
 }
+// Timer agressivo de 30s que roda JUNTO com o watcher nativo
+if (typeof nativeHeartbeatTimer === 'undefined') {
+    window.nativeHeartbeatTimer = null;
+}
+// Cache da última posição recebida pelo GPS nativo
+if (typeof ultimaPosicaoNativa === 'undefined') {
+    window.ultimaPosicaoNativa = null;
+}
 
 async function iniciarCoracaoTracking() {
-    // Se o app estiver rodando via APK (Capacitor), usamos o serviço de fundo nativo.
+    // ═══════════════════════════════════════════════════════════
+    // MODO APK (Capacitor) - GPS AGRESSIVO COM FOREGROUND SERVICE
+    // ═══════════════════════════════════════════════════════════
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation) {
         if (!capacitorWatcherId && typeof manifestoAtual !== 'undefined' && manifestoAtual) {
-            console.log("💓 [PWA Tracking] Iniciando Background Geolocation Nativo...");
+            console.log("🔥 [GPS Nativo] Iniciando modo AGRESSIVO (Foreground Service)...");
             const BackgroundGeolocation = window.Capacitor.Plugins.BackgroundGeolocation;
+
+            // 1. Watcher nativo: escuta QUALQUER movimento (distanceFilter=0)
+            //    Isso mantém o Foreground Service do Android rodando permanentemente.
             BackgroundGeolocation.addWatcher(
                 {
-                    backgroundMessage: "Rastreando sua rota para o manifesto ativo.",
-                    backgroundTitle: "QuickTrack",
+                    backgroundMessage: "QuickTrack: Rastreando sua rota em tempo real.",
+                    backgroundTitle: "QuickTrack Ativo",
                     requestPermissions: true,
                     stale: false,
-                    distanceFilter: 50 // Atualiza a cada 50 metros percorridos
+                    distanceFilter: 0 // Recebe TODAS as atualizações do GPS
                 },
                 function (location, error) {
                     if (error) {
-                        console.error("❌ [PWA Tracking] Erro no BackgroundGeolocation:", error);
+                        if (error.code === "NOT_AUTHORIZED") {
+                            console.error("🚫 [GPS Nativo] Permissão negada! Solicitando ao usuário...");
+                            if (window.confirm("O QuickTrack precisa de permissão de GPS para rastrear sua rota. Deseja abrir as configurações?")) {
+                                BackgroundGeolocation.openSettings();
+                            }
+                        }
                         return;
                     }
-                    console.log("💓 [PWA Tracking] GPS Nativo disparado:", location.latitude, location.longitude);
-                    enviarHeartbeat(location.latitude, location.longitude);
+                    // Armazena a posição mais recente para uso no timer de 30s
+                    window.ultimaPosicaoNativa = {
+                        lat: location.latitude,
+                        lng: location.longitude
+                    };
+                    console.log("📍 [GPS Nativo] Posição atualizada:", location.latitude, location.longitude);
                 }
             ).then(function (watcher_id) {
                 capacitorWatcherId = watcher_id;
+                console.log("✅ [GPS Nativo] Watcher ativo com ID:", watcher_id);
             });
+
+            // 2. Timer AGRESSIVO de 30s: envia heartbeat fixo a cada 30 segundos
+            //    Mesmo que o motorista esteja PARADO, envia a última posição conhecida.
+            //    Este timer roda DENTRO do Foreground Service, então NÃO é morto pelo Android.
+            if (!nativeHeartbeatTimer) {
+                nativeHeartbeatTimer = setInterval(function () {
+                    if (typeof manifestoAtual === 'undefined' || !manifestoAtual) {
+                        pararTrackingNativo();
+                        return;
+                    }
+                    if (window.ultimaPosicaoNativa) {
+                        console.log("🔥 [GPS Nativo] Enviando heartbeat agressivo (30s)...");
+                        enviarHeartbeat(window.ultimaPosicaoNativa.lat, window.ultimaPosicaoNativa.lng);
+                    } else {
+                        console.log("🔥 [GPS Nativo] Sem posição ainda, enviando heartbeat sem coords...");
+                        enviarHeartbeat();
+                    }
+                }, 30000);
+            }
+
             // Envia o primeiro imediatamente
             enviarHeartbeat();
         }
     } else {
-        // Fallback web tradicional
+        // ═══════════════════════════════════════════════════════════
+        // MODO PWA (Navegador) - Fallback tradicional com setInterval
+        // ═══════════════════════════════════════════════════════════
         if (!heartbeatInterval && typeof manifestoAtual !== 'undefined' && manifestoAtual) {
             heartbeatInterval = setInterval(enviarHeartbeat, 30000);
             enviarHeartbeat(); // Envia o primeiro imediatamente
         }
     }
 
-    // Tenta conectar o WebSocket para real-time leve (se não estiver conectado)
+    // ═══════════════════════════════════════════════════════════
+    // WEBSOCKET - Conexão real-time para painel (ambos os modos)
+    // ═══════════════════════════════════════════════════════════
     if (!socketTracking && typeof manifestoAtual !== 'undefined' && manifestoAtual) {
         const token = localStorage.getItem('accessToken');
         const ws_scheme = window.location.protocol === "https:" ? "wss" : "ws";
@@ -74,6 +125,22 @@ async function iniciarCoracaoTracking() {
     }
 }
 
+/**
+ * Para completamente o rastreamento nativo (chamado quando manifesto finaliza)
+ */
+function pararTrackingNativo() {
+    console.log("🛑 [GPS Nativo] Parando rastreamento...");
+    if (window.capacitorWatcherId && window.Capacitor && window.Capacitor.Plugins.BackgroundGeolocation) {
+        window.Capacitor.Plugins.BackgroundGeolocation.removeWatcher({ id: capacitorWatcherId });
+        capacitorWatcherId = null;
+    }
+    if (nativeHeartbeatTimer) {
+        clearInterval(nativeHeartbeatTimer);
+        nativeHeartbeatTimer = null;
+    }
+    window.ultimaPosicaoNativa = null;
+}
+
 async function enviarHeartbeat(overrideLat = null, overrideLng = null) {
     // Auto-limpeza caso o manifesto seja finalizado ou limpo
     if (typeof manifestoAtual === 'undefined' || !manifestoAtual) {
@@ -82,10 +149,7 @@ async function enviarHeartbeat(overrideLat = null, overrideLng = null) {
             clearInterval(heartbeatInterval);
             heartbeatInterval = null;
         }
-        if (window.capacitorWatcherId && window.Capacitor && window.Capacitor.Plugins.BackgroundGeolocation) {
-            window.Capacitor.Plugins.BackgroundGeolocation.removeWatcher({ id: capacitorWatcherId });
-            capacitorWatcherId = null;
-        }
+        pararTrackingNativo();
         if (socketTracking) {
             socketTracking.close();
             socketTracking = null;
@@ -98,7 +162,7 @@ async function enviarHeartbeat(overrideLat = null, overrideLng = null) {
         let lng = overrideLng;
 
         if (lat === null || lng === null) {
-            console.log("💓 [PWA Tracking] Obtendo localização...");
+            console.log("💓 [PWA Tracking] Obtendo localização via navegador...");
             const coords = await getCoords();
             lat = coords ? coords.lat : null;
             lng = coords ? coords.lon : null;
@@ -130,7 +194,7 @@ async function enviarHeartbeat(overrideLat = null, overrideLng = null) {
 
         if (socketTracking && socketTracking.readyState === WebSocket.OPEN) {
             socketTracking.send(JSON.stringify(payload));
-            console.log("💓 [PWA Tracking] Heartbeat enviado via WS");
+            console.log("💓 [PWA Tracking] Heartbeat enviado via WS", lat, lng);
         } else {
             console.log("💓 [PWA Tracking] WS offline. Enviando via REST...");
             const url = `${window.API_BASE}manifesto/app/tracking-heartbeat/`;
@@ -139,7 +203,7 @@ async function enviarHeartbeat(overrideLat = null, overrideLng = null) {
                 body: JSON.stringify(payload)
             });
             if (response && response.ok) {
-                console.log("💓 [PWA Tracking] Heartbeat enviado via REST com sucesso");
+                console.log("💓 [PWA Tracking] Heartbeat enviado via REST com sucesso", lat, lng);
             } else {
                 console.warn("💓 [PWA Tracking] Falha ao enviar via REST:", response ? response.status : 'sem resposta');
             }
@@ -153,4 +217,3 @@ async function enviarHeartbeat(overrideLat = null, overrideLng = null) {
 if (typeof manifestoAtual !== 'undefined' && manifestoAtual) {
     iniciarCoracaoTracking();
 }
-
