@@ -69,11 +69,15 @@ async function restaurarTokensDePreferences() {
             const refresh = window.NativeStorage.get('refreshToken');
             const access = window.NativeStorage.get('accessToken');
             const motoristaId = window.NativeStorage.get('motorista_id');
-            if (refresh) {
+            
+            // ALERT DE DEBUG 2
+            alert("Refresh do NativeStorage: " + refresh);
+
+            if (refresh && refresh !== "null" && refresh !== "undefined") {
                 console.log("🔄 [Native Recovery] Tokens restaurados de Preferences nativas!");
                 localStorage.setItem('refreshToken', refresh);
-                if (access) localStorage.setItem('accessToken', access);
-                if (motoristaId) localStorage.setItem('motorista_id', motoristaId);
+                if (access && access !== "null") localStorage.setItem('accessToken', access);
+                if (motoristaId && motoristaId !== "null") localStorage.setItem('motorista_id', motoristaId);
             }
         } catch (e) {
             console.error("Erro ao restaurar de Preferences nativas:", e);
