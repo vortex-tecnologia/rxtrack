@@ -2,7 +2,7 @@
   "name": "Fluxo Logística",
   "short_name": "Fluxo",
   "start_url": "/app/",
-  "scope": "/",
+  "scope": "/app/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#0A1AFF",

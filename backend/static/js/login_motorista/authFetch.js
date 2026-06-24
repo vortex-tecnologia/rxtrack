@@ -134,9 +134,15 @@ async function initAuth() {
 
     const refreshed = await refreshToken();
 
-    if (!refreshed) {
+    if (refreshed === false) {
+        // O servidor confirmou que o token é inválido (401)
         logout();
         return false;
+    } else if (refreshed === null) {
+        // Falha de rede (sem internet ou servidor fora do ar)
+        // Não apagamos os tokens locais. Deixamos a pessoa tentar usar o PWA offline.
+        console.warn("Sem internet para validar o token. Mantendo sessão ativa.");
+        return true;
     }
 
     return true;
@@ -204,7 +210,8 @@ async function refreshToken() {
         console.error("Refresh falhou no servidor:", await res.text());
         return false;
     } catch (err) {
-        return false;
+        console.error("Erro de rede no refreshToken. Offline?", err);
+        return null; // Retorna null indicando problema de conexão, e não erro 401
     }
 }
 
