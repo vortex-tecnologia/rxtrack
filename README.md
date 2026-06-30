@@ -267,3 +267,23 @@ docker-compose up -d
    - Geradas migrações de banco no app `configuracao` e `manifesto`.
    - Ajustadas as dependências no ambiente virtual da VPS de modo a assegurar total estabilidade dos pacotes de segurança (`cryptography` e `pyopenssl`).
 
+---
+
+**Data:** 30/06/2026
+**Hora:** 17:15
+
+## Exclusão de Notas Fiscais Pendentes (Painel Operacional):
+
+1. **Nova Rota de Exclusão de NF-e (`DELETE`):**
+   - Criada a view `deletar_nota_fiscal_view` em [views.py](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/operacional/views.py) com proteção por `@login_required`, `@apenas_operacional` e `@require_POST`.
+   - Registrada a rota `api/nota-fiscal/deletar/<nota_id>/` em [urls.py](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/operacional/urls.py).
+
+2. **Regra de Negócio (Segurança):**
+   - A exclusão é permitida **exclusivamente** para notas com status `PENDENTE`.
+   - Notas com status `BAIXADA` ou `OCORRENCIA` são bloqueadas pelo backend (retorno HTTP 403), independentemente de qualquer tentativa via interface ou API direta.
+   - No Django Admin, a exclusão de qualquer nota continua liberada normalmente para administradores.
+
+3. **Interface (Frontend):**
+   - Adicionado botão de exclusão (ícone lixeira vermelha) na coluna de ações da tabela de NF-e em [notas_fiscais.html](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/templates/desktop/paginas/notas_fiscais.html), visível apenas ao lado de notas pendentes.
+   - Modal de confirmação com feedback visual (loading, sucesso e erro), seguindo o mesmo padrão de UX dos modais de sincronização TMS já existentes.
+

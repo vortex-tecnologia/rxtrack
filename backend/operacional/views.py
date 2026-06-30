@@ -626,6 +626,39 @@ def deletar_manifesto_operacional_view(request, manifesto_id):
             'success': False,
             'message': f'Houve um erro ao deletar: {str(e)}'
         }, status=500)
+
+
+@login_required
+@apenas_operacional
+@require_POST
+def deletar_nota_fiscal_view(request, nota_id):
+    """
+    Deleta uma Nota Fiscal SOMENTE se ela estiver com status PENDENTE.
+    Notas já baixadas ou com ocorrência NÃO podem ser deletadas pelo painel operacional.
+    """
+    nota = get_object_or_404(NotaFiscal, id=nota_id)
+    
+    try:
+        # REGRA DE NEGÓCIO: Apenas notas PENDENTES podem ser deletadas
+        if nota.status != 'PENDENTE':
+            return JsonResponse({
+                'success': False,
+                'message': f'A nota NF {nota.numero_nota} possui status "{nota.get_status_display()}" e não pode ser deletada. Apenas notas com status Pendente podem ser removidas.'
+            }, status=403)
+        
+        numero = nota.numero_nota
+        manifesto_num = nota.manifesto.numero_manifesto
+        nota.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Nota Fiscal {numero} (Manifesto #{manifesto_num}) deletada com sucesso.'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': f'Erro ao deletar a nota: {str(e)}'
+        }, status=500)
     
 
 from datetime import datetime, time

@@ -152,6 +152,9 @@
                                 <button class="btn btn-sm btn-warning" onclick="abrirModalBaixa('{{ nota.id }}', '{{ nota.numero_nota }}')" title="Registrar Baixa Manual">
                                     <i class="bi bi-journal-plus"></i>
                                 </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="confirmarDeletarNota('{{ nota.id }}', '{{ nota.numero_nota }}')" title="Deletar Nota Pendente">
+                                    <i class="bi bi-trash"></i>
+                                </button>
                                 {% endif %}
                                 
                                 {% with baixa=nota.ultima_baixa %}
@@ -444,6 +447,48 @@
     </div>
 </div>
 
+<!-- Modal Confirmar Exclusão de Nota Fiscal -->
+<div class="modal fade" id="modalDeletarNota" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-exclamation-triangle-fill me-2"></i>Confirmar Exclusão</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4 text-center" id="corpoModalDeletar">
+                <div id="deletar-confirmacao">
+                    <i class="bi bi-trash text-danger" style="font-size: 3rem;"></i>
+                    <h5 class="mt-3 fw-bold">Deseja realmente deletar esta nota?</h5>
+                    <div class="bg-light p-3 rounded border my-3">
+                        <small class="text-muted d-block">NF-e</small>
+                        <strong class="fs-5 text-danger" id="deletarNumeroNfe"></strong>
+                    </div>
+                    <p class="text-muted small">Esta ação é <strong>irreversível</strong>. A nota será removida permanentemente do sistema.</p>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-secondary flex-fill py-2 fw-bold" data-bs-dismiss="modal">CANCELAR</button>
+                        <button class="btn btn-danger flex-fill py-2 fw-bold" id="btnConfirmarDeletar">
+                            <i class="bi bi-trash me-1"></i>SIM, DELETAR
+                        </button>
+                    </div>
+                </div>
+
+                <div id="deletar-loading" style="display: none;">
+                    <div class="spinner-border text-danger" style="width: 3rem; height: 3rem;" role="status"></div>
+                    <h5 class="mt-4 fw-bold text-danger">Removendo nota...</h5>
+                    <p class="text-muted">Aguarde enquanto a nota é excluída.</p>
+                </div>
+
+                <div id="deletar-resultado" style="display: none;">
+                    <div id="deletar-icon"></div>
+                    <h5 class="mt-3 fw-bold" id="deletar-titulo"></h5>
+                    <p class="text-muted" id="deletar-mensagem"></p>
+                    <button class="btn btn-dark px-4" data-bs-dismiss="modal">FECHAR</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     function sincronizarTMS(notaId) {
     const modalSync = new bootstrap.Modal(document.getElementById('modalSincronizar'));
@@ -620,6 +665,72 @@ function enviarBaixaManual() {
         document.getElementById('baixaLoading').classList.add('d-none');
         feedback.innerText = "Erro de conexão.";
         feedback.classList.remove('d-none');
+    });
+}
+
+/**
+ * Funções para Deletar Nota Fiscal Pendente
+ */
+function confirmarDeletarNota(notaId, numeroNfe) {
+    const modal = new bootstrap.Modal(document.getElementById('modalDeletarNota'));
+    
+    // Reseta estado do modal
+    document.getElementById('deletar-confirmacao').style.display = 'block';
+    document.getElementById('deletar-loading').style.display = 'none';
+    document.getElementById('deletar-resultado').style.display = 'none';
+    document.getElementById('deletarNumeroNfe').innerText = `NF: ${numeroNfe}`;
+    
+    // Configura ação do botão confirmar
+    document.getElementById('btnConfirmarDeletar').onclick = function() {
+        executarDeletarNota(notaId);
+    };
+    
+    modal.show();
+}
+
+function executarDeletarNota(notaId) {
+    const stepConf = document.getElementById('deletar-confirmacao');
+    const stepLoad = document.getElementById('deletar-loading');
+    const stepRes = document.getElementById('deletar-resultado');
+    
+    stepConf.style.display = 'none';
+    stepLoad.style.display = 'block';
+    
+    fetch(`/api/nota-fiscal/deletar/${notaId}/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        stepLoad.style.display = 'none';
+        stepRes.style.display = 'block';
+        
+        const iconDiv = document.getElementById('deletar-icon');
+        const titulo = document.getElementById('deletar-titulo');
+        const mensagem = document.getElementById('deletar-mensagem');
+        
+        if (data.success) {
+            iconDiv.innerHTML = '<i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>';
+            titulo.innerText = 'Nota Removida!';
+            titulo.className = 'mt-3 fw-bold text-success';
+            mensagem.innerText = data.message;
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            iconDiv.innerHTML = '<i class="bi bi-x-circle-fill text-danger" style="font-size: 3rem;"></i>';
+            titulo.innerText = 'Não foi possível deletar';
+            titulo.className = 'mt-3 fw-bold text-danger';
+            mensagem.innerText = data.message;
+        }
+    })
+    .catch(error => {
+        stepLoad.style.display = 'none';
+        stepRes.style.display = 'block';
+        document.getElementById('deletar-icon').innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning" style="font-size: 3rem;"></i>';
+        document.getElementById('deletar-titulo').innerText = 'Erro de Conexão';
+        document.getElementById('deletar-mensagem').innerText = 'Não foi possível contatar o servidor.';
     });
 }
 </script>
