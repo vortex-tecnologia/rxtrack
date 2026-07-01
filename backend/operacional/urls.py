@@ -42,4 +42,5 @@ urlpatterns = [
     # Configurações do Sistema
     path('configuracao/', views.ConfiguracaoSistemaView.as_view(), name='configuracao_sistema'),
     path('api/configuracao/salvar/', views.salvar_configuracao_view, name='salvar_configuracao'),
+    path('api/configuracao/buscar-grupos-whatsapp/', views.buscar_grupos_whatsapp_view, name='buscar_grupos_whatsapp'),
 ]

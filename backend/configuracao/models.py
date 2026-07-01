@@ -116,6 +116,13 @@ class ConfiguracaoSistema(models.Model):
         verbose_name="⚙️ Configuração JSON do TMS",
         help_text="Parâmetros de configuração extras específicos para o TMS (ex: tokens secundários, credenciais, etc)."
     )
+    
+    grupos_relatorio_whatsapp = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Grupos para Relatório Diário",
+        help_text="Lista de JIDs dos grupos de WhatsApp separados por vírgula que receberão o relatório 22h."
+    )
 
     # ===== CÓDIGOS DE OCORRÊNCIA QUE ATIVAM A IA =====
     codigos_ocorrencia_yolo = models.CharField(

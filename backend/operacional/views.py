@@ -1104,6 +1104,9 @@ def salvar_configuracao_view(request):
         # IA
         config.codigos_ocorrencia_yolo = data.get('codigos_ocorrencia_yolo', config.codigos_ocorrencia_yolo)
         
+        # WhatsApp Relatórios
+        config.grupos_relatorio_whatsapp = data.get('grupos_relatorio_whatsapp', config.grupos_relatorio_whatsapp)
+        
         config.save()
         return JsonResponse({'status': 'sucesso', 'message': 'Configurações salvas com sucesso!'})
         
@@ -1154,3 +1157,47 @@ def enviar_redefinicao_senha_view(request, motorista_id):
         return JsonResponse({'success': False, 'message': 'Motorista não encontrado.'}, status=404)
     except Exception as e:
         return JsonResponse({'success': False, 'message': f'Erro ao enviar e-mail: {str(e)}'}, status=500)
+
+
+@login_required(login_url='/login/')
+@apenas_operacional
+def buscar_grupos_whatsapp_view(request):
+    """
+    Lista todos os grupos do WhatsApp da Evolution API para exibir no painel.
+    """
+    from whatsbot.registry import get_whatsapp_adapter
+    from base.models import Filial
+    
+    try:
+        # Pega a primeira filial configurada para buscar os grupos
+        # (Idealmente você pode pegar do tenant/filial logado)
+        filial = Filial.objects.filter(ativo=True).first()
+        if not filial:
+            return JsonResponse({'status': 'erro', 'message': 'Nenhuma filial configurada.'}, status=400)
+            
+        adapter = get_whatsapp_adapter(filial)
+        if not adapter:
+            return JsonResponse({'status': 'erro', 'message': 'WhatsApp não configurado.'}, status=400)
+            
+        grupos_dados = adapter.buscar_grupos()
+        
+        # Pode vir direto um array ou um dict
+        if isinstance(grupos_dados, dict) and "data" in grupos_dados:
+            grupos = grupos_dados["data"]
+        elif isinstance(grupos_dados, list):
+            grupos = grupos_dados
+        else:
+            grupos = []
+            
+        lista_formatada = []
+        for g in grupos:
+            lista_formatada.append({
+                "id": g.get("id", ""),
+                "subject": g.get("subject", "Grupo Sem Nome"),
+                "participants_count": len(g.get("participants", [])) if isinstance(g.get("participants"), list) else g.get("participants", 0),
+            })
+            
+        return JsonResponse({'status': 'sucesso', 'grupos': lista_formatada})
+        
+    except Exception as e:
+        return JsonResponse({'status': 'erro', 'message': str(e)}, status=400)

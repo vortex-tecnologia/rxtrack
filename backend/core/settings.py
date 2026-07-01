@@ -122,6 +122,11 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'whatsbot.tasks.bot_lembrete_finalizacao_20h',
         'schedule': crontab(hour=20, minute=0),
     },
+    # Relatório diário da operação enviado aos Grupos
+    'bot-relatorio-diario-22h': {
+        'task': 'whatsbot.tasks.bot_relatorio_diario_grupos',
+        'schedule': crontab(hour=22, minute=0),
+    },
 }
 
 CHANNEL_LAYERS = {

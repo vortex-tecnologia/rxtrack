@@ -136,9 +136,9 @@
         </div>
     </div>
 
-    <!-- 4. AGENTE IA -->
+    <!-- 4. AGENTE IA E GRUPOS WHATSAPP -->
     <div class="col-md-4">
-        <div class="card border-0 shadow-sm h-100">
+        <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white border-bottom py-3">
                 <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-robot me-2"></i>🤖 Agente IA</h6>
             </div>
@@ -151,6 +151,55 @@
                         Apenas baixas com estes códigos de amarrada serão processadas pela IA.
                     </p>
                 </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="fw-bold mb-0 text-success"><i class="bi bi-whatsapp me-2"></i>📱 Relatórios no WhatsApp</h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted">JIDs dos Grupos (Relatório 22h)</label>
+                    <textarea id="grupos_relatorio_whatsapp" class="form-control form-control-sm mb-2" rows="3" placeholder="JID do grupo. Ex: 12036...1923@g.us" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>{{ config.grupos_relatorio_whatsapp }}</textarea>
+                    
+                    {% if cargo == 'GESTOR' or cargo == 'ADMINISTRADOR' %}
+                    <button type="button" class="btn btn-sm btn-outline-success w-100" onclick="buscarGruposWhatsapp()">
+                        <i class="bi bi-search me-1"></i> Buscar Grupos Conectados
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL DE GRUPOS DO WHATSAPP -->
+<div class="modal fade" id="modalGruposWhatsapp" tabindex="-1">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold text-success"><i class="bi bi-whatsapp me-2"></i>Grupos Conectados</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="loadingGrupos" class="text-center py-4">
+                    <div class="spinner-border text-success" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="text-muted mt-2 small">Buscando grupos na Evolution API...</p>
+                </div>
+                
+                <div id="listaGrupos" class="d-none">
+                    <p class="text-muted small mb-3">Selecione os grupos que deseja adicionar à lista de relatórios diários (22h):</p>
+                    <div class="list-group list-group-flush" id="gruposContainer">
+                        <!-- Renderizado via JS -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-success" onclick="aplicarGruposSelecionados()">Adicionar Selecionados</button>
             </div>
         </div>
     </div>
@@ -212,6 +261,7 @@
             emails_notificacao: document.getElementById('emails_notificacao').value,
             armazenar_foto_backup: document.getElementById('armazenar_foto_backup').checked,
             codigos_ocorrencia_yolo: document.getElementById('codigos_ocorrencia_yolo').value,
+            grupos_relatorio_whatsapp: document.getElementById('grupos_relatorio_whatsapp').value,
         };
 
         // Se o valor do token ainda tiver asteriscos, não enviamos ele (manter o original)
@@ -255,6 +305,82 @@
                 text: 'Falha na comunicação com o servidor.'
             });
         }
+    }
+
+    // ===== FUNÇÕES DE GRUPOS DO WHATSAPP =====
+    let modalGrupos = null;
+
+    async function buscarGruposWhatsapp() {
+        if (!modalGrupos) {
+            modalGrupos = new bootstrap.Modal(document.getElementById('modalGruposWhatsapp'));
+        }
+        
+        document.getElementById('loadingGrupos').classList.remove('d-none');
+        document.getElementById('listaGrupos').classList.add('d-none');
+        document.getElementById('gruposContainer').innerHTML = '';
+        
+        modalGrupos.show();
+
+        try {
+            const response = await fetch("{% url 'operacional:buscar_grupos_whatsapp' %}");
+            const data = await response.json();
+
+            if (data.status === 'sucesso') {
+                const container = document.getElementById('gruposContainer');
+                
+                if (data.grupos.length === 0) {
+                    container.innerHTML = '<div class="alert alert-warning">Nenhum grupo encontrado nesta conexão.</div>';
+                } else {
+                    data.grupos.forEach(g => {
+                        const html = `
+                        <label class="list-group-item d-flex justify-content-between align-items-center list-group-item-action cursor-pointer">
+                            <div>
+                                <h6 class="my-0 fw-bold">${g.subject}</h6>
+                                <small class="text-muted">${g.participants_count} participantes | ID: ${g.id}</small>
+                            </div>
+                            <div class="form-check form-switch ms-3">
+                                <input class="form-check-input fs-4 chk-grupo" type="checkbox" role="switch" value="${g.id}">
+                            </div>
+                        </label>`;
+                        container.innerHTML += html;
+                    });
+                }
+                
+                document.getElementById('loadingGrupos').classList.add('d-none');
+                document.getElementById('listaGrupos').classList.remove('d-none');
+            } else {
+                modalGrupos.hide();
+                Swal.fire('Ops!', data.message, 'error');
+            }
+        } catch (e) {
+            modalGrupos.hide();
+            Swal.fire('Erro', 'Falha ao buscar grupos.', 'error');
+        }
+    }
+
+    function aplicarGruposSelecionados() {
+        const checkboxes = document.querySelectorAll('.chk-grupo:checked');
+        const selecionados = Array.from(checkboxes).map(chk => chk.value);
+        
+        if (selecionados.length === 0) {
+            Swal.fire('Aviso', 'Nenhum grupo selecionado.', 'warning');
+            return;
+        }
+
+        const textArea = document.getElementById('grupos_relatorio_whatsapp');
+        let jidsAtuais = textArea.value.split(',').map(s => s.trim()).filter(s => s !== '');
+        
+        // Adiciona apenas se não existir
+        selecionados.forEach(jid => {
+            if (!jidsAtuais.includes(jid)) {
+                jidsAtuais.push(jid);
+            }
+        });
+        
+        textArea.value = jidsAtuais.join(', ');
+        
+        modalGrupos.hide();
+        Swal.fire('Pronto!', 'JIDs adicionados. Não esqueça de Salvar as Alterações.', 'success');
     }
 </script>
 {% endblock %}

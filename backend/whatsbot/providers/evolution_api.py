@@ -96,3 +96,25 @@ class EvolutionAPIAdapter(BaseWhatsAppAdapter):
                 f"{self.instancia.nome_instancia}: {e}"
             )
             return False
+
+    def buscar_grupos(self):
+        """
+        Busca todos os grupos em que a instância está conectada.
+        GET {base_url}/group/fetchAllGroups/{instanceName}?getParticipants=false
+        """
+        url = f"{self._get_base_url()}/group/fetchAllGroups/{self.instancia.nome_instancia}?getParticipants=false"
+
+        try:
+            response = requests.get(
+                url,
+                headers=self._get_headers(),
+                timeout=15
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(
+                f"❌ Erro ao buscar grupos da instância "
+                f"{self.instancia.nome_instancia}: {e}"
+            )
+            return []

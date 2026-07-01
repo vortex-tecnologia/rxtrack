@@ -636,3 +636,126 @@ def bot_lembrete_finalizacao_20h(self):
     except Exception as e:
         logger.error(f"❌ Erro fatal no bot de lembrete: {e}")
         raise self.retry(exc=e, countdown=300)
+
+
+# =====================================================================
+# RELATÓRIO DIÁRIO (22:00) PARA GRUPOS
+# =====================================================================
+
+def _executar_relatorio_grupos():
+    from manifesto.models import Manifesto
+    from base.models import Filial
+    from configuracao.models import ConfiguracaoSistema
+    from whatsbot.registry import get_whatsapp_adapter
+    from django.utils import timezone
+    
+    config = ConfiguracaoSistema.load()
+    grupos_str = config.grupos_relatorio_whatsapp.strip()
+    
+    if not grupos_str:
+        return 0
+        
+    grupos_lista = [g.strip() for g in grupos_str.split(',') if g.strip()]
+    
+    hoje = timezone.now().date()
+    
+    filiais = Filial.objects.filter(ativo=True)
+    total_envios = 0
+    
+    for filial in filiais:
+        adapter = get_whatsapp_adapter(filial)
+        if not adapter:
+            continue
+            
+        manifestos = Manifesto.objects.filter(
+            filial=filial, 
+            data_criacao__date=hoje
+        ).prefetch_related('notas_fiscais')
+        
+        if not manifestos.exists():
+            continue
+            
+        mensagens_mft = []
+        
+        for mft in manifestos:
+            nome_motorista = mft.motorista.nome_completo if mft.motorista else "Sem motorista"
+            
+            # Conta tipos
+            total_notas = mft.notas_fiscais.filter(tipo__in=['ENTREGA', 'PROBLEMA']).count()
+            total_coletas = mft.notas_fiscais.filter(tipo='COLETA').count()
+            
+            notas_baixadas = mft.notas_fiscais.filter(tipo__in=['ENTREGA', 'PROBLEMA'], status='BAIXADA').count()
+            coletas_baixadas = mft.notas_fiscais.filter(tipo='COLETA', status='BAIXADA').count()
+            
+            falta_notas = total_notas - notas_baixadas
+            falta_coletas = total_coletas - coletas_baixadas
+            
+            status_str = ""
+            if mft.status == 'FINALIZADO':
+                status_str = "✅ *Status:* Finalizado perfeitamente!"
+            else:
+                detalhes_falta = []
+                if falta_notas > 0:
+                    detalhes_falta.append(f"{falta_notas} notas")
+                if falta_coletas > 0:
+                    detalhes_falta.append(f"{falta_coletas} coletas")
+                
+                texto_falta = " e ".join(detalhes_falta)
+                status_str = f"⚠️ *Status:* Não finalizado até o momento. Falta finalizar {texto_falta}."
+            
+            mft_texto = (
+                f"📦 *Manifesto {mft.numero_manifesto}*\n"
+                f"👤 *Motorista:* {nome_motorista}\n"
+                f"📝 *Notas:* {total_notas} | 🔄 *Coletas:* {total_coletas}\n"
+                f"{status_str}"
+            )
+            mensagens_mft.append(mft_texto)
+            
+        if not mensagens_mft:
+            continue
+            
+        tms_nome = dict(ConfiguracaoSistema.TMS_CHOICES).get(config.tms_provider, "TMS")
+        
+        rodape = (
+            f"\n\n🤖 _Esta mensagem é automática do sistema de entregas._\n"
+            f"_Os manifestos finalizados no aplicativo com todas as notas e coletas registradas foram finalizados também no {tms_nome}, porém os km finais não foram registrados, necessário ser colocado manual._\n"
+            f"_Para manifestos ainda em transporte, verifique com o motorista o motivo de ainda haver notas pendentes._"
+        )
+        
+        mensagem_completa = f"📊 *Resumo da Operação - {hoje.strftime('%d/%m/%Y')}*\n\n" + "\n\n".join(mensagens_mft) + rodape
+        
+        for jid in grupos_lista:
+            try:
+                adapter.enviar_texto(jid, mensagem_completa)
+                total_envios += 1
+                logger.info(f"📲 Relatório Diário enviado para o grupo {jid}")
+            except Exception as e:
+                logger.error(f"Erro ao enviar relatório para o grupo {jid}: {e}")
+                
+    return total_envios
+
+
+@shared_task(bind=True, max_retries=1)
+def bot_relatorio_diario_grupos(self):
+    """
+    Task agendada para 22h.
+    Busca os manifestos do dia e envia o relatório consolidado para os grupos do WhatsApp.
+    Itera sobre todos os tenants (Multi-SaaS).
+    """
+    try:
+        from tenants.models import Client
+        from django_tenants.utils import schema_context
+
+        tenants = Client.objects.exclude(schema_name='public')
+        total_geral = 0
+        for tenant in tenants:
+            with schema_context(tenant.schema_name):
+                logger.info(f"🏢 Bot Relatório 22h executando no tenant: {tenant.schema_name}")
+                qtd = _executar_relatorio_grupos()
+                total_geral += qtd
+                
+        logger.info(f"🏁 Bot Relatório 22h Finalizado! Relatórios enviados: {total_geral}")
+
+    except Exception as e:
+        logger.error(f"❌ Erro fatal no bot de relatório: {e}")
+        raise self.retry(exc=e, countdown=300)
