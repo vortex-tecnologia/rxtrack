@@ -442,11 +442,17 @@ def _executar_busca_tms_e_notificacao():
             _sincronizar_cache_tms(filial, data_hoje, dados_tms)
 
             # 4. Busca manifestos AGUARDANDO no banco local
+            numeros_tms = [str(d.get('mft_sequence_code', '')) for d in dados_tms if d.get('mft_sequence_code')]
+            
+            from django.db.models import Q
             manifestos_aguardando = Manifesto.objects.filter(
                 filial=filial,
-                status='AGUARDANDO',
-                data_criacao__date=data_hoje
+                status='AGUARDANDO'
+            ).filter(
+                Q(data_criacao__date=data_hoje) | Q(numero_manifesto__in=numeros_tms)
             ).select_related('motorista')
+
+            logger.info(f"🔎 MFTs AGUARDANDO encontrados para {filial.nome}: {manifestos_aguardando.count()}")
 
             # 5. Notifica cada motorista
             for manifesto in manifestos_aguardando:
@@ -489,12 +495,19 @@ def _executar_releitura_cache_e_notificacao():
 
     total_notificacoes = 0
 
+    from django.db.models import Q
+    from whatsbot.models import ManifestoBotCache
+
     for filial in filiais:
         try:
+            cache = ManifestoBotCache.objects.filter(filial=filial, data_referencia=data_hoje).first()
+            numeros_tms = cache.manifestos_encontrados if cache else []
+
             manifestos_aguardando = Manifesto.objects.filter(
                 filial=filial,
-                status='AGUARDANDO',
-                data_criacao__date=data_hoje
+                status='AGUARDANDO'
+            ).filter(
+                Q(data_criacao__date=data_hoje) | Q(numero_manifesto__in=numeros_tms)
             ).select_related('motorista')
 
             for manifesto in manifestos_aguardando:
