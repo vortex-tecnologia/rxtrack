@@ -193,7 +193,8 @@ def _sincronizar_cache_tms(filial, data_hoje, dados_tms):
     """
     from whatsbot.models import ManifestoBotCache
 
-    numeros = [str(d.get('mft_sequence_code', '')) for d in dados_tms if d.get('mft_sequence_code')]
+    # Usa um set para deduplicar, já que o TMS retorna uma linha por NF-e do mesmo manifesto
+    numeros = list(set([str(d.get('sequence_code', '')) for d in dados_tms if d.get('sequence_code')]))
 
     cache_obj, _ = ManifestoBotCache.objects.update_or_create(
         filial=filial,
@@ -216,10 +217,14 @@ def _criar_manifestos_faltantes(filial, dados_tms):
     from usuarios.models import Motorista
 
     criados = 0
+    manifestos_processados = set()
+    
     for item in dados_tms:
-        numero_mft = str(item.get('mft_sequence_code', ''))
-        if not numero_mft:
+        numero_mft = str(item.get('sequence_code', ''))
+        if not numero_mft or numero_mft in manifestos_processados:
             continue
+            
+        manifestos_processados.add(numero_mft)
 
         # Se já existe no banco, não recria
         if Manifesto.objects.filter(numero_manifesto=numero_mft).exists():
@@ -442,7 +447,8 @@ def _executar_busca_tms_e_notificacao():
             _sincronizar_cache_tms(filial, data_hoje, dados_tms)
 
             # 4. Busca manifestos AGUARDANDO no banco local
-            numeros_tms = [str(d.get('mft_sequence_code', '')) for d in dados_tms if d.get('mft_sequence_code')]
+            # Usa set para deduplicar os números
+            numeros_tms = list(set([str(d.get('sequence_code', '')) for d in dados_tms if d.get('sequence_code')]))
             
             from django.db.models import Q
             manifestos_aguardando = Manifesto.objects.filter(
