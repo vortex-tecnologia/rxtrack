@@ -261,6 +261,8 @@ def _notificar_motorista(filial, motorista, numero_mft, rodada, data_hoje):
         return
 
     # Verifica se tem manifesto anterior EM_TRANSPORTE (pendência)
+    from manifesto.models import Manifesto
+    
     manifesto_anterior = Manifesto.objects.filter(
         motorista=motorista,
         status='EM_TRANSPORTE'
