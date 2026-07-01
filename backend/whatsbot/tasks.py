@@ -236,8 +236,8 @@ def _notificar_motorista(filial, motorista, numero_mft, rodada, data_hoje):
         return
 
     # Limpa o telefone
-    telefone = _limpar_telefone(motorista.telefone)
-    if not motorista or not motorista.telefone_celular:
+    telefone = _limpar_telefone(motorista.telefone) if motorista else None
+    if not motorista or not telefone:
         try:
             NotificacaoManifestoLog.objects.create(
                 motorista=motorista if motorista else None,
