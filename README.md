@@ -287,3 +287,77 @@ docker-compose up -d
    - Adicionado botão de exclusão (ícone lixeira vermelha) na coluna de ações da tabela de NF-e em [notas_fiscais.html](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/templates/desktop/paginas/notas_fiscais.html), visível apenas ao lado de notas pendentes.
    - Modal de confirmação com feedback visual (loading, sucesso e erro), seguindo o mesmo padrão de UX dos modais de sincronização TMS já existentes.
 
+---
+
+**Data:** 01/07/2026
+**Hora:** 09:50
+
+## Bot WhatsApp — Notificação Automática de Manifestos (App `whatsbot`):
+
+Novo app Django `whatsbot` que envia notificações WhatsApp automaticamente para motoristas que possuem manifestos gerados no TMS mas ainda não foram ativados no aplicativo. Segue a mesma arquitetura de **Adapter/Registry** do app `integracoes/` (Multi-TMS).
+
+### Arquitetura Multi-Provedor:
+- **Provedores intercambiáveis:** Evolution API (v2.x) como provedor principal. Estrutura preparada para Z-API, WPPConnect e outros futuramente.
+- **Fallback automático:** Se o provedor principal cair, o admin desativa pelo Django Admin e o sistema passa automaticamente para o próximo provedor ativo por ordem de prioridade.
+- **Instâncias por Filial:** Cada filial registra sua própria instância WhatsApp (número + nome da instância no Evolution), vinculada ao provedor ativo.
+
+### Modelos Criados ([models.py](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/whatsbot/models.py)):
+1. **`WhatsAppProvedor`** — Registro de cada provedor de mensageria (URL, API Key, toggle ativo, prioridade).
+2. **`WhatsAppInstancia`** — Vincula cada filial a uma instância WhatsApp específica (nome da instância, número, provedor).
+3. **`ManifestoBotCache`** — Cache do JSON retornado pelo TMS para minimizar requisições. Um registro por filial/dia.
+4. **`NotificacaoManifestoLog`** — Auditoria de todas as mensagens enviadas (motorista, manifesto, rodada, status, erro).
+
+### Agenda de Tarefas Celery Beat ([tasks.py](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/whatsbot/tasks.py)):
+| Horário | Tipo | Descrição |
+|---------|------|-----------|
+| **11:00** | 🔍 Busca TMS + Notifica | 1ª rodada — Mensagem informativa ("Bom dia, manifesto criado...") |
+| **12:00** | 📋 Cache + Notifica | 2ª rodada — Lembrete ("Verificamos que ainda não ativou...") |
+| **14:00** | 🔍 Busca TMS + Notifica | 3ª rodada — Cobrança leve ("Segue aguardando desde o início do dia...") |
+| **15:00** | 📋 Cache + Notifica | 4ª rodada — Urgência ("Atenção! Já são 15h...") |
+| **16:00** | 🔍 Busca TMS + Notifica | 5ª rodada — Última chamada ("Última notificação do dia...") |
+
+### Lógica de Mensagens Inteligente:
+- **Mensagens progressivas:** O tom da mensagem escala de informativo (11h) para urgente (16h).
+- **Detecção de pendência anterior:** Se o motorista tem um manifesto anterior `EM_TRANSPORTE` não finalizado, recebe mensagem especial alertando sobre a pendência.
+- **Anti-spam:** Constraint `unique_together` no banco garante máximo 1 mensagem por motorista/manifesto/rodada/dia.
+
+### Estrutura do App:
+```
+whatsbot/
+├── base.py                    # BaseWhatsAppAdapter (ABC)
+├── registry.py                # get_whatsapp_adapter(filial) — Factory com fallback
+├── providers/
+│   └── evolution_api.py       # EvolutionAPIAdapter (v2.x)
+├── models.py                  # 4 modelos (Provedor, Instância, Cache, Log)
+├── tasks.py                   # 2 tasks Celery (TMS+Notif e Cache+Notif)
+└── admin.py                   # Admin com toggles editáveis na listagem
+```
+
+### Deploy na VPS:
+```bash
+# 1. Atualizar código
+git pull origin homolog
+
+# 2. Migrar banco de dados (cria as tabelas do whatsbot em cada tenant)
+docker exec -it quicktrack_web python manage.py makemigrations whatsbot
+docker exec -it quicktrack_web python manage.py migrate_schemas --tenant
+
+# 3. Reiniciar containers (web + celery worker + celery beat)
+docker-compose restart web celery_worker celery_beat
+
+# 4. Configurar no Django Admin:
+#    a) Criar WhatsAppProvedor (Evolution API + URL + API Key)
+#    b) Criar WhatsAppInstancia para cada filial (vincular filial + nome da instância + número)
+```
+
+> [!IMPORTANT]
+> **Celery Beat obrigatório:** O bot depende do Celery Beat rodando para disparar as tasks agendadas. Certifique-se de que o serviço `celery_beat` está ativo no `docker-compose.yml`. Caso não exista, adicione:
+> ```yaml
+> celery_beat:
+>   build: ./backend
+>   command: celery -A core beat --loglevel=info
+>   depends_on:
+>     - redis
+>     - web
+> ```
+

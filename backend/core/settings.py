@@ -7,6 +7,7 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 from datetime import timedelta
+from celery.schedules import crontab
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 # BASE_DIR aponta para o diretório raiz do projeto (BackendAPP/)
@@ -77,6 +78,7 @@ TENANT_APPS = [
     'sac_mobile',
     'auditoria',
     'integracoes.apps.IntegracoesConfig',
+    'whatsbot.apps.WhatsbotConfig',
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
@@ -90,6 +92,32 @@ DATABASE_ROUTERS = (
 
 PUBLIC_SCHEMA_URLCONF = 'core.urls_public'
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0')
+
+# ===== CELERY BEAT — Tarefas Agendadas =====
+CELERY_BEAT_SCHEDULE = {
+    # Rodadas COM busca no TMS (atualiza JSON)
+    'bot-whatsapp-11h': {
+        'task': 'whatsbot.tasks.bot_buscar_tms_e_notificar',
+        'schedule': crontab(hour=11, minute=0),
+    },
+    'bot-whatsapp-14h': {
+        'task': 'whatsbot.tasks.bot_buscar_tms_e_notificar',
+        'schedule': crontab(hour=14, minute=0),
+    },
+    'bot-whatsapp-16h': {
+        'task': 'whatsbot.tasks.bot_buscar_tms_e_notificar',
+        'schedule': crontab(hour=16, minute=0),
+    },
+    # Rodadas SEM busca no TMS (releitura do cache local)
+    'bot-whatsapp-12h': {
+        'task': 'whatsbot.tasks.bot_reler_cache_e_notificar',
+        'schedule': crontab(hour=12, minute=0),
+    },
+    'bot-whatsapp-15h': {
+        'task': 'whatsbot.tasks.bot_reler_cache_e_notificar',
+        'schedule': crontab(hour=15, minute=0),
+    },
+}
 
 CHANNEL_LAYERS = {
     'default': {
