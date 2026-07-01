@@ -14,9 +14,14 @@ class EvolutionAPIAdapter(BaseWhatsAppAdapter):
 
     def _get_headers(self):
         # Se a instância tiver um token específico, usa ele. Senão, usa o global do provedor.
-        token = self.instancia.api_token if self.instancia.api_token else self.provedor.api_key
+        token_instancia = self.instancia.api_token.strip() if self.instancia.api_token else ""
+        token_global = self.provedor.api_key.strip() if self.provedor.api_key else ""
+        
+        token = token_instancia if token_instancia else token_global
+
         return {
             "apikey": token,
+            "Authorization": f"Bearer {token}",  # Evolution v2 aceita ambos os formatos
             "Content-Type": "application/json"
         }
 
