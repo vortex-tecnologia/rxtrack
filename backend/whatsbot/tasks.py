@@ -562,3 +562,77 @@ def enviar_mensagem_massa_motoristas_task(self, filial_id, mensagem):
                     
     logger.info(f"✅ Disparo em massa concluído! Enviados: {total_enviados} | Erros: {total_erros}")
     return f"Enviados: {total_enviados}, Erros: {total_erros}"
+
+
+# =====================================================================
+# LEMBRETE DE FINALIZAÇÃO (20:00)
+# =====================================================================
+
+def _executar_lembrete_finalizacao():
+    from manifesto.models import Manifesto
+    from base.models import Filial
+    from whatsbot.registry import get_whatsapp_adapter
+    from django.utils import timezone
+    
+    filiais = Filial.objects.filter(ativo=True)
+    total_notificacoes = 0
+    
+    for filial in filiais:
+        adapter = get_whatsapp_adapter(filial)
+        if not adapter:
+            continue
+            
+        # Busca manifestos Em Transporte do dia atual e dias anteriores
+        # Caso tenha esquecido de finalizar rotas antigas, avisará também
+        manifestos_pendentes = Manifesto.objects.filter(
+            filial=filial, 
+            status='EM_TRANSPORTE'
+        ).exclude(motorista__isnull=True)
+        
+        for manifesto in manifestos_pendentes:
+            telefone = _limpar_telefone(manifesto.motorista.telefone) if manifesto.motorista else None
+            if not telefone:
+                continue
+                
+            mensagem = (
+                f"Olá {manifesto.motorista.nome_completo.split()[0]}! 🌙 Passando para lembrar que "
+                f"o seu manifesto *{manifesto.numero_manifesto}* consta como 'Em Rota' no nosso sistema.\n\n"
+                f"Se você ainda estiver na estrada, pode desconsiderar essa mensagem. "
+                f"Mas se já finalizou a sua viagem de hoje, por favor, abra o aplicativo e termine de dar "
+                f"as baixas, anexando as fotos e ocorrências. Assim seu app já fica liberado para uma nova rota amanhã! 🚚💨"
+            )
+            
+            try:
+                adapter.enviar_texto(telefone, mensagem)
+                total_notificacoes += 1
+                logger.info(f"📲 Lembrete enviado para {manifesto.motorista.nome_completo} (MFT: {manifesto.numero_manifesto})")
+            except Exception as e:
+                logger.error(f"Erro ao enviar lembrete para {manifesto.motorista.nome_completo}: {e}")
+                
+    return total_notificacoes
+
+
+@shared_task(bind=True, max_retries=1)
+def bot_lembrete_finalizacao_20h(self):
+    """
+    Task agendada para 20h.
+    Verifica todos os manifestos 'EM_TRANSPORTE' e envia lembrete para os motoristas.
+    Itera sobre todos os tenants (Multi-SaaS).
+    """
+    try:
+        from tenants.models import Client
+        from django_tenants.utils import schema_context
+
+        tenants = Client.objects.exclude(schema_name='public')
+        total_geral = 0
+        for tenant in tenants:
+            with schema_context(tenant.schema_name):
+                logger.info(f"🏢 Bot Lembrete 20h executando no tenant: {tenant.schema_name}")
+                qtd = _executar_lembrete_finalizacao()
+                total_geral += qtd
+                
+        logger.info(f"🏁 Bot Lembrete 20h Finalizado! Total de lembretes enviados: {total_geral}")
+
+    except Exception as e:
+        logger.error(f"❌ Erro fatal no bot de lembrete: {e}")
+        raise self.retry(exc=e, countdown=300)

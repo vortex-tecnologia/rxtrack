@@ -117,6 +117,11 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'whatsbot.tasks.bot_reler_cache_e_notificar',
         'schedule': crontab(hour=15, minute=0),
     },
+    # Lembrete diário de finalização de rota
+    'bot-whatsapp-20h': {
+        'task': 'whatsbot.tasks.bot_lembrete_finalizacao_20h',
+        'schedule': crontab(hour=20, minute=0),
+    },
 }
 
 CHANNEL_LAYERS = {
