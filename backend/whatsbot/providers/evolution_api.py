@@ -39,9 +39,7 @@ class EvolutionAPIAdapter(BaseWhatsAppAdapter):
 
         payload = {
             "number": numero,
-            "textMessage": {
-                "text": mensagem
-            },
+            "text": mensagem,
             "delay": 1200,  # 1.2s de atraso para parecer humano
             "linkPreview": True
         }
