@@ -224,10 +224,6 @@ def _notificar_motorista(filial, motorista, numero_mft, rodada, data_hoje):
     from whatsbot.registry import get_whatsapp_adapter
     from manifesto.models import Manifesto
 
-    motorista = manifesto.motorista
-    if not motorista:
-        return
-
     # Já foi notificado nesta rodada? Se sim, pula
     ja_notificado = NotificacaoManifestoLog.objects.filter(
         motorista=motorista,
