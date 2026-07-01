@@ -18,10 +18,11 @@ class EvolutionAPIAdapter(BaseWhatsAppAdapter):
         token_global = self.provedor.api_key.strip() if self.provedor.api_key else ""
         
         token = token_instancia if token_instancia else token_global
+        
+        logger.info(f"🔑 Usando token: {'instância' if token_instancia else 'global'} ({token[:8]}...{token[-4:]})")
 
         return {
             "apikey": token,
-            "Authorization": f"Bearer {token}",  # Evolution v2 aceita ambos os formatos
             "Content-Type": "application/json"
         }
 
