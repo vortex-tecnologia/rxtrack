@@ -681,11 +681,11 @@ def _executar_relatorio_grupos():
             nome_motorista = mft.motorista.nome_completo if mft.motorista else "Sem motorista"
             
             # Conta tipos
-            total_notas = mft.notas_fiscais.filter(tipo__in=['ENTREGA', 'PROBLEMA']).count()
-            total_coletas = mft.notas_fiscais.filter(tipo='COLETA').count()
+            total_notas = mft.notas_fiscais.filter(tipo_operacao__in=['ENTREGA', 'PROBLEMA']).count()
+            total_coletas = mft.notas_fiscais.filter(tipo_operacao='COLETA').count()
             
-            notas_baixadas = mft.notas_fiscais.filter(tipo__in=['ENTREGA', 'PROBLEMA'], status='BAIXADA').count()
-            coletas_baixadas = mft.notas_fiscais.filter(tipo='COLETA', status='BAIXADA').count()
+            notas_baixadas = mft.notas_fiscais.filter(tipo_operacao__in=['ENTREGA', 'PROBLEMA'], status='BAIXADA').count()
+            coletas_baixadas = mft.notas_fiscais.filter(tipo_operacao='COLETA', status='BAIXADA').count()
             
             falta_notas = total_notas - notas_baixadas
             falta_coletas = total_coletas - coletas_baixadas
