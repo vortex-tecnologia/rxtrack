@@ -208,56 +208,14 @@ def _sincronizar_cache_tms(filial, data_hoje, dados_tms):
     return cache_obj
 
 
-def _criar_manifestos_faltantes(filial, dados_tms):
-    """
-    Para cada manifesto retornado pelo TMS que NÃO existe no banco local,
-    cria um registro com status AGUARDANDO para que o bot possa notificar.
-    """
-    from manifesto.models import Manifesto
-    from usuarios.models import Motorista
-
-    criados = 0
-    manifestos_processados = set()
-    
-    for item in dados_tms:
-        numero_mft = str(item.get('sequence_code', ''))
-        if not numero_mft or numero_mft in manifestos_processados:
-            continue
-            
-        manifestos_processados.add(numero_mft)
-
-        # Se já existe no banco, não recria
-        if Manifesto.objects.filter(numero_manifesto=numero_mft).exists():
-            continue
-
-        # Busca o motorista pelo CPF retornado no TMS
-        cpf_tms = str(item.get('mft_mdr_iil_document', '')).strip().replace('.', '').replace('-', '')
-        motorista = None
-        if cpf_tms:
-            motorista = Motorista.objects.filter(cpf=cpf_tms).first()
-
-        try:
-            Manifesto.objects.create(
-                numero_manifesto=numero_mft,
-                motorista=motorista,
-                filial=filial,
-                status='AGUARDANDO',
-                manifesto_id_tms=item.get('id'),
-            )
-            criados += 1
-            logger.info(f"📦 Manifesto #{numero_mft} criado pelo bot (filial {filial.nome})")
-        except IntegrityError:
-            # Pode acontecer se outro processo criou entre o check e o create
-            continue
-
-    return criados
+# (Lógica de criação de manifestos removida para evitar poluição do banco de dados)
 
 
 # =====================================================================
 # ENVIO DE NOTIFICAÇÕES
 # =====================================================================
 
-def _notificar_motorista(filial, manifesto, rodada, data_hoje):
+def _notificar_motorista(filial, motorista, numero_mft, rodada, data_hoje):
     """
     Envia notificação WhatsApp para o motorista de um manifesto não ativado.
     Verifica se já foi notificado nesta rodada e se tem manifesto anterior pendente.
@@ -273,7 +231,7 @@ def _notificar_motorista(filial, manifesto, rodada, data_hoje):
     # Já foi notificado nesta rodada? Se sim, pula
     ja_notificado = NotificacaoManifestoLog.objects.filter(
         motorista=motorista,
-        manifesto=manifesto,
+        numero_manifesto_tms=numero_mft,
         rodada=rodada,
         data_referencia=data_hoje
     ).exists()
@@ -283,32 +241,30 @@ def _notificar_motorista(filial, manifesto, rodada, data_hoje):
 
     # Limpa o telefone
     telefone = _limpar_telefone(motorista.telefone)
-    if not telefone:
-        # Registra que não tem telefone
+    if not motorista or not motorista.telefone_celular:
         try:
             NotificacaoManifestoLog.objects.create(
-                motorista=motorista,
-                manifesto=manifesto,
+                motorista=motorista if motorista else None,
+                numero_manifesto_tms=numero_mft,
                 filial=filial,
                 data_referencia=data_hoje,
                 rodada=rodada,
-                tipo_mensagem='ATIVACAO',
-                mensagem_enviada='[SEM TELEFONE CADASTRADO]',
-                provedor_usado='nenhum',
-                instancia_usada='nenhum',
-                numero_destino='',
-                status='SEM_TELEFONE',
+                tipo_mensagem='ATIVACAO' if rodada == 1 else 'PENDENCIA',
+                mensagem_enviada="[Não enviada - Motorista sem telefone ou não encontrado]",
+                provedor_usado="N/A",
+                instancia_usada="N/A",
+                numero_destino="N/A",
+                status='SEM_TELEFONE'
             )
-        except IntegrityError:
+        except Exception:
             pass
         return
 
     # Verifica se tem manifesto anterior EM_TRANSPORTE (pendência)
     manifesto_anterior = Manifesto.objects.filter(
         motorista=motorista,
-        status='EM_TRANSPORTE',
-        data_criacao__lt=manifesto.data_criacao
-    ).order_by('-data_criacao').first()
+        status='EM_TRANSPORTE'
+    ).exclude(numero_manifesto=numero_mft).order_by('-data_criacao').first()
 
     # Monta a mensagem
     nome = motorista.nome_completo.split()[0]  # Primeiro nome
@@ -317,7 +273,7 @@ def _notificar_motorista(filial, manifesto, rodada, data_hoje):
         data_antigo = timezone.localtime(manifesto_anterior.data_criacao).strftime('%d/%m/%Y')
         mensagem = MENSAGEM_PENDENCIA.format(
             nome=nome,
-            numero_novo=manifesto.numero_manifesto,
+            numero_novo=numero_mft,
             numero_antigo=manifesto_anterior.numero_manifesto,
             data_antigo=data_antigo
         )
@@ -326,7 +282,7 @@ def _notificar_motorista(filial, manifesto, rodada, data_hoje):
         template = MENSAGENS_ATIVACAO.get(rodada, MENSAGENS_ATIVACAO[1])
         mensagem = template.format(
             nome=nome,
-            numero=manifesto.numero_manifesto
+            numero=numero_mft
         )
         tipo = 'ATIVACAO'
 
@@ -334,23 +290,6 @@ def _notificar_motorista(filial, manifesto, rodada, data_hoje):
     adapter = get_whatsapp_adapter(filial)
     if not adapter:
         logger.warning(f"⚠️ Sem adapter WhatsApp para filial {filial.nome}")
-        try:
-            NotificacaoManifestoLog.objects.create(
-                motorista=motorista,
-                manifesto=manifesto,
-                filial=filial,
-                data_referencia=data_hoje,
-                rodada=rodada,
-                tipo_mensagem=tipo,
-                mensagem_enviada=mensagem,
-                provedor_usado='nenhum',
-                instancia_usada='nenhum',
-                numero_destino=telefone,
-                status='ERRO',
-                erro_detalhe='Nenhum provedor/instância WhatsApp ativo para esta filial.',
-            )
-        except IntegrityError:
-            pass
         return
 
     # Envia a mensagem
@@ -361,7 +300,7 @@ def _notificar_motorista(filial, manifesto, rodada, data_hoje):
         resposta = adapter.enviar_texto(telefone, mensagem)
         NotificacaoManifestoLog.objects.create(
             motorista=motorista,
-            manifesto=manifesto,
+            numero_manifesto_tms=numero_mft,
             filial=filial,
             data_referencia=data_hoje,
             rodada=rodada,
@@ -375,26 +314,9 @@ def _notificar_motorista(filial, manifesto, rodada, data_hoje):
         )
         logger.info(
             f"✅ Notificação R{rodada} enviada para {motorista.nome_completo} "
-            f"(MFT #{manifesto.numero_manifesto})"
+            f"(*Rodada {rodada}/5* | *MFT #{numero_mft}*)"
         )
     except Exception as e:
-        try:
-            NotificacaoManifestoLog.objects.create(
-                motorista=motorista,
-                manifesto=manifesto,
-                filial=filial,
-                data_referencia=data_hoje,
-                rodada=rodada,
-                tipo_mensagem=tipo,
-                mensagem_enviada=mensagem,
-                provedor_usado=provedor_nome,
-                instancia_usada=instancia_nome,
-                numero_destino=telefone,
-                status='ERRO',
-                erro_detalhe=str(e)[:500],
-            )
-        except IntegrityError:
-            pass
         logger.error(
             f"❌ Falha ao enviar para {motorista.nome_completo}: {e}"
         )
@@ -412,7 +334,7 @@ def _executar_busca_tms_e_notificacao():
     3. Salva/atualiza cache JSON
     4. Notifica motoristas com manifestos não ativados
     """
-    from usuarios.models import Filial
+    from usuarios.models import Filial, Motorista
     from manifesto.models import Manifesto
     from whatsbot.models import WhatsAppInstancia
 
@@ -437,33 +359,38 @@ def _executar_busca_tms_e_notificacao():
             # 1. Busca no TMS
             dados_tms = _buscar_manifestos_do_dia_no_tms(filial, data_hoje)
 
-            # 2. Cria manifestos faltantes
-            if dados_tms:
-                criados = _criar_manifestos_faltantes(filial, dados_tms)
-                if criados:
-                    logger.info(f"📦 {criados} manifesto(s) novo(s) criado(s) para {filial.nome}")
-
-            # 3. Atualiza cache
+            # 2. Atualiza cache com todos os manifestos do dia (para consultas e auditoria)
             _sincronizar_cache_tms(filial, data_hoje, dados_tms)
 
-            # 4. Busca manifestos AGUARDANDO no banco local
-            # Usa set para deduplicar os números
-            numeros_tms = list(set([str(d.get('sequence_code', '')) for d in dados_tms if d.get('sequence_code')]))
+            # 3. Varre os manifestos retornados pelo TMS e vê quais NÃO existem no nosso banco
+            manifestos_processados = set()
+            notificados_nesta_filial = 0
+
+            for item in dados_tms:
+                numero_mft = str(item.get('sequence_code', ''))
+                cpf_tms = str(item.get('mft_mdr_iil_document', '')).strip().replace('.', '').replace('-', '')
+                
+                if not numero_mft or numero_mft in manifestos_processados:
+                    continue
+                
+                manifestos_processados.add(numero_mft)
+
+                # Se já existe no banco, o motorista já "ativou". Ignora!
+                if Manifesto.objects.filter(numero_manifesto=numero_mft).exists():
+                    continue
+
+                # Motorista ainda NÃO "ativou". Precisamos notificar!
+                motorista = None
+                if cpf_tms:
+                    motorista = Motorista.objects.filter(cpf=cpf_tms).first()
+
+                if motorista:
+                    _notificar_motorista(filial, motorista, numero_mft, rodada, data_hoje)
+                    notificados_nesta_filial += 1
+                    total_notificacoes += 1
             
-            from django.db.models import Q
-            manifestos_aguardando = Manifesto.objects.filter(
-                filial=filial,
-                status='AGUARDANDO'
-            ).filter(
-                Q(data_criacao__date=data_hoje) | Q(numero_manifesto__in=numeros_tms)
-            ).select_related('motorista')
-
-            logger.info(f"🔎 MFTs AGUARDANDO encontrados para {filial.nome}: {manifestos_aguardando.count()}")
-
-            # 5. Notifica cada motorista
-            for manifesto in manifestos_aguardando:
-                _notificar_motorista(filial, manifesto, rodada, data_hoje)
-                total_notificacoes += 1
+            if notificados_nesta_filial > 0:
+                logger.info(f"🔎 {notificados_nesta_filial} motorista(s) aguardando ativação notificados em {filial.nome}")
 
         except Exception as e:
             logger.error(f"❌ Erro no bot para filial {filial.nome}: {e}")
@@ -484,7 +411,8 @@ def _executar_releitura_cache_e_notificacao():
     """
     from usuarios.models import Filial
     from manifesto.models import Manifesto
-    from whatsbot.models import WhatsAppInstancia
+    from whatsbot.models import WhatsAppInstancia, ManifestoBotCache
+    from django.db.models import Q
 
     data_hoje = date.today()
     rodada = _obter_rodada_atual()
@@ -501,24 +429,41 @@ def _executar_releitura_cache_e_notificacao():
 
     total_notificacoes = 0
 
-    from django.db.models import Q
-    from whatsbot.models import ManifestoBotCache
-
     for filial in filiais:
         try:
             cache = ManifestoBotCache.objects.filter(filial=filial, data_referencia=data_hoje).first()
-            numeros_tms = cache.manifestos_encontrados if cache else []
+            if not cache:
+                continue
 
-            manifestos_aguardando = Manifesto.objects.filter(
-                filial=filial,
-                status='AGUARDANDO'
-            ).filter(
-                Q(data_criacao__date=data_hoje) | Q(numero_manifesto__in=numeros_tms)
-            ).select_related('motorista')
+            dados_tms = cache.payload_tms
+            
+            manifestos_processados = set()
+            notificados_nesta_filial = 0
 
-            for manifesto in manifestos_aguardando:
-                _notificar_motorista(filial, manifesto, rodada, data_hoje)
-                total_notificacoes += 1
+            for item in dados_tms:
+                numero_mft = str(item.get('sequence_code', ''))
+                cpf_tms = str(item.get('mft_mdr_iil_document', '')).strip().replace('.', '').replace('-', '')
+                
+                if not numero_mft or numero_mft in manifestos_processados:
+                    continue
+                
+                manifestos_processados.add(numero_mft)
+
+                if Manifesto.objects.filter(numero_manifesto=numero_mft).exists():
+                    continue
+
+                motorista = None
+                if cpf_tms:
+                    from usuarios.models import Motorista
+                    motorista = Motorista.objects.filter(cpf=cpf_tms).first()
+
+                if motorista:
+                    _notificar_motorista(filial, motorista, numero_mft, rodada, data_hoje)
+                    notificados_nesta_filial += 1
+                    total_notificacoes += 1
+                    
+            if notificados_nesta_filial > 0:
+                logger.info(f"🔎 {notificados_nesta_filial} motorista(s) aguardando ativação notificados em {filial.nome}")
 
         except Exception as e:
             logger.error(f"❌ Erro no bot para filial {filial.nome}: {e}")

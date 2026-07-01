@@ -142,8 +142,14 @@ class NotificacaoManifestoLog(models.Model):
         related_name='notificacoes_bot'
     )
     manifesto = models.ForeignKey(
-        'manifesto.Manifesto', on_delete=models.CASCADE,
-        related_name='notificacoes_bot'
+        'manifesto.Manifesto', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='notificacoes_bot',
+        help_text="Opcional. Preenchido apenas se o manifesto já existir no banco local."
+    )
+    numero_manifesto_tms = models.CharField(
+        max_length=50, null=True, blank=True, 
+        verbose_name="Número MFT TMS"
     )
     filial = models.ForeignKey(
         'usuarios.Filial', on_delete=models.CASCADE,
@@ -172,8 +178,9 @@ class NotificacaoManifestoLog(models.Model):
         verbose_name = "Log de Notificação (Bot)"
         verbose_name_plural = "Logs de Notificações (Bot)"
         ordering = ['-enviado_em']
-        # Garante: 1 mensagem por motorista, por manifesto, por rodada, por dia
-        unique_together = ('motorista', 'manifesto', 'rodada', 'data_referencia')
+        # Garante: 1 mensagem por motorista, por numero de manifesto, por rodada, por dia
+        unique_together = ('motorista', 'numero_manifesto_tms', 'rodada', 'data_referencia')
 
     def __str__(self):
-        return f"R{self.rodada} — {self.motorista.nome_completo} — MFT #{self.manifesto.numero_manifesto} ({self.status})"
+        mft_display = self.manifesto.numero_manifesto if self.manifesto else self.numero_manifesto_tms
+        return f"R{self.rodada} — {self.motorista.nome_completo} — MFT #{mft_display} ({self.status})"
