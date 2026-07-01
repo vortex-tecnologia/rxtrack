@@ -1166,7 +1166,7 @@ def buscar_grupos_whatsapp_view(request):
     Lista todos os grupos do WhatsApp da Evolution API para exibir no painel.
     """
     from whatsbot.registry import get_whatsapp_adapter
-    from base.models import Filial
+    from usuarios.models import Filial
     
     try:
         # Pega a primeira filial configurada para buscar os grupos

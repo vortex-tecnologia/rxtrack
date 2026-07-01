@@ -530,7 +530,7 @@ def enviar_mensagem_massa_motoristas_task(self, filial_id, mensagem):
     Essa task roda dentro do schema logado (já garantido se enfileirada no tenant).
     """
     from usuarios.models import Motorista
-    from base.models import Filial
+    from usuarios.models import Filial
     from whatsbot.registry import get_whatsapp_adapter
 
     # 1. Obter a filial ou filiais
@@ -570,7 +570,7 @@ def enviar_mensagem_massa_motoristas_task(self, filial_id, mensagem):
 
 def _executar_lembrete_finalizacao():
     from manifesto.models import Manifesto
-    from base.models import Filial
+    from usuarios.models import Filial
     from whatsbot.registry import get_whatsapp_adapter
     from django.utils import timezone
     
@@ -644,7 +644,7 @@ def bot_lembrete_finalizacao_20h(self):
 
 def _executar_relatorio_grupos():
     from manifesto.models import Manifesto
-    from base.models import Filial
+    from usuarios.models import Filial
     from configuracao.models import ConfiguracaoSistema
     from whatsbot.registry import get_whatsapp_adapter
     from django.utils import timezone
