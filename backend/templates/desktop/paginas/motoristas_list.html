@@ -487,7 +487,7 @@ async function enviarRedefinicaoSenha(id) {
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Enviando...';
         btn.disabled = true;
 
-        fetch("{% url 'motoristas_avisar_massa' %}", {
+        fetch("{% url 'operacional:motoristas_avisar_massa' %}", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
