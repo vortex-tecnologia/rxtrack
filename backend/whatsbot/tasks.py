@@ -518,5 +518,47 @@ def bot_reler_cache_e_notificar(self):
                 _executar_releitura_cache_e_notificacao()
 
     except Exception as e:
-        logger.error(f"❌ Erro fatal no bot (releitura cache): {e}")
+        logger.error(f"❌ Erro fatal no bot (cache/releitura): {e}")
         raise self.retry(exc=e, countdown=300)
+
+
+@shared_task(bind=True)
+def enviar_mensagem_massa_motoristas_task(self, filial_id, mensagem):
+    """
+    Envia uma mensagem em massa para todos os motoristas de uma filial específica
+    ou para todas as filiais caso não seja informada.
+    Essa task roda dentro do schema logado (já garantido se enfileirada no tenant).
+    """
+    from usuarios.models import Motorista
+    from base.models import Filial
+    from whatsbot.registry import get_whatsapp_adapter
+
+    # 1. Obter a filial ou filiais
+    if filial_id and str(filial_id).lower() != 'todas':
+        filiais = Filial.objects.filter(id=filial_id)
+    else:
+        filiais = Filial.objects.all()
+
+    total_enviados = 0
+    total_erros = 0
+
+    for filial in filiais:
+        adapter = get_whatsapp_adapter(filial)
+        if not adapter:
+            logger.warning(f"Filial {filial.nome} não possui WhatsApp ativo configurado. Pulando...")
+            continue
+
+        motoristas = Motorista.objects.filter(filial=filial, tipo_usuario='MOTORISTA').exclude(telefone__isnull=True).exclude(telefone__exact='')
+
+        for motorista in motoristas:
+            telefone = _limpar_telefone(motorista.telefone)
+            if telefone:
+                try:
+                    adapter.enviar_texto(telefone, mensagem)
+                    total_enviados += 1
+                except Exception as e:
+                    logger.error(f"Erro ao enviar aviso em massa para {motorista.nome_completo}: {e}")
+                    total_erros += 1
+                    
+    logger.info(f"✅ Disparo em massa concluído! Enviados: {total_enviados} | Erros: {total_erros}")
+    return f"Enviados: {total_enviados}, Erros: {total_erros}"

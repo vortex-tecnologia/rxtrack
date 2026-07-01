@@ -19,9 +19,14 @@
                 </h3>
                 <p class="text-muted mb-0">Análise de reputação e eficiência operacional</p>
             </div>
-            <button class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#modalCadastro">
-                <i class="bi bi-person-plus me-1"></i> Novo Motorista
-            </button>
+            <div class="d-flex gap-2">
+                <button class="btn btn-success shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAvisoMassa">
+                    <i class="bi bi-whatsapp me-1"></i> Avisar Todos
+                </button>
+                <button class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#modalCadastro">
+                    <i class="bi bi-person-plus me-1"></i> Novo Motorista
+                </button>
+            </div>
         </div>
 
         <div class="col-12 mt-3">
@@ -186,6 +191,36 @@
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Aviso em Massa -->
+<div class="modal fade" id="modalAvisoMassa" tabindex="-1" aria-labelledby="modalAvisoMassaLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title fw-bold" id="modalAvisoMassaLabel"><i class="bi bi-whatsapp me-2"></i>Avisar Todos os Motoristas</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="small text-muted mb-3">
+                    Envie uma mensagem no WhatsApp de todos os motoristas registrados na filial selecionada.
+                </p>
+                <form id="formAvisoMassa">
+                    <input type="hidden" id="avisoFilialId" value="{{ filial_selecionada }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Mensagem</label>
+                        <textarea class="form-control" id="avisoMensagem" rows="5" placeholder="Digite o aviso aqui..." required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="enviarAvisoMassa()">
+                    <i class="bi bi-send me-1"></i> Disparar Mensagens
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -429,6 +464,97 @@ async function enviarRedefinicaoSenha(id) {
         }
     } catch (e) {
         alert("Erro ao comunicar com o servidor.");
+    }
+
+    function enviarAvisoMassa() {
+        const mensagem = document.getElementById('avisoMensagem').value;
+        const filialId = document.getElementById('avisoFilialId').value;
+
+        if (!mensagem.trim()) {
+            Toastify({
+                text: "A mensagem não pode estar vazia.",
+                duration: 3000,
+                close: true,
+                gravity: "top",
+                position: "right",
+                backgroundColor: "#dc3545",
+            }).showToast();
+            return;
+        }
+
+        const btn = document.querySelector('#modalAvisoMassa .btn-success');
+        const txtOriginal = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Enviando...';
+        btn.disabled = true;
+
+        fetch("{% url 'motoristas_avisar_massa' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: new URLSearchParams({
+                'mensagem': mensagem,
+                'filial_id': filialId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            btn.innerHTML = txtOriginal;
+            btn.disabled = false;
+
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('modalAvisoMassa')).hide();
+                document.getElementById('avisoMensagem').value = '';
+                
+                Toastify({
+                    text: data.message,
+                    duration: 5000,
+                    close: true,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "#198754",
+                }).showToast();
+            } else {
+                Toastify({
+                    text: data.message || "Erro ao processar envio.",
+                    duration: 5000,
+                    close: true,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "#dc3545",
+                }).showToast();
+            }
+        })
+        .catch(error => {
+            btn.innerHTML = txtOriginal;
+            btn.disabled = false;
+            console.error('Erro:', error);
+            Toastify({
+                text: "Erro de comunicação com o servidor.",
+                duration: 5000,
+                close: true,
+                gravity: "top",
+                position: "right",
+                backgroundColor: "#dc3545",
+            }).showToast();
+        });
+    }
+
+    // Função auxiliar para CSRF
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
     }
 }
 </script>

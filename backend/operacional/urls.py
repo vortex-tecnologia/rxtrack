@@ -27,6 +27,7 @@ urlpatterns = [
     path('motoristas/', MotoristasPerformanceView.as_view(), name='motoristas'),
     path('motoristas/cadastrar/', views.motorista_cadastrar, name='motorista_cadastrar'),
     path('motoristas/editar/', views.motorista_editar, name='motorista_editar'),
+    path('motoristas/avisar-todos/', views.motoristas_avisar_massa, name='motoristas_avisar_massa'),
     path('usuarios/reset-senha/<int:motorista_id>/', views.enviar_redefinicao_senha_view, name='enviar_redefinicao_senha'),
     path('api/rastreio/<int:manifesto_id>/', api_rastreio_manifesto, name='api_rastreio_manifesto'),
 

@@ -864,6 +864,25 @@ def motorista_editar(request):
     except Exception as e:
         return JsonResponse({'success': False, 'message': f'Erro ao editar: {str(e)}'})
 
+@require_POST
+def motoristas_avisar_massa(request):
+    try:
+        mensagem = request.POST.get('mensagem')
+        filial_id = request.POST.get('filial_id')
+
+        if not mensagem:
+            return JsonResponse({'success': False, 'message': 'A mensagem não pode estar vazia.'}, status=400)
+
+        # Import local para evitar circular imports
+        from whatsbot.tasks import enviar_mensagem_massa_motoristas_task
+        
+        # Envia a tarefa para o Celery executar em background
+        enviar_mensagem_massa_motoristas_task.delay(filial_id, mensagem)
+        
+        return JsonResponse({'success': True, 'message': 'Mensagens enviadas para processamento com sucesso!'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': f'Erro ao solicitar envio em massa: {str(e)}'}, status=500)
+
 # --- VIEWS DA CENTRAL DE AJUDA ---
 
 @method_decorator(login_required(login_url='/login/'), name='dispatch')
