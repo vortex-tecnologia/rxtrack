@@ -3,6 +3,21 @@
   <img src="backend/static/images/logo_app.png" alt="Quick Track Logo" width="150" />
 </div>
 
+# Atualizações Aplicadas (01/07/2026)
+
+**Hora:** 16:30
+
+## 1. Bot Relatório Diário de Operação no WhatsApp (Grupos)
+- Criada a infraestrutura para envio de relatórios consolidados em grupos de WhatsApp (via Evolution API).
+- **Interface Painel:** Adicionado botão em `Configurações` > `Relatórios no WhatsApp` para buscar grupos automaticamente da Evolution API e listá-los.
+- **Banco de Dados:** Campo `grupos_relatorio_whatsapp` adicionado ao modelo `ConfiguracaoSistema` para gerenciar JIDs dos grupos selecionados.
+- **Bot Celery (22:00h):** Criada a task `bot_relatorio_diario_grupos` agendada no Celery Beat.
+  - O bot compila o total de notas de Entrega, Problemas e Coletas, calcula o faltante e formata uma única mensagem otimizada contendo todos os manifestos operacionais do dia na filial logada.
+  - Implementado sistema resiliente (multi-tenant) no celery beat com `schema_context` ativo e tratativas de fallback se a Evolution API não estiver configurada.
+- **Hotfix (Models):** Corrigido o path do import e query `.objects.all()` para a `Filial`, resolvendo o erro de FieldError no Celery.
+
+---
+
 # Atualizações Aplicadas (Push para Produção)
 
 **Data:** 08/06/2026
