@@ -1171,7 +1171,7 @@ def buscar_grupos_whatsapp_view(request):
     try:
         # Pega a primeira filial configurada para buscar os grupos
         # (Idealmente você pode pegar do tenant/filial logado)
-        filial = Filial.objects.filter(ativo=True).first()
+        filial = Filial.objects.first()
         if not filial:
             return JsonResponse({'status': 'erro', 'message': 'Nenhuma filial configurada.'}, status=400)
             

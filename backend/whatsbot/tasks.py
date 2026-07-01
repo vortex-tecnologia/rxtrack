@@ -659,7 +659,7 @@ def _executar_relatorio_grupos():
     
     hoje = timezone.now().date()
     
-    filiais = Filial.objects.filter(ativo=True)
+    filiais = Filial.objects.all()
     total_envios = 0
     
     for filial in filiais:
