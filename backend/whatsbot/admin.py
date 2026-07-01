@@ -50,10 +50,11 @@ class WhatsAppInstanciaAdmin(admin.ModelAdmin):
             'description': 'Selecione a filial e qual provedor WhatsApp ela utilizará para envios.'
         }),
         ('📱 Dados da Instância', {
-            'fields': ('nome_instancia', 'numero_whatsapp'),
+            'fields': ('nome_instancia', 'numero_whatsapp', 'api_token'),
             'description': (
                 'Nome da instância = nome cadastrado no Evolution API / Z-API. '
-                'Número no formato internacional: 5511999999999'
+                'Número no formato internacional: 5511999999999. '
+                'Token da Instância é opcional. Se preenchido, será usado em vez da API Key Global.'
             )
         }),
         ('⚙️ Status', {

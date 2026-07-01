@@ -66,6 +66,10 @@ class WhatsAppInstancia(models.Model):
         max_length=100, verbose_name="Nome da Instância",
         help_text="Nome cadastrado na Evolution/Z-API (ex: filial_sp, bot_rj)"
     )
+    api_token = models.CharField(
+        max_length=200, blank=True, null=True, verbose_name="Token da Instância (Opcional)",
+        help_text="Se preenchido, usa este token específico em vez da API Key Global do provedor."
+    )
     numero_whatsapp = models.CharField(
         max_length=20, verbose_name="Número WhatsApp",
         help_text="Formato internacional: 5511999999999"
