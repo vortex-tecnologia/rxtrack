@@ -1045,17 +1045,19 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         logger.error(f"Erro ao notificar grupos (already closed): {notif_err}")
                     
                     return f"Manifesto {manifesto.numero_manifesto} já constava como fechado."
-                
-                # Notifica grupos: TMS com ERRO
-                try:
-                    from whatsbot.tasks import notificar_finalizacao_manifesto_grupos
-                    notificar_finalizacao_manifesto_grupos(manifesto_id, tms_sucesso=False, tms_erro_msg=str(erros))
-                except Exception as notif_err:
-                    logger.error(f"Erro ao notificar grupos (erro TMS): {notif_err}")
-                
                 raise Exception(f"TMS recusou fechamento: {erros}")
 
         except Exception as exc:
+            # Verifica se é a última tentativa para não spammar o grupo de WhatsApp
+            is_last_attempt = not task or (hasattr(task, 'request') and getattr(task.request, 'retries', 0) >= getattr(task, 'max_retries', 3))
+            
+            if is_last_attempt:
+                try:
+                    from whatsbot.tasks import notificar_finalizacao_manifesto_grupos
+                    notificar_finalizacao_manifesto_grupos(manifesto_id, tms_sucesso=False, tms_erro_msg=str(exc))
+                except Exception as notif_err:
+                    logger.error(f"Erro ao notificar grupos (erro TMS/Rede): {notif_err}")
+
             if task:
                 raise task.retry(exc=exc, countdown=300)
             raise
