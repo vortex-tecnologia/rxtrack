@@ -1568,6 +1568,22 @@ async function carregarDadosCabecalho() {
                 filialIdMotorista = dados.filial_id;
             }
 
+            // 3. Verifica se tem permissão para usar Galeria (Celulares Fracos)
+            if (dados.permitir_upload_galeria) {
+                console.log("Liberando uso da Galeria (Workaround Celular Fraco ativo)");
+                // Pega os inputs de câmera nativa no HTML
+                const inputCameraNativa = document.getElementById('camera-nativa');
+                const inputOcorrencia = document.getElementById('foto-ocorrencia'); // se existir outro
+
+                if (inputCameraNativa) {
+                    inputCameraNativa.removeAttribute('capture');
+                }
+                if (inputOcorrencia) {
+                    inputOcorrencia.removeAttribute('capture');
+                }
+            }
+
+
         } else {
             console.log("Não foi possível carregar os dados do perfil ou motorista anônimo.");
         }

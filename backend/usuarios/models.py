@@ -84,6 +84,13 @@ class Motorista(models.Model):
         verbose_name="Filial de Vínculo"
     )
 
+    # NOVO: Workaround para celulares com pouca RAM que matam o app PWA ao abrir a câmera
+    permitir_upload_galeria = models.BooleanField(
+        default=False, 
+        verbose_name="Permitir Upload da Galeria (Celular Fraco)",
+        help_text="Se marcado, remove a trava da câmera nativa e permite que o motorista escolha fotos da galeria em vez de forçar a abertura da câmera (Evita travamento e recarregamento da página em celulares com pouca memória)."
+    )
+
     def __str__(self):
         return self.nome_completo
 

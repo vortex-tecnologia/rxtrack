@@ -13,7 +13,8 @@ def perfil_motorista(request):
             'nome': motorista.nome_completo,
             'foto_url': motorista.foto_perfil.url if motorista.foto_perfil else None,
             'filial_id': str(motorista.filial.id) if motorista.filial else 'todas',
-            'filial_nome': motorista.filial.nome if motorista.filial else 'Geral'
+            'filial_nome': motorista.filial.nome if motorista.filial else 'Geral',
+            'permitir_upload_galeria': motorista.permitir_upload_galeria
         })
     except Exception as e:
         # Se o user não tiver um perfil vinculado
