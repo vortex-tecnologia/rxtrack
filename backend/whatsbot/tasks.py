@@ -13,7 +13,7 @@ import re
 import json
 import logging
 import requests
-from datetime import date
+
 
 from celery import shared_task
 from django.utils import timezone
@@ -336,7 +336,7 @@ def _executar_busca_tms_e_notificacao():
     from manifesto.models import Manifesto
     from whatsbot.models import WhatsAppInstancia
 
-    data_hoje = date.today()
+    data_hoje = timezone.localdate()
     rodada = _obter_rodada_atual()
 
     # Filiais que possuem instância WhatsApp ativa
@@ -412,7 +412,7 @@ def _executar_releitura_cache_e_notificacao():
     from whatsbot.models import WhatsAppInstancia, ManifestoBotCache
     from django.db.models import Q
 
-    data_hoje = date.today()
+    data_hoje = timezone.localdate()
     rodada = _obter_rodada_atual()
 
     filiais_ids = WhatsAppInstancia.objects.filter(
