@@ -1021,6 +1021,14 @@ class ESLCloudAdapter(BaseTMSAdapter):
             if result.get('success'):
                 manifesto.status = 'FINALIZADO'
                 manifesto.save()
+                
+                # Notifica grupos: TMS OK
+                try:
+                    from whatsbot.tasks import notificar_finalizacao_manifesto_grupos
+                    notificar_finalizacao_manifesto_grupos(manifesto_id, tms_sucesso=True)
+                except Exception as notif_err:
+                    logger.error(f"Erro ao notificar grupos (sucesso TMS): {notif_err}")
+                
                 return f"Manifesto {manifesto.numero_manifesto} finalizado com sucesso no TMS."
             else:
                 erros = result.get('errors', 'Erro desconhecido')
@@ -1028,7 +1036,22 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 if "already closed" in str(erros).lower():
                     manifesto.status = 'FINALIZADO'
                     manifesto.save()
+                    
+                    # Notifica grupos: TMS já estava fechado (consideramos sucesso)
+                    try:
+                        from whatsbot.tasks import notificar_finalizacao_manifesto_grupos
+                        notificar_finalizacao_manifesto_grupos(manifesto_id, tms_sucesso=True)
+                    except Exception as notif_err:
+                        logger.error(f"Erro ao notificar grupos (already closed): {notif_err}")
+                    
                     return f"Manifesto {manifesto.numero_manifesto} já constava como fechado."
+                
+                # Notifica grupos: TMS com ERRO
+                try:
+                    from whatsbot.tasks import notificar_finalizacao_manifesto_grupos
+                    notificar_finalizacao_manifesto_grupos(manifesto_id, tms_sucesso=False, tms_erro_msg=str(erros))
+                except Exception as notif_err:
+                    logger.error(f"Erro ao notificar grupos (erro TMS): {notif_err}")
                 
                 raise Exception(f"TMS recusou fechamento: {erros}")
 

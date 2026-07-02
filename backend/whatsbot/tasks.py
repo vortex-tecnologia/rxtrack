@@ -759,3 +759,82 @@ def bot_relatorio_diario_grupos(self):
     except Exception as e:
         logger.error(f"❌ Erro fatal no bot de relatório: {e}")
         raise self.retry(exc=e, countdown=300)
+
+
+# =====================================================================
+# NOTIFICAÇÃO INSTANTÂNEA DE FINALIZAÇÃO DE MANIFESTO (GRUPOS)
+# =====================================================================
+
+def notificar_finalizacao_manifesto_grupos(manifesto_id, tms_sucesso=True, tms_erro_msg=''):
+    """
+    Envia uma mensagem para os grupos configurados informando que um manifesto
+    foi finalizado no app. Informa se o TMS finalizou com sucesso ou com erro.
+    
+    Args:
+        manifesto_id: ID do manifesto
+        tms_sucesso: True se o TMS finalizou com sucesso, False se houve erro
+        tms_erro_msg: Mensagem de erro do TMS (se houver)
+    """
+    try:
+        from manifesto.models import Manifesto
+        from usuarios.models import Filial
+        from configuracao.models import ConfiguracaoSistema
+        from whatsbot.registry import get_whatsapp_adapter
+        
+        config = ConfiguracaoSistema.load()
+        grupos_str = config.grupos_relatorio_whatsapp.strip()
+        
+        if not grupos_str:
+            return  # Sem grupos configurados, não faz nada
+            
+        grupos_lista = [g.strip() for g in grupos_str.split(',') if g.strip()]
+        
+        manifesto = Manifesto.objects.get(id=manifesto_id)
+        nome_motorista = manifesto.motorista.nome_completo if manifesto.motorista else "Sem motorista"
+        
+        total_notas = manifesto.notas_fiscais.filter(tipo_operacao__in=['ENTREGA', 'PROBLEMA']).count()
+        total_coletas = manifesto.notas_fiscais.filter(tipo_operacao='COLETA').count()
+        
+        tms_nome = dict(ConfiguracaoSistema.TMS_CHOICES).get(config.tms_provider, "TMS")
+        
+        if tms_sucesso:
+            status_tms = f"✅ *{tms_nome}:* Finalizado com sucesso"
+            obs_linha = f"\n📌 *OBS:* KM Final não anexado na finalização, por favor solicitar KM final real do motorista e inserir manualmente."
+            emoji_header = "✅"
+        else:
+            status_tms = f"❌ *{tms_nome}:* Manifesto não pôde ser finalizado — _{tms_erro_msg}_"
+            obs_linha = ""
+            emoji_header = "⚠️"
+        
+        mensagem = (
+            f"{emoji_header} *Manifesto Finalizado*\n\n"
+            f"📦 *Manifesto:* {manifesto.numero_manifesto}\n"
+            f"👤 *Motorista:* {nome_motorista}\n"
+            f"📝 *Notas:* {total_notas}\n"
+            f"🔄 *Coletas:* {total_coletas}\n\n"
+            f"📱 *Aplicativo:* Finalizado com sucesso\n"
+            f"{status_tms}"
+            f"{obs_linha}"
+        )
+        
+        # Pega o adapter da filial do manifesto
+        filial = manifesto.filial
+        if not filial:
+            filial = Filial.objects.first()
+        
+        adapter = get_whatsapp_adapter(filial)
+        if not adapter:
+            logger.warning(f"WhatsApp não configurado para notificar finalização do MFT {manifesto.numero_manifesto}")
+            return
+            
+        for jid in grupos_lista:
+            try:
+                adapter.enviar_texto(jid, mensagem)
+                logger.info(f"📲 Notificação de finalização MFT {manifesto.numero_manifesto} enviada para {jid}")
+            except Exception as e:
+                logger.error(f"Erro ao notificar grupo {jid} sobre MFT {manifesto.numero_manifesto}: {e}")
+                
+    except Exception as e:
+        # Não queremos que um erro de notificação quebre o fluxo principal
+        logger.error(f"❌ Erro ao notificar finalização do manifesto {manifesto_id}: {e}")
+
