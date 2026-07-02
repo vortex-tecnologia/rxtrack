@@ -29,3 +29,11 @@ class BaseWhatsAppAdapter(ABC):
         Retorna True se conectada, False caso contrário.
         """
         pass
+
+    @abstractmethod
+    def buscar_foto_perfil(self, numero: str) -> str:
+        """
+        Busca a URL da foto de perfil de um número de WhatsApp.
+        Retorna a URL da imagem ou None se não encontrar.
+        """
+        pass

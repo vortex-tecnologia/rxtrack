@@ -127,6 +127,11 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'whatsbot.tasks.bot_relatorio_diario_grupos',
         'schedule': crontab(hour=22, minute=0),
     },
+    # Sincronização diária das fotos de perfil dos motoristas via WhatsApp
+    'sincronizar-fotos-motoristas-3am': {
+        'task': 'whatsbot.tasks.sincronizar_fotos_motoristas_whatsapp_task',
+        'schedule': crontab(hour=3, minute=0),
+    },
 }
 
 CHANNEL_LAYERS = {

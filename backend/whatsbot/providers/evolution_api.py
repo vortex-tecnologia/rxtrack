@@ -118,3 +118,36 @@ class EvolutionAPIAdapter(BaseWhatsAppAdapter):
                 f"{self.instancia.nome_instancia}: {e}"
             )
             return []
+
+    def buscar_foto_perfil(self, numero: str) -> str:
+        """
+        Busca a URL da foto de perfil no WhatsApp.
+        POST {base_url}/chat/fetchProfilePicture/{instanceName}
+        """
+        url = f"{self._get_base_url()}/chat/fetchProfilePicture/{self.instancia.nome_instancia}"
+        
+        payload = {
+            "number": numero
+        }
+        
+        try:
+            response = requests.post(
+                url,
+                json=payload,
+                headers=self._get_headers(),
+                timeout=15
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            # Evolution API retorna algo como: {"pictureUrl": "https://pps.whatsapp.net/v/..."}
+            # Se não houver foto, pode retornar vazia ou erro
+            return data.get('pictureUrl') or None
+            
+        except requests.exceptions.HTTPError as e:
+            # Não é erro grave (o numero pode não ter whatsapp ou ter ocultado a foto)
+            logger.info(f"ℹ️ Sem foto pública de perfil para {numero}")
+            return None
+        except Exception as e:
+            logger.error(f"❌ Erro ao buscar foto de perfil de {numero}: {e}")
+            return None

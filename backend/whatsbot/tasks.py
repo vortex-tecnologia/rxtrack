@@ -838,3 +838,65 @@ def notificar_finalizacao_manifesto_grupos(manifesto_id, tms_sucesso=True, tms_e
         # Não queremos que um erro de notificação quebre o fluxo principal
         logger.error(f"❌ Erro ao notificar finalização do manifesto {manifesto_id}: {e}")
 
+
+# =====================================================================
+# SINCRONIZAÇÃO AUTOMÁTICA DE FOTOS DO WHATSAPP (CELERY BEAT)
+# =====================================================================
+
+@shared_task(bind=True, max_retries=2, queue='default')
+def sincronizar_fotos_motoristas_whatsapp_task(self):
+    """
+    Percorre todos os motoristas ativos com telefone.
+    Busca a URL da foto no WhatsApp via Evolution API.
+    Baixa e salva em `foto_perfil`.
+    """
+    from usuarios.models import Motorista
+    from whatsbot.registry import get_whatsapp_adapter
+    from tenants.models import Client
+    from django_tenants.utils import schema_context
+    import requests
+    from django.core.files.base import ContentFile
+    import time
+    
+    logger.info("📸 Iniciando sincronização de fotos do WhatsApp dos motoristas...")
+    
+    tenants = Client.objects.exclude(schema_name='public')
+    
+    for tenant in tenants:
+        with schema_context(tenant.schema_name):
+            motoristas = Motorista.objects.exclude(telefone__isnull=True).exclude(telefone='')
+            
+            for motorista in motoristas:
+                telefone = motorista.telefone.strip().replace('-', '').replace('(', '').replace(')', '').replace(' ', '')
+                if not telefone.startswith('55') and len(telefone) >= 10:
+                    telefone = '55' + telefone
+                
+                # Assume que a filial tem um adaptador
+                filial = motorista.filial
+                if not filial:
+                    continue
+                    
+                adapter = get_whatsapp_adapter(filial)
+                if not adapter:
+                    continue
+                    
+                try:
+                    url_foto = adapter.buscar_foto_perfil(telefone)
+                    if url_foto:
+                        response = requests.get(url_foto, timeout=15)
+                        if response.status_code == 200:
+                            nome_arquivo = f"perfil_{motorista.id}_whatsapp.jpg"
+                            # Sobrescreve a foto antiga
+                            motorista.foto_perfil.save(nome_arquivo, ContentFile(response.content), save=True)
+                            logger.info(f"✅ Foto sincronizada para Motorista ID {motorista.id} ({telefone})")
+                        else:
+                            logger.warning(f"⚠️ Não foi possível baixar a foto do motorista ID {motorista.id}")
+                    else:
+                        logger.debug(f"ℹ️ Motorista ID {motorista.id} não possui foto pública no WhatsApp")
+                except Exception as e:
+                    logger.error(f"❌ Erro ao sincronizar foto do motorista ID {motorista.id}: {e}")
+                    
+                # Atraso pequeno para não dar rate limit (Anti-Ban)
+                time.sleep(2)
+                
+    logger.info("🏁 Sincronização de fotos do WhatsApp concluída!")
