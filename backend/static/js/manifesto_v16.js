@@ -1262,6 +1262,25 @@ async function carregarDadosCabecalho() {
                 }
             }
 
+            // 4. Envia dados do hardware do celular para o admin saber se é celular fraco
+            setTimeout(async () => {
+                try {
+                    let ram = navigator.deviceMemory ? `${navigator.deviceMemory}GB` : 'Desconhecido';
+                    let model = 'Desconhecido';
+                    
+                    if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+                        const hints = await navigator.userAgentData.getHighEntropyValues(['model']);
+                        if (hints.model) model = hints.model;
+                    }
+                    
+                    if (ram !== 'Desconhecido' || model !== 'Desconhecido') {
+                        authFetch(`${API_BASE}motorista/perfil/`, {
+                            method: 'POST',
+                            body: JSON.stringify({ modelo_aparelho: model, memoria_ram: ram })
+                        });
+                    }
+                } catch(e) {}
+            }, 3000);
 
         } else {
             console.log("Não foi possível carregar os dados do perfil ou motorista anônimo.");

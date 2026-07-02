@@ -8,6 +8,7 @@ class MotoristaAdmin(admin.ModelAdmin):
     list_filter = ('tipo_usuario', 'cargo', 'filial', 'permitir_upload_galeria')
     list_editable = ('cargo', 'permitir_upload_galeria')
     search_fields = ('nome_completo', 'cpf')
+    readonly_fields = ('modelo_aparelho', 'memoria_ram')
 
 
 admin.site.register(Filial)

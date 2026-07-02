@@ -90,6 +90,10 @@ class Motorista(models.Model):
         verbose_name="Permitir Upload da Galeria (Celular Fraco)",
         help_text="Se marcado, remove a trava da câmera nativa e permite que o motorista escolha fotos da galeria em vez de forçar a abertura da câmera (Evita travamento e recarregamento da página em celulares com pouca memória)."
     )
+    
+    # NOVO: Informações do Hardware coletadas automaticamente
+    modelo_aparelho = models.CharField(max_length=100, null=True, blank=True, verbose_name="Modelo do Aparelho")
+    memoria_ram = models.CharField(max_length=20, null=True, blank=True, verbose_name="Memória RAM")
 
     def __str__(self):
         return self.nome_completo
