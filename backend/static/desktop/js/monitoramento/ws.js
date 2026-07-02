@@ -128,9 +128,13 @@ function conectarWebSocket() {
                     <div class="card-body pt-4">
                         <div class="d-flex align-items-center mb-3">
                             <div class="flex-shrink-0">
-                                <div class="bg-soft-primary p-3 rounded-circle">
+                                ${d.foto_motorista ? 
+                                `<img src="${d.foto_motorista}" class="rounded-circle" style="width: 48px; height: 48px; object-fit: cover; border: 2px solid #0d6efd;">` 
+                                : 
+                                `<div class="bg-soft-primary p-3 rounded-circle d-flex justify-content-center align-items-center" style="width: 48px; height: 48px;">
                                     <i class="fas fa-truck-moving text-primary"></i>
-                                </div>
+                                </div>`
+                                }
                             </div>
                             <div class="ms-3">
                                 <h6 class="mb-0 fw-bold">${d.motorista_nome || 'Desconhecido'}</h6>

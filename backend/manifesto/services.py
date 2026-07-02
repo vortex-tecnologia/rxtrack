@@ -35,6 +35,7 @@ def enviar_painel(manifesto):
             "baixadas": baixadas,
             "porcentagem": porcentagem,
             "motorista_nome": manifesto.motorista.nome_completo if manifesto.motorista else "Desconhecido",
+            "foto_motorista": manifesto.motorista.foto_perfil.url if (manifesto.motorista and manifesto.motorista.foto_perfil) else None,
             "remover": remover,
             "total": total_notas, 
             "data_registro": data_registro
