@@ -1000,8 +1000,8 @@ async function salvarRegistro() {
 
     // --- NOVA LÓGICA DE VALIDAÇÃO ---
     if (isRetida) {
-        if (inputObs.trim().length < 5) {
-            alert("Obrigatório descrever o motivo da Nota Retida.");
+        if (!inputObs || inputObs.trim().length < 3) {
+            alert("Selecione o motivo da retenção.");
             return;
         }
     } else {
@@ -1290,11 +1290,23 @@ function abrirModalBaixaMassa() {
     document.getElementById('lista-resumo-massa').innerHTML = listaHtml;
 
     // Reset formulário
-    document.getElementById('input-observacao-massa').value = '';
+    document.getElementById('input-observacao-massa').value = 'Canhotos retidos para conferência';
     selecionarTipoMassa('retida'); // Default
+
+    // Esconde o FAB enquanto o modal está aberto
+    const fab = document.getElementById('fab-baixa-massa');
+    if (fab) fab.style.display = 'none';
 
     const modalBaixaMassa = new bootstrap.Modal(document.getElementById('modalBaixaMassa'));
     modalBaixaMassa.show();
+
+    // Quando o modal fechar, restaura o FAB
+    document.getElementById('modalBaixaMassa').addEventListener('hidden.bs.modal', function restaurarFab() {
+        if (notasSelecionadas.size > 0) {
+            fab.style.display = '';
+        }
+        this.removeEventListener('hidden.bs.modal', restaurarFab);
+    });
 }
 
 async function salvarBaixaMassa() {
@@ -1307,13 +1319,9 @@ async function salvarBaixaMassa() {
     let obsStr = '';
 
     if (tipoSelecionado === 'retida') {
-        if (inputObsMassa.trim().length < 5) {
-            alert("Para Notas Retidas, é obrigatório digitar uma justificativa clara.");
-            return;
-        }
         cod = "1"; // Ocorrência padrão de Entrega para reter canhoto
         isRetida = true;
-        obsStr = inputObsMassa.trim();
+        obsStr = inputObsMassa.trim() || 'Canhotos retidos para conferência';
     } else {
         if (!selectOc) {
             alert("Selecione qual a ocorrência de Insucesso na lista.");

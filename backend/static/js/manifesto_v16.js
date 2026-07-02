@@ -882,11 +882,11 @@ async function salvarRegistro() {
     const temFoto = (canvas.dataset.temFoto === "true");
     const mID = manifestoAtual || localStorage.getItem('manifesto_ativo');
 
-    // --- NOVA LÓGICA DE VALIDAÇÃO ---
-    if (isRetida) {
-        if (inputObs.trim().length < 5) {
-            alert("Obrigatório descrever o motivo da Nota Retida.");
-            return;
+    // --- NOVA LÓGICA DE VALIDAÇÃO ---\r
+    if (isRetida) {\r
+        if (!inputObs || inputObs.trim().length < 3) {\r
+            alert("Selecione o motivo da retenção.");\r
+            return;\r
         }
     } else {
         if ((cod === "1" || cod === "2") && !temFoto) {
