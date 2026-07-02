@@ -657,7 +657,7 @@ def _executar_relatorio_grupos():
         
     grupos_lista = [g.strip() for g in grupos_str.split(',') if g.strip()]
     
-    hoje = timezone.now().date()
+    hoje = timezone.localdate()
     
     filiais = Filial.objects.all()
     total_envios = 0
