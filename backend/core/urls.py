@@ -33,6 +33,13 @@ urlpatterns = [
     path('gestao/', include('usuarios.gestao_urls')),
 ]
 
-# Configuração para servir arquivos de mídia (Fotos de comprovantes) em ambiente de desenvolvimento
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+from django.urls import re_path
+from django.views.static import serve
+
+# Configuração para servir arquivos de mídia (Fotos de comprovantes/perfil) via Daphne
+# IMPORTANTE: Em produção de grande escala, Nginx/S3 é melhor, mas para homologação com Daphne serve.
+urlpatterns += [
+    re_path(r'^media/(?P<path>.*)$', serve, {
+        'document_root': settings.MEDIA_ROOT,
+    }),
+]

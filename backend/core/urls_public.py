@@ -73,6 +73,15 @@ def public_index(request):
 
 urlpatterns = [
     path('', public_index, name='public_index'),
-    path('admin/', public_admin_site.urls),
 ]
 
+from django.urls import re_path
+from django.views.static import serve
+from django.conf import settings
+
+# Servir arquivos de mídia também pelo schema público (em ambiente sem Nginx)
+urlpatterns += [
+    re_path(r'^media/(?P<path>.*)$', serve, {
+        'document_root': settings.MEDIA_ROOT,
+    }),
+]
