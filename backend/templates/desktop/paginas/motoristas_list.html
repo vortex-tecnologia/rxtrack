@@ -180,7 +180,7 @@
                             <button onclick="enviarRedefinicaoSenha('{{ m.id }}')" class="btn btn-sm btn-outline-secondary border-0 me-1" title="Enviar Redefinição de Senha">
                                 <i class="bi bi-envelope"></i>
                             </button>
-                            <button onclick="abrirDetalhes('{{ m.id }}', '{{ m.nome_completo }}', '{{ m.cpf }}', '{% if m.foto_perfil %}{{ m.foto_perfil.url }}{% endif %}', '{{ m.telefone|default:'' }}', '{{ m.filial_id|default:'' }}', '{{ m.email|default:'' }}')" 
+                            <button onclick="abrirDetalhes('{{ m.id }}', '{{ m.nome_completo }}', '{{ m.cpf }}', '{% if m.foto_perfil %}{{ m.foto_perfil.url }}{% endif %}', '{{ m.telefone|default:'' }}', '{{ m.filial_id|default:'' }}', '{{ m.email|default:'' }}', '{{ m.modelo_aparelho|default:'Desconhecido'|escapejs }}', '{{ m.memoria_ram|default:'Desconhecido'|escapejs }}', '{{ m.permitir_upload_galeria|yesno:'true,false' }}')" 
                                     class="btn btn-sm btn-outline-primary border-0">
                                 <i class="bi bi-pencil-square"></i> Editar
                             </button>
@@ -293,6 +293,14 @@
     </div>
                     <div class="text-center mb-4">
                         <img id="view_foto" src="" class="rounded-circle shadow" width="100" height="100" style="object-fit: cover; border: 3px solid #eee;">
+                        
+                        <div id="hardware_info_box" class="mt-2 p-2 bg-light border rounded text-muted small text-start mx-auto" style="display: none; max-width: 250px;">
+                            <div><i class="bi bi-phone"></i> <strong>Aparelho:</strong> <span id="view_modelo_aparelho"></span></div>
+                            <div><i class="bi bi-cpu"></i> <strong>RAM:</strong> <span id="view_memoria_ram"></span></div>
+                            <div id="aviso_ram_fraca" class="text-danger mt-1 fw-bold" style="display: none;">
+                                <i class="bi bi-exclamation-triangle-fill"></i> Este celular pode ter problemas ao tentar tirar fotos (Pouca RAM).
+                            </div>
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-bold">Nome Completo</label>
@@ -318,6 +326,15 @@
                             <option value="{{ f.id }}">{{ f.nome }}</option>
                             {% endfor %}
                         </select>
+                    </div>
+                    <div class="mb-3 form-check form-switch mt-3 p-3 bg-light rounded border">
+                        <input class="form-check-input ms-0 me-2" type="checkbox" name="permitir_upload_galeria" id="edit_permitir_galeria">
+                        <label class="form-check-label fw-bold" for="edit_permitir_galeria">
+                            Permitir Upload da Galeria (Celular Fraco)
+                        </label>
+                        <div class="form-text small text-muted">
+                            Habilita a escolha de fotos da galeria no app (contorna recarregamento de página em celulares com pouca memória).
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-bold">Trocar Foto</label>
@@ -432,13 +449,40 @@ document.getElementById('formEdicao').addEventListener('submit', e => {
     enviarFormulario('formEdicao', "{% url 'operacional:motorista_editar' %}", 'btnSalvarEdicao', 'loaderBtnEdicao', 'msgFeedbackEdicao'); // Crie essa ID no modal de edição também
 });
 
-function abrirDetalhes(id, nome, cpf, foto, telefone, filial_id, email) {
+function abrirDetalhes(id, nome, cpf, foto, telefone, filial_id, email, modelo_aparelho, memoria_ram, permitir_galeria) {
     document.getElementById('edit_id').value = id;
     document.getElementById('edit_nome').value = nome;
     document.getElementById('edit_cpf').value = cpf;
     document.getElementById('edit_telefone').value = telefone || '';
     document.getElementById('edit_filial').value = filial_id || '';
     document.getElementById('edit_email').value = email || '';
+    
+    // Tratamento do Checkbox e Info de Hardware
+    document.getElementById('edit_permitir_galeria').checked = (permitir_galeria === 'true');
+    
+    const boxHardware = document.getElementById('hardware_info_box');
+    const txtModelo = document.getElementById('view_modelo_aparelho');
+    const txtRam = document.getElementById('view_memoria_ram');
+    const avisoRam = document.getElementById('aviso_ram_fraca');
+    
+    if (modelo_aparelho && modelo_aparelho !== 'Desconhecido' || memoria_ram && memoria_ram !== 'Desconhecido') {
+        boxHardware.style.display = 'block';
+        txtModelo.innerText = modelo_aparelho || 'Desconhecido';
+        txtRam.innerText = memoria_ram || 'Desconhecido';
+        
+        let temPoucaRam = false;
+        if (memoria_ram) {
+            let numRam = parseFloat(memoria_ram.replace('GB','').trim());
+            if (!isNaN(numRam) && numRam <= 4) {
+                temPoucaRam = true;
+            }
+        }
+        
+        avisoRam.style.display = temPoucaRam ? 'block' : 'none';
+    } else {
+        boxHardware.style.display = 'none';
+    }
+
     const img = document.getElementById('view_foto');
     if(foto) { img.src = foto; img.style.display = 'inline-block'; } 
     else { img.style.display = 'none'; }

@@ -856,6 +856,8 @@ def motorista_editar(request):
         filial_id = request.POST.get('filial_id')
         motorista.filial_id = filial_id if filial_id else None
         
+        motorista.permitir_upload_galeria = request.POST.get('permitir_upload_galeria') == 'on'
+        
         if request.FILES.get('foto_perfil'):
             motorista.foto_perfil = request.FILES.get('foto_perfil')
             
