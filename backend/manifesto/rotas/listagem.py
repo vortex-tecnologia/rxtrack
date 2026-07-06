@@ -24,6 +24,34 @@ class ListarNotasManifestoView(APIView):
                 if lat: mft.ultima_lat = float(lat)
                 if lng: mft.ultima_lng = float(lng)
                 mft.save(update_fields=['ultimo_acesso', 'ultima_bateria', 'ultima_lat', 'ultima_lng'])
+                
+                # --- Dispara atualização para a torre ---
+                from channels.layers import get_channel_layer
+                from asgiref.sync import async_to_sync
+                import json
+                
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    targets = ["painel_monitoramento_todas"]
+                    if mft.filial:
+                        targets.append(f"painel_monitoramento_{mft.filial.id}")
+                    
+                    for target in list(set(targets)):
+                        async_to_sync(channel_layer.group_send)(
+                            target,
+                            {
+                                "type": "atualizar_status_motorista",
+                                "data": {
+                                    "user_id": request.user.id,
+                                    "manifesto_id": numero,
+                                    "lat": lat,
+                                    "lng": lng,
+                                    "battery": bateria,
+                                    "network": None,
+                                    "last_seen": mft.ultimo_acesso.isoformat()
+                                }
+                            }
+                        )
         except Exception as e:
             print(f"Erro ao atualizar telemetria: {e}")
         
