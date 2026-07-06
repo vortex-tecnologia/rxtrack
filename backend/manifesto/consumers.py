@@ -94,13 +94,15 @@ class MonitoramentoConsumer(AsyncWebsocketConsumer):
             except Exception as e:
                 print(f"❌ [WS] Erro ao salvar no Redis: {e}")
 
-            # 2. Salva no Banco de Dados (Persistência)
-            await self.persistir_status_motorista(user, battery, status_data['last_seen'], status_data)
+            # 2. Salva no Banco de Dados (Persistência) e pega a filial
+            filial_id = await self.persistir_status_motorista(user, battery, status_data['last_seen'], status_data)
 
-            # 3. Notifica o grupo para atualizar o painel em tempo real
-            targets = [self.group_name]
-            if self.filial_id != 'todas':
-                targets.append("painel_monitoramento_todas")
+            # 3. Notifica os grupos para atualizar o painel em tempo real
+            targets = ["painel_monitoramento_todas"]
+            if filial_id:
+                targets.append(f"painel_monitoramento_{filial_id}")
+            
+            targets = list(set(targets)) # Remove duplicatas
 
             for target in targets:
                 # print(f"💓 [WS] Enviando status para o grupo: {target}")
@@ -146,11 +148,14 @@ class MonitoramentoConsumer(AsyncWebsocketConsumer):
                     
                 manifesto.save(update_fields=['ultima_bateria', 'ultimo_acesso', 'ultima_rede', 'ultima_lat', 'ultima_lng'])
                 # print(f"✅ [WS] Status persistido no Manifesto: {manifesto_id}")
+                return manifesto.filial.id if manifesto.filial else None
             except Manifesto.DoesNotExist:
                 print(f"⚠️ [WS] Manifesto não encontrado para persistência: {manifesto_id}")
+                return None
                 
         except Exception as e:
             print(f"❌ [WS] Erro ao persistir no DB: {e}")
+            return None
 
     async def atualizar_painel(self, event):
         conteudo = event["data"]
