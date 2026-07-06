@@ -26,23 +26,28 @@
                 </div>
 
                 <div class="card-body pt-4">
-                    <div class="d-flex align-items-center mb-3">
-                        <div class="flex-shrink-0">
-                            {% if m.motorista.foto_perfil %}
-                            <img src="{{ m.motorista.foto_perfil.url }}" class="rounded-circle" style="width: 48px; height: 48px; object-fit: cover; border: 2px solid #0d6efd;">
-                            {% else %}
-                            <div class="bg-soft-primary p-3 rounded-circle d-flex justify-content-center align-items-center" style="width: 48px; height: 48px;">
-                                <i class="fas fa-truck-moving text-primary"></i>
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-shrink-0">
+                                {% if m.motorista.foto_perfil %}
+                                <img src="{{ m.motorista.foto_perfil.url }}" class="rounded-circle" style="width: 48px; height: 48px; object-fit: cover; border: 2px solid #0d6efd;">
+                                {% else %}
+                                <div class="bg-soft-primary p-3 rounded-circle d-flex justify-content-center align-items-center" style="width: 48px; height: 48px;">
+                                    <i class="fas fa-truck-moving text-primary"></i>
+                                </div>
+                                {% endif %}
                             </div>
-                            {% endif %}
+                            <div class="ms-3">
+                                <h6 class="mb-0 fw-bold">
+                                    {{ m.motorista.user.get_full_name|default:m.motorista.user.username}}</h6>
+                                <small class="text-muted">Manifesto: #{{ m.numero_manifesto }}</small>
+                                <small class="text-muted d-block mt-1" style="font-size: 9px;" id="data-registro-{{ m.numero_manifesto }}">
+                                    <i class="bi bi-clock pe-1"></i>{{ m.data_criacao|date:"d/m/Y H:i" }}
+                                </small>
+                            </div>
                         </div>
-                        <div class="ms-3">
-                            <h6 class="mb-0 fw-bold">
-                                {{ m.motorista.user.get_full_name|default:m.motorista.user.username}}</h6>
-                            <small class="text-muted">Manifesto: #{{ m.numero_manifesto }}</small>
-                            <small class="text-muted d-block mt-1" style="font-size: 9px;" id="data-registro-{{ m.numero_manifesto }}">
-                                <i class="bi bi-clock pe-1"></i>{{ m.data_criacao|date:"d/m/Y H:i" }}
-                            </small>
+                        <div id="sinal-torre-{{ m.numero_manifesto }}" class="last-seen-torre" data-iso="{% if m.ultimo_acesso %}{{ m.ultimo_acesso|date:'c' }}{% endif %}">
+                            <!-- JS will render this -->
                         </div>
                     </div>
 
@@ -189,14 +194,41 @@
             transform: scale(0.9);
         }
     }
+
+    .card-danger-pulse {
+        animation: danger-pulse 2s infinite;
+    }
+
+    @keyframes danger-pulse {
+        0% {
+            background-color: white;
+            box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+        }
+        50% {
+            background-color: rgba(220, 53, 69, 0.1);
+            box-shadow: 0 0 15px rgba(220, 53, 69, 0.3);
+        }
+        100% {
+            background-color: white;
+            box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+        }
+    }
 </style>
 <script>
     // Passagem da variável de filial ativa para o WS (slugificada no backend)
     window.FILIAL_ATIVA = "{{ filial_selecionada|default:'todas' }}";
 </script>
-<script src="{% static 'desktop/js/monitoramento/ws.js' %}?v=2"></script>
+<script src="{% static 'desktop/js/monitoramento/ws.js' %}?v=3"></script>
 <script>
     let mapaEntrega = null;
+
+    // Inicializa os badges logo que carregar a página
+    document.addEventListener("DOMContentLoaded", function() {
+        if (typeof atualizarUltimoSinalTorre === "function") {
+            atualizarUltimoSinalTorre();
+            setInterval(atualizarUltimoSinalTorre, 60000); // Atualiza a cada 1 min
+        }
+    });
 
     function abrirRastreio(manifestoId, nomeMotorista, progresso, totalNfs) {
         document.getElementById('rastreio_numero').innerText = manifestoId;

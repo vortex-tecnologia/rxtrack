@@ -223,14 +223,22 @@ function conectarWebSocket() {
 
     function updateLastSeen(mID, isoDate) {
         const el = document.getElementById(`last-seen-mft-${mID}`);
-        if (!el) return;
-
-        try {
-            const date = new Date(isoDate);
-            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            el.innerHTML = `<div class="text-primary fw-bold" style="font-size: 0.9rem; text-align: center;">${timeStr}</div>`;
-        } catch (e) {
-            console.error("Erro data:", e);
+        if (el) {
+            try {
+                const date = new Date(isoDate);
+                const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                el.innerHTML = `<div class="text-primary fw-bold" style="font-size: 0.9rem; text-align: center;">${timeStr}</div>`;
+            } catch (e) {
+                console.error("Erro data:", e);
+            }
+        }
+        
+        const elTorre = document.getElementById(`sinal-torre-${mID}`);
+        if (elTorre) {
+            elTorre.setAttribute('data-iso', isoDate);
+                    if (typeof atualizarUltimoSinalTorre === 'function') {
+                atualizarUltimoSinalTorre();
+            }
         }
     }
 
@@ -247,6 +255,93 @@ function conectarWebSocket() {
     socket.onerror = function(error) {
         console.error("❌ Erro WS:", error);
     };
+}
+
+// --- LÓGICA DE ÚLTIMO SINAL DA TORRE DE CONTROLE ---
+function formatTimeDiff(ms) {
+    const mins = Math.floor(ms / 60000);
+    const hours = Math.floor(mins / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (mins < 60) {
+        if (mins <= 5) return 'Sinal agora';
+        return `Há ${mins}m`;
+    } else if (hours < 24) {
+        return `Há ${hours}h`;
+    } else {
+        return `Há ${days}d`;
+    }
+}
+
+function atualizarUltimoSinalTorre() {
+    const cards = document.querySelectorAll('[id^="card-mft-"]');
+    cards.forEach(card => {
+        const mID = card.id.replace('card-mft-', '');
+        const elSinal = document.getElementById(`sinal-torre-${mID}`);
+        if (!elSinal) return;
+        
+        const isoDate = elSinal.getAttribute('data-iso');
+        if (!isoDate || isoDate.trim() === '') {
+            elSinal.innerHTML = `
+                <div style="border: 1px solid #ccc; background-color: #f8f9fa; border-radius: 20px; padding: 2px 10px; display: inline-block; min-width: 80px; text-align: center;">
+                    <span style="color: #6c757d; font-weight: bold; font-size: 13px;">--:--</span>
+                </div>
+                <div style="font-size: 11px; color: #6c757d; margin-top: 4px; text-align: center;">
+                    Sem sinal
+                </div>
+            `;
+            card.classList.remove('card-danger-pulse');
+            return;
+        }
+        
+        try {
+            const date = new Date(isoDate);
+            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            const now = new Date();
+            const diffMs = now - date;
+            
+            const diffHours = diffMs / (1000 * 60 * 60);
+            
+            let bgColor = '';
+            let textColor = '';
+            let isRedPulsing = false;
+            
+            if (diffHours <= 1.5 || diffMs < 0) { // < 0 caso horário do celular esteja à frente do servidor
+                bgColor = 'rgba(25, 135, 84, 0.1)'; // green soft
+                textColor = '#198754';
+            } else if (diffHours <= 4) {
+                bgColor = 'rgba(255, 193, 7, 0.1)'; // yellow soft
+                textColor = '#ffc107';
+            } else {
+                bgColor = 'rgba(220, 53, 69, 0.1)'; // red soft
+                textColor = '#dc3545';
+                if (diffHours > 24) {
+                    isRedPulsing = true;
+                }
+            }
+            
+            const textDiff = diffMs < 0 ? 'Sinal agora' : formatTimeDiff(diffMs);
+            
+            elSinal.innerHTML = `
+                <div style="border: 1px solid ${textColor}; background-color: ${bgColor}; border-radius: 20px; padding: 2px 10px; display: inline-block; min-width: 80px; text-align: center;">
+                    <i class="fas fa-circle" style="color: ${textColor}; font-size: 8px; vertical-align: middle; margin-right: 4px;"></i>
+                    <span style="color: ${textColor}; font-weight: bold; font-size: 13px;">${timeStr}</span>
+                </div>
+                <div style="font-size: 11px; color: #6c757d; margin-top: 4px; text-align: center;">
+                    ${textDiff}
+                </div>
+            `;
+            
+            if (isRedPulsing) {
+                card.classList.add('card-danger-pulse');
+            } else {
+                card.classList.remove('card-danger-pulse');
+            }
+        } catch(e) {
+            console.error('Erro na data Torre', e);
+        }
+    });
 }
 
 // --- FUNÇÕES DO MAPA REAL-TIME ---
