@@ -91,6 +91,26 @@ function conectarWebSocket() {
 
                 const percentEl = document.getElementById(`percent-${mID}`);
                 if (percentEl) percentEl.innerText = d.porcentagem;
+                
+                // Atualiza a hora do sinal na torre
+                if (d.ultimo_acesso_iso) {
+                    const elTorre = document.getElementById(`sinal-torre-${mID}`);
+                    if (elTorre) {
+                        elTorre.setAttribute('data-iso', d.ultimo_acesso_iso);
+                    }
+                }
+
+                // Atualiza alerta de manifesto antigo
+                if (d.is_antigo !== undefined) {
+                    const alertaContainer = document.getElementById(`alerta-antigo-${mID}`);
+                    if (alertaContainer) {
+                        alertaContainer.innerHTML = d.is_antigo ? 
+                            `<i class="fas fa-exclamation-triangle text-warning fs-3" 
+                               title="Manifesto criado há ${d.dias_criado} dia(s) e não finalizado" 
+                               data-bs-toggle="tooltip" 
+                               style="cursor: help; animation: pulse 2s infinite;"></i>` : '';
+                    }
+                }
 
                 // Efeito de flash (pulsada no card)
                 if (cardContainer) {
