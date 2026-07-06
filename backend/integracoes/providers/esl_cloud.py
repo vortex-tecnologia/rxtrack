@@ -597,6 +597,10 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
             nf = baixa.nota_fiscal
             if not nf.chave_acesso:
+                # Coletas usam endpoint próprio (/api/v1/picks/) e não precisam de freight_id
+                if nf.numero_coleta or nf.tipo_operacao == 'COLETA':
+                    logger.info(f"Redirecionando baixa {baixa_id} (coleta) para enviar_coleta")
+                    return self.enviar_coleta(baixa_id, task=task)
                 logger.info(f"Redirecionando baixa {baixa_id} (minuta) para enviar_baixa_minuta")
                 return self.enviar_baixa_minuta(baixa_id, task=task)
 
