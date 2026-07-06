@@ -47,8 +47,15 @@
                             </div>
                         </div>
                         
-                        <!-- Ícone de Alerta para Manifesto Antigo (Renderizado via JS) -->
-                        <div id="alerta-antigo-{{ m.numero_manifesto }}" class="align-self-center px-2"></div>
+                        <!-- Ícone de Alerta para Manifesto Antigo (Renderizado Nativo pelo Backend e JS) -->
+                        <div id="alerta-antigo-{{ m.numero_manifesto }}" class="align-self-center px-2">
+                            {% if m.is_antigo %}
+                            <i class="fas fa-exclamation-triangle text-warning fs-3" 
+                               title="Manifesto criado há {{ m.dias_criado }} dia(s) e não finalizado" 
+                               data-bs-toggle="tooltip" 
+                               style="cursor: help; animation: pulse 2s infinite;"></i>
+                            {% endif %}
+                        </div>
 
                         <div id="sinal-torre-{{ m.numero_manifesto }}" class="last-seen-torre" 
                              data-iso="{% if m.ultimo_acesso %}{{ m.ultimo_acesso|date:'c' }}{% endif %}"

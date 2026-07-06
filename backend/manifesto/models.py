@@ -176,6 +176,22 @@ class Manifesto(models.Model):
     def __str__(self):
         return f"Manifesto {self.numero_manifesto}"
 
+    @property
+    def is_antigo(self):
+        """Retorna True se o manifesto foi criado há mais de 24 horas."""
+        if not self.data_criacao:
+            return False
+        diff = timezone.now() - self.data_criacao
+        return diff.total_seconds() > 86400
+
+    @property
+    def dias_criado(self):
+        """Retorna a quantidade de dias desde a criação."""
+        if not self.data_criacao:
+            return 0
+        diff = timezone.now() - self.data_criacao
+        return diff.days
+
     class Meta:
         verbose_name = "Manifesto"
         verbose_name_plural = "Manifestos"
