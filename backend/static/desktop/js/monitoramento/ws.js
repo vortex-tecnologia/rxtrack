@@ -101,6 +101,11 @@ function conectarWebSocket() {
                         innerCard.classList.add('card-update-flash');
                     }
                 }
+                
+                // Re-avalia o último sinal para o card atualizado
+                if (typeof atualizarUltimoSinalTorre === 'function') {
+                    atualizarUltimoSinalTorre();
+                }
             }
         } catch (err) {
             console.error("❌ Erro ao processar mensagem WS:", err);
@@ -146,11 +151,17 @@ function conectarWebSocket() {
                                 </div>
                             </div>
                             
-                            <!-- Ícone de Alerta para Manifesto Antigo (Renderizado via JS) -->
-                            <div id="alerta-antigo-${d.manifesto_id}" class="align-self-center px-2"></div>
+                            <!-- Ícone de Alerta para Manifesto Antigo (Renderizado via JS e Servidor) -->
+                            <div id="alerta-antigo-${d.manifesto_id}" class="align-self-center px-2">
+                                ${d.is_antigo ? 
+                                `<i class="fas fa-exclamation-triangle text-warning fs-3" 
+                                   title="Manifesto criado há ${d.dias_criado} dia(s) e não finalizado" 
+                                   data-bs-toggle="tooltip" 
+                                   style="cursor: help; animation: pulse 2s infinite;"></i>` : ''}
+                            </div>
 
                             <div id="sinal-torre-${d.manifesto_id}" class="last-seen-torre" 
-                                 data-iso=""
+                                 data-iso="${d.ultimo_acesso_iso || ''}"
                                  data-criacao="${d.data_criacao_iso || ''}">
                                 <!-- JS will render this -->
                             </div>

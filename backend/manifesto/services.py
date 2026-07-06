@@ -38,7 +38,11 @@ def enviar_painel(manifesto):
             "foto_motorista": manifesto.motorista.foto_perfil.url if (manifesto.motorista and manifesto.motorista.foto_perfil) else None,
             "remover": remover,
             "total": total_notas, 
-            "data_registro": data_registro
+            "data_registro": data_registro,
+            "data_criacao_iso": manifesto.data_criacao.isoformat() if manifesto.data_criacao else None,
+            "ultimo_acesso_iso": localtime(manifesto.ultimo_acesso).isoformat() if manifesto.ultimo_acesso else None,
+            "is_antigo": getattr(manifesto, 'is_antigo', False),
+            "dias_criado": getattr(manifesto, 'dias_criado', 0)
         }
     }
     
