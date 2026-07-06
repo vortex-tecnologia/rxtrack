@@ -78,16 +78,24 @@ function conectarWebSocket() {
                     cardContainer = document.getElementById(`card-mft-${mID}`);
                 }
 
+                let devePiscar = false;
+
                 // Atualiza a barrinha azul
                 const progressBar = document.getElementById(`progress-bar-${mID}`);
                 if (progressBar) progressBar.style.width = (d.porcentagem || 0) + '%';
                 
                 // Atualiza os números
                 const baixadasEl = document.getElementById(`baixadas-${mID}`);
-                if (baixadasEl) baixadasEl.innerText = d.baixadas;
+                if (baixadasEl) {
+                    if (parseInt(baixadasEl.innerText) !== parseInt(d.baixadas)) devePiscar = true;
+                    baixadasEl.innerText = d.baixadas;
+                }
 
                 const totalEl = document.getElementById(`total-${mID}`);
-                if (totalEl) totalEl.innerText = d.total;
+                if (totalEl) {
+                    if (parseInt(totalEl.innerText) !== parseInt(d.total)) devePiscar = true;
+                    totalEl.innerText = d.total;
+                }
 
                 const percentEl = document.getElementById(`percent-${mID}`);
                 if (percentEl) percentEl.innerText = d.porcentagem;
@@ -112,8 +120,8 @@ function conectarWebSocket() {
                     }
                 }
 
-                // Efeito de flash (pulsada no card)
-                if (cardContainer) {
+                // Efeito de flash (pulsada no card) apenas se mudou baixadas ou total
+                if (cardContainer && devePiscar) {
                     const innerCard = cardContainer.querySelector('.card');
                     if (innerCard) {
                         innerCard.classList.remove('card-update-flash');
