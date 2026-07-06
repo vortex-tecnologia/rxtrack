@@ -87,7 +87,7 @@ class MonitoramentoConsumer(AsyncWebsocketConsumer):
                     'battery': battery,
                     'network': data.get('network'),
                     'manifesto_id': manifesto_id,
-                    'last_seen': timezone.now().isoformat(),
+                    'last_seen': timezone.localtime(timezone.now()).isoformat(),
                     'nome': user.first_name or user.username
                 }
                 redis_client.set(status_key, json.dumps(status_data), ex=3600)

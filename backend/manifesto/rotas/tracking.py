@@ -35,14 +35,14 @@ class TrackingHeartbeatView(APIView):
                 'battery': battery,
                 'network': network,
                 'manifesto_id': manifesto_id,
-                'last_seen': timezone.now().isoformat(),
+                'last_seen': timezone.localtime(timezone.now()).isoformat(),
                 'nome': user.first_name or user.username
             }
             redis_client.set(status_key, json.dumps(status_data), ex=3600)
         except Exception as e:
             print(f"❌ [REST Tracking] Erro ao salvar no Redis: {e}")
             status_data = {
-                'last_seen': timezone.now().isoformat()
+                'last_seen': timezone.localtime(timezone.now()).isoformat()
             }
 
         # 2. Salva no Banco de Dados (Persistência)

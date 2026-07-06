@@ -48,7 +48,7 @@ class ListarNotasManifestoView(APIView):
                                     "lng": lng,
                                     "battery": bateria,
                                     "network": None,
-                                    "last_seen": mft.ultimo_acesso.isoformat()
+                                    "last_seen": timezone.localtime(mft.ultimo_acesso).isoformat() if mft.ultimo_acesso else None
                                 }
                             }
                         )
