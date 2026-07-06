@@ -46,7 +46,13 @@
                                 </small>
                             </div>
                         </div>
-                        <div id="sinal-torre-{{ m.numero_manifesto }}" class="last-seen-torre" data-iso="{% if m.ultimo_acesso %}{{ m.ultimo_acesso|date:'c' }}{% endif %}">
+                        
+                        <!-- Ícone de Alerta para Manifesto Antigo (Renderizado via JS) -->
+                        <div id="alerta-antigo-{{ m.numero_manifesto }}" class="align-self-center px-2"></div>
+
+                        <div id="sinal-torre-{{ m.numero_manifesto }}" class="last-seen-torre" 
+                             data-iso="{% if m.ultimo_acesso %}{{ m.ultimo_acesso|date:'c' }}{% endif %}"
+                             data-criacao="{{ m.data_criacao|date:'c' }}">
                             <!-- JS will render this -->
                         </div>
                     </div>
@@ -218,7 +224,7 @@
     // Passagem da variável de filial ativa para o WS (slugificada no backend)
     window.FILIAL_ATIVA = "{{ filial_selecionada|default:'todas' }}";
 </script>
-<script src="{% static 'desktop/js/monitoramento/ws.js' %}?v=4"></script>
+<script src="{% static 'desktop/js/monitoramento/ws.js' %}?v=5"></script>
 <script>
     let mapaEntrega = null;
 

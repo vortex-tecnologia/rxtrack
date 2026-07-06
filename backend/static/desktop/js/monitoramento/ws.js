@@ -145,7 +145,13 @@ function conectarWebSocket() {
                                     </small>
                                 </div>
                             </div>
-                            <div id="sinal-torre-${d.manifesto_id}" class="last-seen-torre" data-iso="">
+                            
+                            <!-- Ícone de Alerta para Manifesto Antigo (Renderizado via JS) -->
+                            <div id="alerta-antigo-${d.manifesto_id}" class="align-self-center px-2"></div>
+
+                            <div id="sinal-torre-${d.manifesto_id}" class="last-seen-torre" 
+                                 data-iso=""
+                                 data-criacao="${d.data_criacao_iso || ''}">
                                 <!-- JS will render this -->
                             </div>
                         </div>
@@ -342,6 +348,32 @@ function atualizarUltimoSinalTorre() {
                 card.classList.add('card-danger-pulse');
             } else {
                 card.classList.remove('card-danger-pulse');
+            }
+            
+            // --- LÓGICA DE ALERTA DE MANIFESTO ANTIGO ---
+            const alertaContainer = document.getElementById(`alerta-antigo-${mID}`);
+            const dataCriacaoIso = elSinal.getAttribute('data-criacao');
+            
+            if (alertaContainer && dataCriacaoIso) {
+                const criacaoDate = new Date(dataCriacaoIso);
+                const diffCriacaoHours = (now - criacaoDate) / (1000 * 60 * 60);
+                
+                // Se o manifesto foi criado há mais de 24 horas, exibimos um alerta
+                if (diffCriacaoHours > 24) {
+                    alertaContainer.innerHTML = `
+                        <i class="fas fa-exclamation-triangle text-warning fs-3" 
+                           title="Manifesto criado há ${Math.floor(diffCriacaoHours/24)} dia(s) e não finalizado" 
+                           data-bs-toggle="tooltip" 
+                           style="cursor: help; animation: pulse 2s infinite;"></i>
+                    `;
+                    // Inicializa tooltip se o bootstrap estiver disponível
+                    if (typeof bootstrap !== 'undefined' && !alertaContainer.hasAttribute('data-tooltip-init')) {
+                        new bootstrap.Tooltip(alertaContainer.querySelector('[data-bs-toggle="tooltip"]'));
+                        alertaContainer.setAttribute('data-tooltip-init', 'true');
+                    }
+                } else {
+                    alertaContainer.innerHTML = '';
+                }
             }
         } catch(e) {
             console.error('Erro na data Torre', e);
