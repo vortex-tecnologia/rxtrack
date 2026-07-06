@@ -294,10 +294,19 @@ function atualizarUltimoSinalTorre() {
         const now = new Date();
         
         // --- LÓGICA DE ALERTA DE MANIFESTO ANTIGO ---
-        const alertaContainer = document.getElementById(`alerta-antigo-${mID}`);
+        let alertaContainer = document.getElementById(`alerta-antigo-${mID}`);
+        
+        // Resiliência: se o HTML estiver em cache e a div não existir, cria ela dinamicamente
+        if (!alertaContainer) {
+            alertaContainer = document.createElement('div');
+            alertaContainer.id = `alerta-antigo-${mID}`;
+            alertaContainer.className = 'align-self-center px-2';
+            elSinal.parentNode.insertBefore(alertaContainer, elSinal);
+        }
+
         const dataCriacaoIso = elSinal.getAttribute('data-criacao');
         
-        if (alertaContainer && dataCriacaoIso) {
+        if (dataCriacaoIso) {
             try {
                 const criacaoDate = new Date(dataCriacaoIso);
                 const diffCriacaoHours = (now - criacaoDate) / (1000 * 60 * 60);
