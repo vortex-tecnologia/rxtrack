@@ -126,22 +126,27 @@ function conectarWebSocket() {
                     </div>
 
                     <div class="card-body pt-4">
-                        <div class="d-flex align-items-center mb-3">
-                            <div class="flex-shrink-0">
-                                ${d.foto_motorista ? 
-                                `<img src="${d.foto_motorista}" class="rounded-circle" style="width: 48px; height: 48px; object-fit: cover; border: 2px solid #0d6efd;">` 
-                                : 
-                                `<div class="bg-soft-primary p-3 rounded-circle d-flex justify-content-center align-items-center" style="width: 48px; height: 48px;">
-                                    <i class="fas fa-truck-moving text-primary"></i>
-                                </div>`
-                                }
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-shrink-0">
+                                    ${d.foto_motorista ? 
+                                    `<img src="${d.foto_motorista}" class="rounded-circle" style="width: 48px; height: 48px; object-fit: cover; border: 2px solid #0d6efd;">` 
+                                    : 
+                                    `<div class="bg-soft-primary p-3 rounded-circle d-flex justify-content-center align-items-center" style="width: 48px; height: 48px;">
+                                        <i class="fas fa-truck-moving text-primary"></i>
+                                    </div>`
+                                    }
+                                </div>
+                                <div class="ms-3">
+                                    <h6 class="mb-0 fw-bold">${d.motorista_nome || 'Desconhecido'}</h6>
+                                    <small class="text-muted">Manifesto: #${d.manifesto_id}</small>
+                                    <small class="text-muted d-block mt-1" style="font-size: 9px;" id="data-registro-${d.manifesto_id}">
+                                        <i class="bi bi-clock pe-1"></i>${d.data_registro || ''}
+                                    </small>
+                                </div>
                             </div>
-                            <div class="ms-3">
-                                <h6 class="mb-0 fw-bold">${d.motorista_nome || 'Desconhecido'}</h6>
-                                <small class="text-muted">Manifesto: #${d.manifesto_id}</small>
-                                <small class="text-muted d-block mt-1" style="font-size: 9px;" id="data-registro-${d.manifesto_id}">
-                                    <i class="bi bi-clock pe-1"></i>${d.data_registro || ''}
-                                </small>
+                            <div id="sinal-torre-${d.manifesto_id}" class="last-seen-torre" data-iso="">
+                                <!-- JS will render this -->
                             </div>
                         </div>
 
