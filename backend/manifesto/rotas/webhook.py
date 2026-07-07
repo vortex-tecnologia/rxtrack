@@ -8,6 +8,76 @@ from rest_framework.authtoken.models import Token
 from manifesto.models import WebhookEventoManifestoESL
 
 
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes, OpenApiExample, OpenApiResponse
+
+@extend_schema(
+    methods=['GET'],
+    summary="Consultar Documentação do Webhook JSON",
+    description="Retorna instruções e um exemplo detalhado do payload JSON esperado para integração.",
+    responses={
+        200: OpenApiResponse(description="Documentação gerada com sucesso.")
+    }
+)
+@extend_schema(
+    methods=['POST'],
+    summary="Receber Manifesto via Webhook (JSON)",
+    description=(
+        "Recebe dados de manifesto e notas fiscais em formato JSON. "
+        "Requer autenticação via Header `Authorization: Token SEU_TOKEN`."
+    ),
+    request=OpenApiTypes.OBJECT,
+    examples=[
+        OpenApiExample(
+            "Exemplo Payload Webhook JSON",
+            value={
+                "filial": {
+                    "id_tms": "ID_FILIAL_TMS",
+                    "nome": "NOME DA FILIAL"
+                },
+                "motorista": {
+                    "cpf": "12345678901",
+                    "nome": "NOME DO MOTORISTA"
+                },
+                "manifesto": {
+                    "numero": "58134",
+                    "id_tms": "ID_INTERNA_TMS",
+                    "data_emissao": "2025-03-24T10:00:00Z",
+                    "observacoes": "Entrega prioritária"
+                },
+                "itens": [
+                    {
+                        "tipo": "ENTREGA",
+                        "id_tms": "ID_ITEM_TMS",
+                        "numero_item": "123456",
+                        "chave_item": "44_DIGITOS_NFE",
+                        "numero_cte": "999888",
+                        "chave_cte": "44_DIGITOS_CTE",
+                        "numero_coleta": "",
+                        "data_emissao": "2025-03-22",
+                        "sla": "2025-03-25",
+                        "destinatario": {
+                            "nome": "NOME DA EMPRESA",
+                            "documento": "11122233344",
+                            "logradouro": "RUA EXEMPLO",
+                            "numero": "100",
+                            "bairro": "CENTRO",
+                            "cidade": "RIO DE JANEIRO",
+                            "uf": "RJ",
+                            "cep": "00000-000",
+                            "telefone": "21999999999"
+                        }
+                    }
+                ]
+            },
+            request_only=True
+        )
+    ],
+    responses={
+        201: OpenApiResponse(description="Recebido e enfileirado para processamento"),
+        401: OpenApiResponse(description="Token inválido ou não informado"),
+        403: OpenApiResponse(description="Token bloqueado")
+    }
+)
 @api_view(['GET', 'POST'])
 @authentication_classes([])            # 👈 REMOVE auth padrão
 @permission_classes([AllowAny])        # 👈 PERMITE GET público
