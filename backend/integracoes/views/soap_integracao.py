@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from django.db import transaction
 from django.utils import timezone
 from manifesto.models import WebhookEventoSOAP
+from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample, OpenApiTypes
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,68 @@ class UploadRouteSoapView(APIView):
     authentication_classes = []
     permission_classes = []
 
+    @extend_schema(
+        summary="Receber Manifesto via SOAP",
+        description=(
+            "Recebe um manifesto contendo motorista, veículo e notas fiscais em formato XML SOAP. "
+            "O processamento das notas será executado em background (assíncrono). "
+            "Para autenticação, o TMS envia a credencial diretamente no nó `<Credenciais>`. "
+            "Caso alguma nota seja omitida no XML, o sistema entenderá que ela foi removida e a deletará do banco se o status for pendente."
+        ),
+        request=OpenApiTypes.STR,
+        examples=[
+            OpenApiExample(
+                name="Exemplo SOAP UploadRoute",
+                description="XML de exemplo de envio de manifesto",
+                value='''<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <uploadRoute>
+      <Rota numero="999999">
+        <Data>20260707</Data>
+        <Transportadora>
+          <Razao>TRANSPORTADORA EXEMPLO LTDA</Razao>
+        </Transportadora>
+        <Motorista>
+          <Usuario>11122233344</Usuario>
+          <Nome>MOTORISTA TESTE</Nome>
+        </Motorista>
+        <Paradas>
+          <Parada numero="1">
+            <Tipo>E</Tipo>
+            <Documento>
+              <Numero>12345</Numero>
+              <ChaveNota>35230111111111111111550010000123451000123456</ChaveNota>
+            </Documento>
+            <Cliente>
+              <Razao>CLIENTE DESTINO</Razao>
+              <Endereco>RUA DAS FLORES 123</Endereco>
+              <Bairro>CENTRO</Bairro>
+              <Cidade>SAO PAULO</Cidade>
+              <Estado>SP</Estado>
+            </Cliente>
+          </Parada>
+        </Paradas>
+      </Rota>
+    </uploadRoute>
+  </soap:Body>
+</soap:Envelope>''',
+                request_only=True
+            )
+        ],
+        responses={
+            200: OpenApiResponse(
+                description="Sucesso. Retorna um envelope SOAP com status OK.",
+                response=OpenApiTypes.STR,
+                examples=[OpenApiExample("Sucesso", value="<status>OK</status>")]
+            ),
+            400: OpenApiResponse(
+                description="Erro. Retorna um envelope SOAP com status ERRO.",
+                response=OpenApiTypes.STR,
+                examples=[OpenApiExample("Erro", value="<status>ERRO</status>")]
+            )
+        }
+    )
     def post(self, request, *args, **kwargs):
         try:
             xml_data = request.body
