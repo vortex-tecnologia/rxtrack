@@ -6,6 +6,7 @@ from django.conf.urls.static import static # Necessário para arquivos de mídia
 from django.views.generic import RedirectView
 from django.http import HttpResponse
 from usuarios.views_login.auth_views import login_sac_mobile_view
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 urlpatterns = [
     path('capacitor.js', lambda r: HttpResponse("", content_type="application/javascript")),
@@ -23,6 +24,11 @@ urlpatterns = [
     path('auth/', include(('usuarios.urls', 'usuarios'), namespace='usuarios')),
     path('api/', include(('manifesto.urls', 'manifesto'), namespace='manifesto')),
     path('api/integracoes/', include(('integracoes.urls', 'integracoes'), namespace='integracoes')),
+    
+    # Documentação de API
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/docs/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     path('app/', include(('mobile.urls', 'mobile'), namespace='mobile')),
     path('app-sac/', include(('sac_mobile.urls', 'sac_mobile'), namespace='sac_mobile')),
     path('', include(('operacional.urls', 'operacional'), namespace='operacional')),

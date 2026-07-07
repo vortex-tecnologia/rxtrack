@@ -34,6 +34,7 @@ SHARED_APPS = [
     'daphne',                  # Daphne (ASGI)
     'channels',                # Camada de comunicação
     'jazzmin',                 # Admin bonito (Bootstrap)
+    'drf_spectacular',         # API Docs (Swagger/ReDoc)
     
     'django.contrib.admin',
     'django.contrib.auth',
@@ -271,6 +272,7 @@ CELERY_TIMEZONE = TIME_ZONE
 
 
 REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication', 
         'rest_framework.authentication.TokenAuthentication',
@@ -287,6 +289,19 @@ REST_FRAMEWORK = {
         'anon': '30/minute',
         'user': '120/minute',
     }
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Quicktrack API',
+    'DESCRIPTION': 'Documentação oficial das integrações e recursos do sistema Quicktrack TMS.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+        'displayOperationId': True,
+    },
 }
 
 
