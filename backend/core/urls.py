@@ -9,10 +9,21 @@ from usuarios.views_login.auth_views import login_sac_mobile_view
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from manifesto.rotas.webhook import webhook_tms
 from integracoes.views.soap_integracao import UploadRouteSoapView
-
+from integracoes.views.api_tms import (
+    iniciar_transporte_tms, adicionar_nota_manifesto_tms, 
+    finalizar_manifesto_tms, registrar_nota_tms, 
+    status_ocorrencia_tms, comprovante_nota_tms, remover_nota_tms
+)
 api_docs_patterns = [
     path('api/webhook/tms/', webhook_tms),
     path('api/integracoes/soap/uploadRoute/', UploadRouteSoapView.as_view()),
+    path('api/integracoes/tms/manifesto/iniciar/', iniciar_transporte_tms),
+    path('api/integracoes/tms/manifesto/finalizar/', finalizar_manifesto_tms),
+    path('api/integracoes/tms/manifesto/nota/adicionar/', adicionar_nota_manifesto_tms),
+    path('api/integracoes/tms/nota/registrar/', registrar_nota_tms),
+    path('api/integracoes/tms/nota/status/', status_ocorrencia_tms),
+    path('api/integracoes/tms/nota/comprovante/', comprovante_nota_tms),
+    path('api/integracoes/tms/nota/deletar/', remover_nota_tms),
 ]
 urlpatterns = [
     path('capacitor.js', lambda r: HttpResponse("", content_type="application/javascript")),
