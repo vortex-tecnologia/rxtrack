@@ -22,6 +22,7 @@ urlpatterns = [
     path('api/auth/', include('core.rotas.auth')),
     path('auth/', include(('usuarios.urls', 'usuarios'), namespace='usuarios')),
     path('api/', include(('manifesto.urls', 'manifesto'), namespace='manifesto')),
+    path('api/integracoes/', include(('integracoes.urls', 'integracoes'), namespace='integracoes')),
     path('app/', include(('mobile.urls', 'mobile'), namespace='mobile')),
     path('app-sac/', include(('sac_mobile.urls', 'sac_mobile'), namespace='sac_mobile')),
     path('', include(('operacional.urls', 'operacional'), namespace='operacional')),
