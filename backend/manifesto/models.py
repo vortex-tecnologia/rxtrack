@@ -22,6 +22,14 @@ class WebhookEventoManifestoESL(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     processed_at = models.DateTimeField(null=True, blank=True)
 
+class WebhookEventoSOAP(models.Model):
+    numero_manifesto = models.CharField(max_length=50)
+    payload_xml = models.TextField()
+    status = models.CharField(max_length=20, default="PENDENTE")
+    erro = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+
 class WebhookTokenControl(models.Model):
     """
     Controla o uso mensal de tokens para o Webhook comercial.

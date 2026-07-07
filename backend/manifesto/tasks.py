@@ -282,3 +282,157 @@ def processar_webhook_manifesto_task(self, event_id):
             logger.error(f"Falha ao registrar log de erro do webhook: {logger_err}")
             
         raise self.retry(exc=e, countdown=60)
+
+@shared_task(bind=True, max_retries=3)
+def processar_soap_task(self, evento_id):
+    import xml.etree.ElementTree as ET
+    from django.db import transaction
+    from manifesto.models import WebhookEventoSOAP, Manifesto, NotaFiscal, ManifestoBuscaLog
+    from usuarios.models import Motorista, Filial
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        evento = WebhookEventoSOAP.objects.get(id=evento_id)
+        xml_str = evento.payload_xml
+        numero_rota = evento.numero_manifesto
+
+        root = ET.fromstring(xml_str)
+        def find_tag(element, tag_name):
+            for child in element.iter():
+                if child.tag.endswith(tag_name):
+                    return child
+            return None
+
+        rota_element = find_tag(root, 'Rota')
+        if rota_element is None:
+            raise Exception("Tag <Rota> nao encontrada no XML")
+
+        transportadora = find_tag(rota_element, 'Transportadora')
+        filial_nome = "MATRIZ (INTEGRACAO)"
+        if transportadora is not None:
+            razao = find_tag(transportadora, 'Razao')
+            if razao is not None and razao.text:
+                filial_nome = str(razao.text).upper()[:100]
+
+        filial_obj, _ = Filial.objects.get_or_create(nome=filial_nome)
+
+        motorista_el = find_tag(rota_element, 'Motorista')
+        if motorista_el is None:
+            raise Exception("Tag <Motorista> nao encontrada")
+        
+        moto_cpf = find_tag(motorista_el, 'Usuario')
+        moto_nome = find_tag(motorista_el, 'Nome')
+        
+        cpf = str(moto_cpf.text).strip() if moto_cpf is not None and moto_cpf.text else ""
+        nome = str(moto_nome.text).upper().strip() if moto_nome is not None and moto_nome.text else "MOTORISTA INTEGRACAO"
+
+        if not cpf:
+            raise Exception("CPF do motorista nao encontrado")
+
+        motorista_obj, _ = Motorista.objects.get_or_create(
+            cpf=cpf,
+            defaults={'nome_completo': nome, 'filial': filial_obj}
+        )
+
+        with transaction.atomic():
+            manifesto_obj = Manifesto.objects.filter(numero_manifesto=numero_rota).first()
+            status_novo = 'AGUARDANDO'
+            if manifesto_obj and manifesto_obj.status == 'EM_TRANSPORTE':
+                status_novo = 'EM_TRANSPORTE'
+
+            manifesto_obj, _ = Manifesto.objects.update_or_create(
+                numero_manifesto=numero_rota,
+                defaults={'motorista': motorista_obj, 'filial': filial_obj, 'status': status_novo}
+            )
+
+            paradas = find_tag(rota_element, 'Paradas')
+            count_notas = 0
+            ids_processadas = []
+
+            if paradas is not None:
+                for parada in paradas:
+                    if not parada.tag.endswith('Parada'): continue
+                        
+                    tipo_parada = find_tag(parada, 'Tipo')
+                    tipo_str = tipo_parada.text if tipo_parada is not None else 'E'
+                    tipo_operacao = 'ENTREGA' if tipo_str == 'E' else 'COLETA'
+
+                    doc = find_tag(parada, 'Documento')
+                    cliente = find_tag(parada, 'Cliente')
+
+                    if doc is not None:
+                        numero_nota = find_tag(doc, 'Numero')
+                        numero_nota = numero_nota.text if numero_nota is not None else ""
+                        chave_nota = find_tag(doc, 'ChaveNota')
+                        chave_nota = chave_nota.text if chave_nota is not None else ""
+                    else:
+                        numero_nota = ""
+                        chave_nota = ""
+
+                    if cliente is not None:
+                        razao_cli = find_tag(cliente, 'Razao')
+                        destinatario = razao_cli.text.upper() if (razao_cli is not None and razao_cli.text) else "NÃO INFORMADO"
+                        end = find_tag(cliente, 'Endereco')
+                        bairro = find_tag(cliente, 'Bairro')
+                        cidade = find_tag(cliente, 'Cidade')
+                        uf = find_tag(cliente, 'Estado')
+                        endereco_str = f"{end.text if end is not None and end.text else ''} - {bairro.text if bairro is not None and bairro.text else ''} ({cidade.text if cidade is not None and cidade.text else ''}/{uf.text if uf is not None and uf.text else ''})".upper()
+                    else:
+                        destinatario = "NÃO INFORMADO"
+                        endereco_str = "NÃO INFORMADO"
+
+                    if numero_nota:
+                        filtros_busca = {'manifesto': manifesto_obj}
+                        if chave_nota: filtros_busca['chave_acesso'] = chave_nota
+                        else:
+                            filtros_busca['numero_nota'] = numero_nota
+                            filtros_busca['tipo_operacao'] = tipo_operacao
+
+                        nota_obj, _ = NotaFiscal.objects.update_or_create(
+                            **filtros_busca,
+                            defaults={
+                                'destinatario': destinatario,
+                                'endereco_entrega': endereco_str,
+                                'tipo_operacao': tipo_operacao,
+                                'numero_nota': numero_nota,
+                                'chave_acesso': chave_nota if chave_nota else None,
+                            }
+                        )
+                        ids_processadas.append(nota_obj.id)
+                        count_notas += 1
+
+            if ids_processadas:
+                notas_removidas = NotaFiscal.objects.filter(
+                    manifesto=manifesto_obj,
+                    status__in=['PENDENTE', 'AGUARDANDO']
+                ).exclude(id__in=ids_processadas)
+                qtd_removidas = notas_removidas.count()
+                if qtd_removidas > 0:
+                    logger.info(f"Removendo {qtd_removidas} notas orfas do manifesto SOAP {numero_rota}")
+                    notas_removidas.delete()
+
+            ManifestoBuscaLog.objects.update_or_create(
+                numero_manifesto=numero_rota, motorista=motorista_obj,
+                defaults={'status': 'PROCESSADO', 'mensagem_erro': None, 'quantidade_notas': count_notas}
+            )
+
+        from django.utils import timezone
+        evento.status = 'PROCESSADO'
+        evento.processed_at = timezone.now()
+        evento.save()
+
+        return f"Manifesto SOAP {numero_rota} processado com sucesso. {count_notas} notas."
+
+    except Exception as e:
+        logger.error(f"Erro ao processar SOAP Task {evento_id}: {str(e)}", exc_info=True)
+        try:
+            from manifesto.models import WebhookEventoSOAP
+            evt = WebhookEventoSOAP.objects.get(id=evento_id)
+            evt.status = 'ERRO'
+            evt.erro = str(e)
+            evt.save()
+        except:
+            pass
+        raise self.retry(exc=e, countdown=60)
