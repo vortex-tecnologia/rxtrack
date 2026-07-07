@@ -31,7 +31,7 @@ class UploadRouteSoapView(APIView):
             try:
                 root = ET.fromstring(xml_str)
             except ET.ParseError as e:
-                logger.error(f"Erro ao parsear XML SOAP Comprovei: {e}")
+                logger.error(f"Erro ao parsear XML SOAP Integracao: {e}")
                 return self.soap_error("XML malformado")
 
             # Função auxiliar para buscar tags ignorando prefixos de namespace
@@ -60,7 +60,7 @@ class UploadRouteSoapView(APIView):
 
             # 3. Filial / Transportadora
             transportadora = find_tag(rota_element, 'Transportadora')
-            filial_nome = "MATRIZ (COMPROVEI)"
+            filial_nome = "MATRIZ (INTEGRACAO)"
             if transportadora is not None:
                 razao = find_tag(transportadora, 'Razao')
                 if razao is not None and razao.text:
@@ -77,7 +77,7 @@ class UploadRouteSoapView(APIView):
             moto_nome = find_tag(motorista_el, 'Nome')
             
             cpf = str(moto_cpf.text).strip() if moto_cpf is not None and moto_cpf.text else ""
-            nome = str(moto_nome.text).upper().strip() if moto_nome is not None and moto_nome.text else "MOTORISTA COMPROVEI"
+            nome = str(moto_nome.text).upper().strip() if moto_nome is not None and moto_nome.text else "MOTORISTA INTEGRACAO"
 
             if not cpf:
                 return self.soap_error("CPF do motorista nao encontrado")
@@ -190,16 +190,16 @@ class UploadRouteSoapView(APIView):
                     }
                 )
 
-            logger.info(f"Manifesto SOAP Comprovei {numero_rota} processado com {count_notas} notas.")
+            logger.info(f"Manifesto SOAP Integracao {numero_rota} processado com {count_notas} notas.")
             return self.soap_success()
 
         except Exception as e:
-            logger.error(f"Erro critico ao processar SOAP Comprovei: {e}", exc_info=True)
+            logger.error(f"Erro critico ao processar SOAP Integracao: {e}", exc_info=True)
             return self.soap_error("Erro interno no servidor")
 
     def soap_success(self):
         """
-        Retorna um envelope SOAP de sucesso genérico padrão da Comprovei.
+        Retorna um envelope SOAP de sucesso genérico padrão da integracao anterior.
         Muitos TMS avaliam apenas o HTTP 200 e alguma tag indicando sucesso.
         """
         xml_response = """<?xml version="1.0" encoding="utf-8"?>
