@@ -7,7 +7,13 @@ from django.views.generic import RedirectView
 from django.http import HttpResponse
 from usuarios.views_login.auth_views import login_sac_mobile_view
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from manifesto.rotas.webhook import webhook_tms
+from integracoes.views.soap_integracao import UploadRouteSoapView
 
+api_docs_patterns = [
+    path('api/webhook/tms/', webhook_tms),
+    path('api/integracoes/soap/uploadRoute/', UploadRouteSoapView.as_view()),
+]
 urlpatterns = [
     path('capacitor.js', lambda r: HttpResponse("", content_type="application/javascript")),
     # Redireciona a raiz (/) para /login/
@@ -25,8 +31,8 @@ urlpatterns = [
     path('api/', include(('manifesto.urls', 'manifesto'), namespace='manifesto')),
     path('api/integracoes/', include(('integracoes.urls', 'integracoes'), namespace='integracoes')),
     
-    # Documentação de API
-    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    # Documentação de API - Exibe APENAS as rotas de integração listadas em api_docs_patterns
+    path('api/schema/', SpectacularAPIView.as_view(patterns=api_docs_patterns), name='schema'),
     path('api/docs/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/docs/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     path('app/', include(('mobile.urls', 'mobile'), namespace='mobile')),
