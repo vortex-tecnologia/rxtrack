@@ -12,14 +12,11 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes,
 
 @extend_schema(
     methods=['GET'],
-    summary="Consultar Documentação do Webhook JSON",
-    description="Retorna instruções e um exemplo detalhado do payload JSON esperado para integração.",
-    responses={
-        200: OpenApiResponse(description="Documentação gerada com sucesso.")
-    }
+    exclude=True
 )
 @extend_schema(
     methods=['POST'],
+    tags=['Integração TMS'],
     summary="Receber Manifesto via Webhook (JSON)",
     description=(
         "Recebe dados de manifesto e notas fiscais em formato JSON. "
