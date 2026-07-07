@@ -170,9 +170,9 @@ def processar_webhook_manifesto_task(self, event_id):
                 }
             )
 
-            # 4. Itens (Notas Fiscais, Coletas, Minutas)
             itens = payload.get('itens', [])
             count_notas = 0
+            ids_processadas = []
             for item in itens:
                 dest = item.get('destinatario', {})
                 endereco = f"{dest.get('logradouro', '')}, {dest.get('numero', '')} - {dest.get('bairro', '')} ({dest.get('cidade', '')}/{dest.get('uf', '')})".upper()
@@ -205,7 +205,7 @@ def processar_webhook_manifesto_task(self, event_id):
                     filtros_busca['numero_nota'] = numero_item
                     filtros_busca['tipo_operacao'] = tipo_item
 
-                NotaFiscal.objects.update_or_create(
+                nota_obj, _ = NotaFiscal.objects.update_or_create(
                     **filtros_busca,
                     defaults={
                         'destinatario': str(dest.get('nome', 'NÃO INFORMADO')).upper(),
@@ -219,7 +219,23 @@ def processar_webhook_manifesto_task(self, event_id):
                         'chave_cte': chave_cte
                     }
                 )
+                ids_processadas.append(nota_obj.id)
                 count_notas += 1
+
+            # === REMOÇÃO DE NOTAS ÓRFÃS NO WEBHOOK ===
+            try:
+                if ids_processadas:
+                    notas_removidas = NotaFiscal.objects.filter(
+                        manifesto=manifesto_obj,
+                        status__in=['PENDENTE', 'AGUARDANDO']
+                    ).exclude(id__in=ids_processadas)
+                    
+                    qtd_removidas = notas_removidas.count()
+                    if qtd_removidas > 0:
+                        logger.info(f"🗑️ Removendo {qtd_removidas} notas órfãs do manifesto {num_mani} que foram excluídas no TMS via Webhook.")
+                        notas_removidas.delete()
+            except Exception as e:
+                logger.error(f"Erro ao tentar remover notas órfãs no webhook: {e}")
 
             # 5. Criar Log de Auditoria/Visibilidade no Dashboard
             ManifestoBuscaLog.objects.update_or_create(
