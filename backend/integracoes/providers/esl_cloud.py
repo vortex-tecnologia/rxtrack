@@ -380,6 +380,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             log.save()
             
             total_processadas = 0
+            ids_processadas = []
             for id_doc, dados_base in notas_unicas_dict.items():
                 try:
                     chave = dados_base['chave']
@@ -411,7 +412,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
                         status_final = nota_no_manifesto.status if nota_no_manifesto else 'PENDENTE'
 
-                        NotaFiscal.objects.update_or_create(
+                        nota_obj, _ = NotaFiscal.objects.update_or_create(
                             manifesto=manifesto_obj,
                             chave_acesso=chave,
                             numero_nota=str(numero),
@@ -423,6 +424,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                                 'freight_id_tms': str(freight_id) if freight_id else None
                             }
                         )
+                        ids_processadas.append(nota_obj.id)
                     else:
                         nota_no_manifesto = NotaFiscal.objects.filter(
                             manifesto=manifesto_obj,
@@ -432,7 +434,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         
                         status_final = nota_no_manifesto.status if nota_no_manifesto else 'PENDENTE'
 
-                        NotaFiscal.objects.update_or_create(
+                        nota_obj, _ = NotaFiscal.objects.update_or_create(
                             manifesto=manifesto_obj,
                             numero_nota=str(numero),
                             chave_acesso=None,
@@ -444,6 +446,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                                 'freight_id_tms': str(freight_id) if freight_id else None
                             }
                         )
+                        ids_processadas.append(nota_obj.id)
 
                     total_processadas += 1
 
@@ -482,7 +485,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                             endereco = "ENDEREÇO NÃO INFORMADO"
                         endereco = endereco.upper()
                         
-                        NotaFiscal.objects.update_or_create(
+                        coleta_obj, _ = NotaFiscal.objects.update_or_create(
                             manifesto=manifesto_obj,
                             numero_nota=str(seq_code),
                             tipo_operacao='COLETA',
@@ -492,6 +495,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                                 'numero_coleta': str(seq_code),
                             }
                         )
+                        ids_processadas.append(coleta_obj.id)
                         total_coletas += 1
                     
                     if total_coletas > 0:
@@ -501,12 +505,29 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         
                 logger.info(f"Coletas para {numero_visual}: {total_coletas} encontradas e salvas.")
             except Exception as e:
-                logger.warning(f"⚠️ Falha ao buscar coletas inline para {numero_visual}: {e}. Disparando retry em background.")
+                logger.warning(f"⚠️ Erro ao processar coletas para o manifesto {numero_visual}: {e}. Disparando retry em background.")
                 from manifesto.tasks import buscar_coletas_manifesto_task
                 buscar_coletas_manifesto_task.apply_async(
                     args=[manifesto_obj.id, numero_visual],
                     countdown=30
                 )
+
+            # === REMOÇÃO DE NOTAS ÓRFÃS ===
+            try:
+                if ids_processadas:
+                    notas_removidas = NotaFiscal.objects.filter(
+                        manifesto=manifesto_obj,
+                        status__in=['PENDENTE', 'AGUARDANDO']
+                    ).exclude(id__in=ids_processadas)
+                    
+                    qtd_removidas = notas_removidas.count()
+                    if qtd_removidas > 0:
+                        logger.info(f"🗑️ Removendo {qtd_removidas} notas órfãs do manifesto {numero_visual} que foram excluídas no TMS.")
+                        notas_removidas.delete()
+            except Exception as e:
+                logger.error(f"Erro ao tentar remover notas órfãs: {e}")
+
+            logger.info(f"✅ Manifesto {numero_visual} processado. Entregas/Transferências: {total_processadas}. Coletas: {total_coletas}")
 
             transaction.on_commit(lambda: enviar_painel(manifesto_obj))
 
