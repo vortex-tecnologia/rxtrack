@@ -15,6 +15,7 @@ class UploadRouteSoapView(APIView):
     permission_classes = []
 
     @extend_schema(
+        tags=['Integração TMS'],
         summary="Receber Manifesto via SOAP",
         description=(
             "Recebe um manifesto contendo motorista, veículo e notas fiscais em formato XML SOAP. "
