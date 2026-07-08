@@ -8,12 +8,29 @@ from manifesto.models import Manifesto
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
+from rest_framework.permissions import AllowAny
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from usuarios.models import DeviceToken
+
+@method_decorator(csrf_exempt, name='dispatch')
 class TrackingHeartbeatView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def post(self, request):
         user = request.user
         data = request.data
+
+        # Autenticação NATIVA (quando o Plugin Java faz o POST sem Cookies de Sessão)
+        if not user.is_authenticated:
+            device_token = data.get('device_token')
+            if not device_token:
+                return Response({'error': 'Acesso negado. Token de dispositivo não fornecido.'}, status=401)
+            try:
+                dt = DeviceToken.objects.select_related('user').get(token=device_token)
+                user = dt.user
+            except DeviceToken.DoesNotExist:
+                return Response({'error': 'Acesso negado. Token de dispositivo inválido.'}, status=401)
 
         lat = data.get('lat')
         lng = data.get('lng')
@@ -97,4 +114,5 @@ class TrackingHeartbeatView(APIView):
         except Exception as e:
             print(f"❌ [REST Tracking] Erro ao enviar para Channels: {e}")
 
+        print(f"📡 [GPS NATIVO RECEBIDO] Motorista: {user.username} | Lat: {lat}, Lng: {lng} | Manifesto: {manifesto_id}")
         return Response({'success': True})
