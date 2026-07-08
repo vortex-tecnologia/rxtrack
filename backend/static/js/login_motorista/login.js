@@ -24,7 +24,7 @@ function salvarTokensEmCookies(access, refresh) {
 // =====================================================
 async function salvarDeviceTokenCapacitor(accessToken) {
     if (!window.Capacitor) {
-        console.log("📱 [APK] window.Capacitor não encontrado. Ignorando device token.");
+        alert("📱 [APK] window.Capacitor não encontrado na página! Bridge não injetada.");
         return;
     }
     if (!window.Capacitor.Plugins || !window.Capacitor.Plugins.Preferences) {
