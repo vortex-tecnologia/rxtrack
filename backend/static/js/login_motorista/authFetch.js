@@ -266,9 +266,12 @@ function logout() {
     fetch(AUTH_BASE + 'logout-session/', { method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') } }).catch(() => {});
     localStorage.clear();
     clearTokenCookies(); // Limpa cookies de backup também
-    // Limpa Preferences nativas do Capacitor
+    // Limpa Preferences nativas do Capacitor (se existir)
     if (window.NativeStorage) {
         window.NativeStorage.clear();
+    }
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences) {
+        window.Capacitor.Plugins.Preferences.remove({ key: 'device_token' });
     }
     if (!window.location.pathname.includes('/login/')) {
         window.location.href = '/login/';
