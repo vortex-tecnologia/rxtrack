@@ -26,61 +26,34 @@ if (typeof ultimaPosicaoNativa === 'undefined') {
 }
 
 async function iniciarCoracaoTracking() {
-    // Tenta carregar o plugin nativo via registerPlugin ou direto do objeto Plugins
-    let bgGeo = null;
-    if (window.Capacitor) {
-        if (window.Capacitor.registerPlugin) {
-            try { bgGeo = window.Capacitor.registerPlugin("BackgroundGeolocation"); } catch(e) { alert("registerPlugin erro: " + e.message); }
-        }
-        if (!bgGeo && window.Capacitor.Plugins) {
-            bgGeo = window.Capacitor.Plugins.BackgroundGeolocation;
-        }
-    } else {
-        alert("CRÍTICO: window.Capacitor não existe nesta página!");
-    }
-
-    if (bgGeo) {
+    // ═══════════════════════════════════════════════════════════
+    // COMUNICAÇÃO COM O IFRAME (NATIVO)
+    // ═══════════════════════════════════════════════════════════
+    if (window.parent !== window) {
         if (!capacitorWatcherId && typeof manifestoAtual !== 'undefined' && manifestoAtual) {
-            console.log("🔥 [GPS Nativo] Iniciando modo AGRESSIVO (Capacitor BackgroundGeolocation)...");
-            
-            bgGeo.addWatcher(
-                {
-                    backgroundMessage: "Rastreamento do QuickTrack ativo.",
-                    backgroundTitle: "Coletando GPS para o Manifesto.",
-                    requestPermissions: true,
-                    stale: false,
-                    distanceFilter: 0
-                },
-                function callback(location, error) {
-                    if (error) {
-                        alert("Erro no GPS Nativo: " + JSON.stringify(error));
-                        return console.error("📍 [Tracking] Erro:", error);
-                    }
-                    console.log("📍 [Tracking] Coordenada nativa:", location.latitude, location.longitude);
-                    enviarHeartbeat(location.latitude, location.longitude);
+            console.log("🔥 [GPS Nativo] Enviando comando para o App Nativo (Iframe Pai)...");
+            window.parent.postMessage({
+                type: 'START_NATIVE_GPS',
+                payload: {
+                    manifesto: manifestoAtual,
+                    baseUrl: window.API_BASE.replace('api/', '')
                 }
-            ).then(id => {
-                capacitorWatcherId = id;
-                console.log("📍 [Tracking] Watcher nativo ativo:", id);
-            }).catch(e => {
-                alert("Falha Crítica ao iniciar GPS Nativo: " + (e.message || JSON.stringify(e)));
-                console.error("📍 [Tracking] Erro crítico no addWatcher", e);
-            });
+            }, '*');
+            capacitorWatcherId = "iframe_mode";
             
-            // Fallback: timer de 30s chamando o watcher manualmente se necessário
+            // Fallback: garante envio pela própria janela caso falhe o nativo
             if (!nativeHeartbeatTimer) {
-                nativeHeartbeatTimer = setInterval(() => {
-                    enviarHeartbeat(); 
-                }, 30000);
+                nativeHeartbeatTimer = setInterval(() => { enviarHeartbeat(); }, 30000);
             }
         }
     } else {
         // ═══════════════════════════════════════════════════════════
-        // MODO PWA (Navegador) - Fallback tradicional com setInterval
+        // MODO PWA (Navegador Desktop/Web)
         // ═══════════════════════════════════════════════════════════
         if (!heartbeatInterval && typeof manifestoAtual !== 'undefined' && manifestoAtual) {
+            console.log("💓 [PWA Tracking] Iniciando fallback JS");
             heartbeatInterval = setInterval(enviarHeartbeat, 30000);
-            enviarHeartbeat(); // Envia o primeiro imediatamente
+            enviarHeartbeat(); // Primeiro imediato
         }
     }
 
