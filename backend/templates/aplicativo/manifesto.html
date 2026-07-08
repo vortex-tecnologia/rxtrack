@@ -1796,7 +1796,13 @@
             onRefresh: function() { window.location.reload(); }
         });
     </script>
-    <script src="/capacitor.js"></script>
+    <script>
+        if (navigator.userAgent.includes('Android')) {
+            document.write('<script src="http://localhost/capacitor.js"><\/script>');
+        } else if (navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad')) {
+            document.write('<script src="capacitor://localhost/capacitor.js"><\/script>');
+        }
+    </script>
     <script src="{% static 'js/pwa_tracking.js' %}"></script>
     <script src="{% static 'js/offiline.js' %}"></script>
     <script src="{% static 'js/historico_v1.js' %}"></script>
