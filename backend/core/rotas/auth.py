@@ -9,6 +9,7 @@ from usuarios.views_login.auth_views import (
     MeSessionView,
     LogoutSessionView
 )
+from usuarios.views_login.device_token_views import auto_login_device, criar_device_token
 
 urlpatterns = [
     path('verificar-cpf/', VerificarCPFView.as_view(), name='verificar-cpf'),
@@ -18,4 +19,7 @@ urlpatterns = [
     path('login-session/', LoginSessionView.as_view(), name='login_session'),
     path('me-session/', MeSessionView.as_view(), name='me_session'),
     path('logout-session/', LogoutSessionView.as_view(), name='logout_session'),
+    # Auto-login APK (Device Token)
+    path('auto-login/', auto_login_device, name='auto_login_device'),
+    path('device-token/', criar_device_token, name='criar_device_token'),
 ]

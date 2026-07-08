@@ -19,6 +19,32 @@ function salvarTokensEmCookies(access, refresh) {
 }
 
 // =====================================================
+// CAPACITOR: Salva Device Token no SharedPreferences nativo
+// Só executa dentro do APK. No PWA/Browser, é ignorado.
+// =====================================================
+async function salvarDeviceTokenCapacitor(accessToken) {
+    if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.Preferences) return;
+    try {
+        const res = await fetch(API_BASE + 'device-token/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`
+            },
+            body: JSON.stringify({ device_info: navigator.userAgent.substring(0, 200) })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            await window.Capacitor.Plugins.Preferences.set({ key: 'device_token', value: data.device_token });
+            await window.Capacitor.Plugins.Preferences.set({ key: 'server_url', value: window.location.origin });
+            console.log('📱 [APK] Device token salvo no SharedPreferences nativo!');
+        }
+    } catch (e) {
+        console.error('Erro ao salvar device token:', e);
+    }
+}
+
+// =====================================================
 // AUTO-LOGIN (Redireciona se já estiver logado via NativeStorage/Cookies)
 // =====================================================
 document.addEventListener("DOMContentLoaded", async () => {
@@ -166,6 +192,9 @@ form.addEventListener('submit', async (e) => {
                 window.NativeStorage.save('motorista_id', localStorage.getItem('motorista_id') || '');
             }
 
+            // 📱 APK: Salva device token no SharedPreferences nativo (Capacitor)
+            await salvarDeviceTokenCapacitor(data.access);
+
             window.location.href = '/app/';
         }
 
@@ -210,6 +239,9 @@ form.addEventListener('submit', async (e) => {
                 window.NativeStorage.save('refreshToken', data.refresh);
                 window.NativeStorage.save('motorista_id', me.id);
             }
+
+            // 📱 APK: Salva device token no SharedPreferences nativo (Capacitor)
+            await salvarDeviceTokenCapacitor(data.access);
 
             window.location.href = '/app/';
         }

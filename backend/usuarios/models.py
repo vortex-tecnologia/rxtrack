@@ -306,3 +306,33 @@ def enviar_email_convite_sac(sender, instance, created, **kwargs):
             )
         except Exception as e:
             print(f"Erro ao enviar email de convite SAC: {e}")
+
+
+# =====================================================
+# Device Token — Login persistente para APK (Capacitor)
+# =====================================================
+class DeviceToken(models.Model):
+    """
+    Token de dispositivo para auto-login no APK.
+    Salvo no SharedPreferences nativo do Android via @capacitor/preferences.
+    Sobrevive ao app ser matado, celular reiniciado, etc.
+    NÃO é usado pelo PWA (que funciona normal com sessão/cookies).
+    """
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='device_tokens',
+        verbose_name="Usuário"
+    )
+    token = models.CharField(max_length=64, unique=True, db_index=True, verbose_name="Token do Dispositivo")
+    device_info = models.CharField(max_length=255, blank=True, default='APK Android', verbose_name="Info do Dispositivo")
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name="Criado em")
+    ultimo_uso = models.DateTimeField(auto_now=True, verbose_name="Último Uso")
+    ativo = models.BooleanField(default=True, verbose_name="Ativo")
+
+    class Meta:
+        verbose_name = "Device Token"
+        verbose_name_plural = "Device Tokens"
+
+    def __str__(self):
+        return f"Device {self.user.username} - {self.token[:8]}..."
