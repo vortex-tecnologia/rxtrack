@@ -493,7 +493,10 @@ if not DEBUG: # Ou remova o 'if' se quiser testar no ngrok agora
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-
+    
+SESSION_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_TRUSTED_ORIGINS = ['http://localhost', 'https://localhost', 'capacitor://localhost']
 
 WHITENOISE_MANIFEST_STRICT = False
 X_FRAME_OPTIONS = 'ALLOWALL'
