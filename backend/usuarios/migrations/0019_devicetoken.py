@@ -6,7 +6,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('auth', '0012_alter_user_first_name_max_length'),
-        ('usuarios', '0013_motorista_permitir_upload_galeria'),
+        ('usuarios', '0018_merge_20260702_1603'),
     ]
 
     operations = [
