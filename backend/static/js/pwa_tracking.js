@@ -51,6 +51,7 @@ async function iniciarCoracaoTracking() {
                 },
                 function callback(location, error) {
                     if (error) {
+                        alert("Erro no GPS Nativo: " + JSON.stringify(error));
                         return console.error("📍 [Tracking] Erro:", error);
                     }
                     console.log("📍 [Tracking] Coordenada nativa:", location.latitude, location.longitude);
@@ -59,6 +60,9 @@ async function iniciarCoracaoTracking() {
             ).then(id => {
                 capacitorWatcherId = id;
                 console.log("📍 [Tracking] Watcher nativo ativo:", id);
+            }).catch(e => {
+                alert("Falha Crítica ao iniciar GPS Nativo: " + (e.message || JSON.stringify(e)));
+                console.error("📍 [Tracking] Erro crítico no addWatcher", e);
             });
             
             // Fallback: timer de 30s chamando o watcher manualmente se necessário
