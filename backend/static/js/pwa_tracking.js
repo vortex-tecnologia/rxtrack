@@ -30,11 +30,13 @@ async function iniciarCoracaoTracking() {
     let bgGeo = null;
     if (window.Capacitor) {
         if (window.Capacitor.registerPlugin) {
-            try { bgGeo = window.Capacitor.registerPlugin("BackgroundGeolocation"); } catch(e) {}
+            try { bgGeo = window.Capacitor.registerPlugin("BackgroundGeolocation"); } catch(e) { alert("registerPlugin erro: " + e.message); }
         }
         if (!bgGeo && window.Capacitor.Plugins) {
             bgGeo = window.Capacitor.Plugins.BackgroundGeolocation;
         }
+    } else {
+        alert("CRÍTICO: window.Capacitor não existe nesta página!");
     }
 
     if (bgGeo) {
