@@ -23,7 +23,15 @@ function salvarTokensEmCookies(access, refresh) {
 // Só executa dentro do APK. No PWA/Browser, é ignorado.
 // =====================================================
 async function salvarDeviceTokenCapacitor(accessToken) {
-    if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.Preferences) return;
+    if (!window.Capacitor) {
+        console.log("📱 [APK] window.Capacitor não encontrado. Ignorando device token.");
+        return;
+    }
+    if (!window.Capacitor.Plugins || !window.Capacitor.Plugins.Preferences) {
+        alert("Erro APK: Plugin Preferences não está disponível no Capacitor.");
+        return;
+    }
+    
     try {
         const res = await fetch(API_BASE + 'device-token/', {
             method: 'POST',
@@ -33,14 +41,17 @@ async function salvarDeviceTokenCapacitor(accessToken) {
             },
             body: JSON.stringify({ device_info: navigator.userAgent.substring(0, 200) })
         });
+        
         if (res.ok) {
             const data = await res.json();
             await window.Capacitor.Plugins.Preferences.set({ key: 'device_token', value: data.device_token });
             await window.Capacitor.Plugins.Preferences.set({ key: 'server_url', value: window.location.origin });
-            console.log('📱 [APK] Device token salvo no SharedPreferences nativo!');
+            alert('📱 [APK] Device token criado e salvo com sucesso!');
+        } else {
+            alert('Erro ao criar device token: ' + await res.text());
         }
     } catch (e) {
-        console.error('Erro ao salvar device token:', e);
+        alert('Erro de rede ao salvar device token: ' + e.message);
     }
 }
 
