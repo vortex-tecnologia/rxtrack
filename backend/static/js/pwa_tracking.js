@@ -29,16 +29,37 @@ async function iniciarCoracaoTracking() {
     // ═══════════════════════════════════════════════════════════
     // MODO APK - GPS AGRESSIVO COM FOREGROUND SERVICE NATIVO
     // ═══════════════════════════════════════════════════════════
-    if (window.NativeGPS) {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation) {
         if (!capacitorWatcherId && typeof manifestoAtual !== 'undefined' && manifestoAtual) {
-            console.log("🔥 [GPS Nativo] Iniciando modo AGRESSIVO (Foreground Service via Java)...");
+            console.log("🔥 [GPS Nativo] Iniciando modo AGRESSIVO (Capacitor BackgroundGeolocation)...");
             
-            const motoristaId = localStorage.getItem('motorista_id') || '';
-            const token = localStorage.getItem('accessToken') || '';
+            const bgGeo = window.Capacitor.Plugins.BackgroundGeolocation;
+            bgGeo.addWatcher(
+                {
+                    backgroundMessage: "Rastreamento do QuickTrack ativo.",
+                    backgroundTitle: "Coletando GPS para o Manifesto.",
+                    requestPermissions: true,
+                    stale: false,
+                    distanceFilter: 0
+                },
+                function callback(location, error) {
+                    if (error) {
+                        return console.error("📍 [Tracking] Erro:", error);
+                    }
+                    console.log("📍 [Tracking] Coordenada nativa:", location.latitude, location.longitude);
+                    enviarHeartbeat(location.latitude, location.longitude);
+                }
+            ).then(id => {
+                capacitorWatcherId = id;
+                console.log("📍 [Tracking] Watcher nativo ativo:", id);
+            });
             
-            // O Java envia direto pro backend a cada 30s
-            window.NativeGPS.startTracking(motoristaId, manifestoAtual, token, window.API_BASE.replace('api/', ''));
-            capacitorWatcherId = 'native-gps-active'; // Apenas uma flag para sabermos que tá rodando
+            // Fallback: timer de 30s chamando o watcher manualmente se necessário
+            if (!nativeHeartbeatTimer) {
+                nativeHeartbeatTimer = setInterval(() => {
+                    enviarHeartbeat(); 
+                }, 30000);
+            }
         }
     } else {
         // ═══════════════════════════════════════════════════════════
@@ -82,8 +103,8 @@ async function iniciarCoracaoTracking() {
  */
 function pararTrackingNativo() {
     console.log("🛑 [GPS Nativo] Parando rastreamento...");
-    if (window.NativeGPS) {
-        window.NativeGPS.stopTracking();
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation && capacitorWatcherId) {
+        window.Capacitor.Plugins.BackgroundGeolocation.removeWatcher({ id: capacitorWatcherId });
         capacitorWatcherId = null;
     }
     if (nativeHeartbeatTimer) {

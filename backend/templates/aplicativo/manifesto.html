@@ -1456,6 +1456,20 @@
             window.location.reload(true);
         }
 
+        // Pull to Refresh (Para Capacitor/WebView)
+        document.addEventListener("DOMContentLoaded", function () {
+            if (typeof PullToRefresh !== 'undefined') {
+                PullToRefresh.init({
+                    mainElement: 'body',
+                    onRefresh: function() {
+                        window.location.reload();
+                    },
+                    distThreshold: 60,
+                    distMax: 80
+                });
+            }
+        });
+
         // Função de Logout
         document.addEventListener("DOMContentLoaded", function () {
             verificarStatusNotificacao();
@@ -1775,6 +1789,13 @@
     <script src="{% static 'js/serviceworker.js' %}?v=1.38"></script>
     <script src="/static/js/login_motorista/authFetch.js"></script>
     <script src="{% static 'js/manifesto_v19.js' %}"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pulltorefreshjs/0.1.22/index.umd.min.js"></script>
+    <script>
+        PullToRefresh.init({
+            mainElement: 'body',
+            onRefresh: function() { window.location.reload(); }
+        });
+    </script>
     <script src="{% static 'js/pwa_tracking.js' %}"></script>
     <script src="{% static 'js/offiline.js' %}"></script>
     <script src="{% static 'js/historico_v1.js' %}"></script>
