@@ -26,14 +26,21 @@ if (typeof ultimaPosicaoNativa === 'undefined') {
 }
 
 async function iniciarCoracaoTracking() {
-    // ═══════════════════════════════════════════════════════════
-    // MODO APK - GPS AGRESSIVO COM FOREGROUND SERVICE NATIVO
-    // ═══════════════════════════════════════════════════════════
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation) {
+    // Tenta carregar o plugin nativo via registerPlugin ou direto do objeto Plugins
+    let bgGeo = null;
+    if (window.Capacitor) {
+        if (window.Capacitor.registerPlugin) {
+            try { bgGeo = window.Capacitor.registerPlugin("BackgroundGeolocation"); } catch(e) {}
+        }
+        if (!bgGeo && window.Capacitor.Plugins) {
+            bgGeo = window.Capacitor.Plugins.BackgroundGeolocation;
+        }
+    }
+
+    if (bgGeo) {
         if (!capacitorWatcherId && typeof manifestoAtual !== 'undefined' && manifestoAtual) {
             console.log("🔥 [GPS Nativo] Iniciando modo AGRESSIVO (Capacitor BackgroundGeolocation)...");
             
-            const bgGeo = window.Capacitor.Plugins.BackgroundGeolocation;
             bgGeo.addWatcher(
                 {
                     backgroundMessage: "Rastreamento do QuickTrack ativo.",
@@ -103,9 +110,18 @@ async function iniciarCoracaoTracking() {
  */
 function pararTrackingNativo() {
     console.log("🛑 [GPS Nativo] Parando rastreamento...");
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation && capacitorWatcherId) {
-        window.Capacitor.Plugins.BackgroundGeolocation.removeWatcher({ id: capacitorWatcherId });
-        capacitorWatcherId = null;
+    if (window.Capacitor) {
+        let bgGeo = null;
+        if (window.Capacitor.registerPlugin) {
+            try { bgGeo = window.Capacitor.registerPlugin("BackgroundGeolocation"); } catch(e) {}
+        }
+        if (!bgGeo && window.Capacitor.Plugins) {
+            bgGeo = window.Capacitor.Plugins.BackgroundGeolocation;
+        }
+        if (bgGeo && capacitorWatcherId) {
+            bgGeo.removeWatcher({ id: capacitorWatcherId });
+            capacitorWatcherId = null;
+        }
     }
     if (nativeHeartbeatTimer) {
         clearInterval(nativeHeartbeatTimer);
