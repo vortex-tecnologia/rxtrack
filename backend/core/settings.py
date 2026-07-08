@@ -496,3 +496,4 @@ if not DEBUG: # Ou remova o 'if' se quiser testar no ngrok agora
 
 
 WHITENOISE_MANIFEST_STRICT = False
+X_FRAME_OPTIONS = 'ALLOWALL'
