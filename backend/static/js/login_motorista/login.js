@@ -24,11 +24,13 @@ function salvarTokensEmCookies(access, refresh) {
 // =====================================================
 async function salvarDeviceTokenCapacitor(accessToken) {
     if (!window.Capacitor) {
-        alert("📱 [APK] window.Capacitor não encontrado na página! Bridge não injetada.");
+        showAlert("📱 [APK] window.Capacitor não encontrado na página! Bridge não injetada.", 'danger');
+        await new Promise(resolve => setTimeout(resolve, 4000));
         return;
     }
     if (!window.Capacitor.Plugins || !window.Capacitor.Plugins.Preferences) {
-        alert("Erro APK: Plugin Preferences não está disponível no Capacitor.");
+        showAlert("Erro APK: Plugin Preferences não está disponível no Capacitor.", 'danger');
+        await new Promise(resolve => setTimeout(resolve, 4000));
         return;
     }
     
@@ -46,13 +48,16 @@ async function salvarDeviceTokenCapacitor(accessToken) {
             const data = await res.json();
             await window.Capacitor.Plugins.Preferences.set({ key: 'device_token', value: data.device_token });
             await window.Capacitor.Plugins.Preferences.set({ key: 'server_url', value: window.location.origin });
-            alert('📱 [APK] Device token criado e salvo com sucesso!');
+            showAlert('📱 [APK] Device token criado e salvo com sucesso!', 'success');
         } else {
-            alert('Erro ao criar device token: ' + await res.text());
+            showAlert('Erro ao criar device token: ' + await res.text(), 'danger');
         }
     } catch (e) {
-        alert('Erro de rede ao salvar device token: ' + e.message);
+        showAlert('Erro de rede ao salvar device token: ' + e.message, 'danger');
     }
+    
+    // Pausa de 4 segundos para dar tempo de ler a mensagem na tela antes de redirecionar
+    await new Promise(resolve => setTimeout(resolve, 4000));
 }
 
 // =====================================================
