@@ -273,8 +273,15 @@ function logout() {
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences) {
         window.Capacitor.Plugins.Preferences.remove({ key: 'device_token' });
     }
-    if (!window.location.pathname.includes('/login/')) {
-        window.location.href = '/login/';
+    
+    if (window.parent !== window) {
+        // Se estiver rodando dentro do App Nativo (Iframe), envia o comando para matar o app e limpar dados
+        window.parent.postMessage({ type: 'LOGOUT_APP' }, '*');
+    } else {
+        // Se estiver rodando no navegador normal, redireciona pra tela de login do PWA
+        if (!window.location.pathname.includes('/login/')) {
+            window.location.href = '/login/';
+        }
     }
 }
 
