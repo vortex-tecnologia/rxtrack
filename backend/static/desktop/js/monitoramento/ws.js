@@ -65,6 +65,17 @@ function conectarWebSocket() {
                             `<b>📡 Posição Atual</b><br>🔋 Bateria: ${status.battery || '--'}%<br>📶 Rede: ${status.network || '--'}<br>🕐 Último Sinal: ${status.last_seen ? new Date(status.last_seen).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--'}`
                         );
                     }
+                    // Atualiza overlay de status do modal (se existir)
+                    const batEl = document.getElementById('mapa-status-bat');
+                    const redeEl = document.getElementById('mapa-status-rede');
+                    const vistoEl = document.getElementById('mapa-status-visto');
+                    if (batEl) batEl.innerText = status.battery ? status.battery + '%' : '--%';
+                    if (redeEl) redeEl.innerText = status.network || '--';
+                    if (vistoEl && status.last_seen) {
+                        try {
+                            vistoEl.innerText = new Date(status.last_seen).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                        } catch(e) {}
+                    }
                 }
                 return;
             }
@@ -451,46 +462,71 @@ function atualizarUltimoSinalTorre() {
 // --- FUNÇÕES DO MAPA REAL-TIME ---
 
 function abrirRastreamentoRealTime(manifestoId, motoristaNome, initialLat, initialLng) {
-    monitorandoManifestoId = manifestoId;
+    monitorandoManifestoId = manifestoId.toString();
     document.getElementById('rastreamento-titulo').innerText = `Rastreando: ${motoristaNome}`;
     document.getElementById('rastreamento-mft').innerText = manifestoId;
-
-    // Carrega dados em tempo real da tabela, se disponíveis
-    const tr = document.querySelector(`tr[data-manifesto-id="${manifestoId}"]`);
-    let lat = initialLat;
-    let lng = initialLng;
-    let battery = null;
-    let network = '';
-    let lastSeen = null;
-
-    if (tr) {
-        lat = tr.getAttribute('data-lat') || lat;
-        lng = tr.getAttribute('data-lng') || lng;
-        battery = tr.getAttribute('data-bateria') || null;
-        network = tr.getAttribute('data-rede') || '';
-        lastSeen = tr.getAttribute('data-ultimo-acesso') || null;
-    }
 
     const modal = new bootstrap.Modal(document.getElementById('modalRastreamento'));
     modal.show();
 
     // Aguarda o modal abrir para inicializar o mapa (Leaflet precisa do container visível)
     document.getElementById('modalRastreamento').addEventListener('shown.bs.modal', function () {
-        initMapaRastreamento(lat, lng);
+        // Busca a posição atual do caminhão via API REST
+        fetch(`/api/rastreio/${manifestoId}/`)
+            .then(res => res.ok ? res.json() : Promise.reject('Erro HTTP'))
+            .then(data => {
+                let lat = initialLat;
+                let lng = initialLng;
+                let battery = null;
+                let network = '';
+                let lastSeen = null;
 
-        // Preenche o overlay de status com as últimas informações conhecidas
-        document.getElementById('mapa-status-bat').innerText = battery ? battery + '%' : '--%';
-        document.getElementById('mapa-status-rede').innerText = network || '--';
-        if (lastSeen) {
-            try {
-                const timeStr = new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                document.getElementById('mapa-status-visto').innerText = timeStr;
-            } catch (e) {
+                // Se a API retornou posição atual do GPS nativo, usa ela
+                if (data.posicao_atual) {
+                    lat = data.posicao_atual.lat;
+                    lng = data.posicao_atual.lng;
+                    battery = data.posicao_atual.battery;
+                    network = data.posicao_atual.network;
+                    lastSeen = data.posicao_atual.last_seen;
+                }
+
+                // Fallback: tenta ler dos atributos data-* da tabela (se existir)
+                const tr = document.querySelector(`tr[data-manifesto-id="${manifestoId}"]`);
+                if (tr) {
+                    lat = lat || tr.getAttribute('data-lat');
+                    lng = lng || tr.getAttribute('data-lng');
+                    battery = battery || tr.getAttribute('data-bateria');
+                    network = network || tr.getAttribute('data-rede');
+                    lastSeen = lastSeen || tr.getAttribute('data-ultimo-acesso');
+                }
+
+                initMapaRastreamento(lat, lng);
+
+                // Preenche o overlay de status
+                document.getElementById('mapa-status-bat').innerText = battery ? battery + '%' : '--%';
+                document.getElementById('mapa-status-rede').innerText = network || '--';
+                if (lastSeen) {
+                    try {
+                        // lastSeen pode ser "HH:MM" ou ISO string
+                        const timeStr = lastSeen.includes(':') && lastSeen.length <= 5 
+                            ? lastSeen 
+                            : new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        document.getElementById('mapa-status-visto').innerText = timeStr;
+                    } catch (e) {
+                        document.getElementById('mapa-status-visto').innerText = lastSeen || '--';
+                    }
+                } else {
+                    document.getElementById('mapa-status-visto').innerText = '--';
+                }
+            })
+            .catch(err => {
+                console.error('Erro ao buscar posição atual:', err);
+                // Fallback: inicializa com as coordenadas do template
+                initMapaRastreamento(initialLat, initialLng);
+                document.getElementById('mapa-status-bat').innerText = '--%';
+                document.getElementById('mapa-status-rede').innerText = '--';
                 document.getElementById('mapa-status-visto').innerText = '--';
-            }
-        } else {
-            document.getElementById('mapa-status-visto').innerText = '--';
-        }
+            });
     }, { once: true });
 
     // Limpeza ao fechar
