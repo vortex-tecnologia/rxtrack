@@ -218,8 +218,20 @@ def api_rastreio_manifesto(request, manifesto_id):
         'lng': -43.2886202
     }
 
+    # Posição atual do veículo (enviada pelo GPS nativo Java)
+    posicao_atual = None
+    if manifesto.ultima_lat and manifesto.ultima_lng:
+        posicao_atual = {
+            'lat': float(manifesto.ultima_lat),
+            'lng': float(manifesto.ultima_lng),
+            'battery': manifesto.ultima_bateria,
+            'network': manifesto.ultima_rede,
+            'last_seen': localtime(manifesto.ultimo_acesso).strftime('%H:%M') if manifesto.ultimo_acesso else None
+        }
+
     return JsonResponse({
         'filial': dados_filial,
         'pontos': pontos,
-        'motorista': manifesto.motorista.nome_completo if manifesto.motorista else "Motorista não identificado"
+        'motorista': manifesto.motorista.nome_completo if manifesto.motorista else "Motorista não identificado",
+        'posicao_atual': posicao_atual
     })

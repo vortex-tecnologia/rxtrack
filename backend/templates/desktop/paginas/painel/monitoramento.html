@@ -251,6 +251,9 @@
         let calculoProgresso = (parseInt(progresso) / parseInt(totalNfs)) * 100;
         document.getElementById('rastreio_progresso_barra').style.width = (calculoProgresso || 0) + '%';
 
+        // Conecta ao sistema de atualização em tempo real do ws.js
+        monitorandoManifestoId = manifestoId.toString();
+
         const modalElement = document.getElementById('modalRastreio');
         const modal = new bootstrap.Modal(modalElement);
         modal.show();
@@ -272,7 +275,9 @@
                 maxZoom: 20
             }).addTo(mapaEntrega);
 
-            // Ícones Normais (Caixas)
+            setTimeout(() => { mapaEntrega.invalidateSize(); }, 200);
+
+            // Ícones
             const iconEntregue = L.divIcon({
                 html: '<i class="bi bi-box-seam-fill text-success" style="font-size: 18px;"></i>',
                 className: 'custom-div-icon',
@@ -285,14 +290,14 @@
                 iconSize: [20, 20]
             });
 
-            // ÍCONE DO VEÍCULO (Última parada)
+            // ÍCONE DO VEÍCULO (posição real-time)
             const iconCaminhao = L.divIcon({
                 html: '<div style="background: #007bff; border: 2px solid white; border-radius: 50%; padding: 5px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0,0,0,0.3);">' +
                     '<i class="bi bi-truck text-white" style="font-size: 20px;"></i>' +
                     '</div>',
                 className: 'custom-div-icon',
                 iconSize: [35, 35],
-                iconAnchor: [17, 17] // Centraliza o ícone no ponto exato
+                iconAnchor: [17, 17]
             });
 
             fetch(`/api/rastreio/${manifestoId}/`)
@@ -305,24 +310,43 @@
 
                     L.marker([latFilial, lngFilial]).bindPopup("<b>Filial RDexpresso</b>").addTo(mapaEntrega);
 
+                    // Plotar pontos de entrega (notas baixadas)
                     if (data.pontos && data.pontos.length > 0) {
-                        data.pontos.forEach((ponto, index) => {
+                        data.pontos.forEach((ponto) => {
                             const latLng = [ponto.lat, ponto.lng];
                             pontosParaRota.push(`${ponto.lng},${ponto.lat}`);
 
-                            // LÓGICA: Se for o ÚLTIMO ponto da lista, coloca o caminhão. Senão, coloca a caixa.
-                            let iconChoice;
-                            if (index === data.pontos.length - 1) {
-                                iconChoice = iconCaminhao;
-                            } else {
-                                iconChoice = (ponto.status === 'BAIXADA') ? iconEntregue : iconOcorrencia;
-                            }
+                            const iconChoice = (ponto.status === 'BAIXADA') ? iconEntregue : iconOcorrencia;
 
                             L.marker(latLng, { icon: iconChoice })
-                                .bindPopup(`<b>Nota: ${ponto.nota}</b><br>Hora: ${ponto.horario}<br>${index === data.pontos.length - 1 ? '<b>Última parada aqui</b>' : ''}`)
+                                .bindPopup(`<b>Nota: ${ponto.nota}</b><br>Hora: ${ponto.horario}`)
                                 .addTo(mapaEntrega);
                         });
+                    }
 
+                    // POSIÇÃO ATUAL DO CAMINHÃO (GPS Nativo Java)
+                    if (data.posicao_atual) {
+                        const pos = data.posicao_atual;
+                        const caminhaoLatLng = [pos.lat, pos.lng];
+                        pontosParaRota.push(`${pos.lng},${pos.lat}`);
+
+                        // Cria o marcador do caminhão e salva globalmente para updates via WS
+                        marcadorMotorista = L.marker(caminhaoLatLng, { icon: iconCaminhao })
+                            .bindPopup(`<b>📡 Posição Atual</b><br>🔋 Bateria: ${pos.battery || '--'}%<br>📶 Rede: ${pos.network || '--'}<br>🕐 Último Sinal: ${pos.last_seen || '--'}`)
+                            .addTo(mapaEntrega);
+
+                        // Centraliza o mapa no caminhão
+                        mapaEntrega.setView(caminhaoLatLng, 15);
+                    } else {
+                        // Sem posição GPS conhecida — mostra mensagem no centro
+                        L.popup()
+                            .setLatLng([latFilial, lngFilial])
+                            .setContent('<b>Aguardando primeiro sinal de GPS...</b>')
+                            .openOn(mapaEntrega);
+                    }
+
+                    // Desenhar rota (se houver pontos suficientes)
+                    if (pontosParaRota.length > 1) {
                         const coordenadasString = pontosParaRota.join(';');
                         const urlOSRM = `https://router.project-osrm.org/route/v1/driving/${coordenadasString}?overview=full&geometries=geojson`;
 
@@ -332,20 +356,25 @@
                                 if (result.routes && result.routes.length > 0) {
                                     const rotaRua = result.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
 
-                                    let polyline = L.polyline(rotaRua, {
+                                    L.polyline(rotaRua, {
                                         color: '#007bff',
                                         weight: 6,
                                         opacity: 0.8,
                                         lineJoin: 'round'
                                     }).addTo(mapaEntrega);
-
-                                    mapaEntrega.fitBounds(polyline.getBounds(), { padding: [50, 50] });
                                 }
-                            });
+                            }).catch(() => {});
                     }
                 })
                 .catch(err => console.error('Erro ao carregar rastro:', err));
 
+        }, { once: true });
+
+        // Limpeza ao fechar o modal
+        modalElement.addEventListener('hidden.bs.modal', function () {
+            monitorandoManifestoId = null;
+            marcadorMotorista = null;
+            // O mapa será destruído na próxima abertura
         }, { once: true });
     }
 </script>

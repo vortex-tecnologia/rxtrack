@@ -50,8 +50,21 @@ function conectarWebSocket() {
                 updateLastSeen(mID, status.last_seen);
 
                 // Atualiza Mapa Modal (se estiver aberto para este manifesto)
-                if (monitorandoManifestoId === mID && mapaRastreamento) {
-                    atualizarPosicaoMapa(status);
+                if (monitorandoManifestoId === mID && marcadorMotorista) {
+                    const lat = parseFloat(status.lat);
+                    const lng = parseFloat(status.lng);
+                    if (!isNaN(lat) && !isNaN(lng)) {
+                        marcadorMotorista.setLatLng([lat, lng]);
+                        if (typeof mapaEntrega !== 'undefined' && mapaEntrega) {
+                            mapaEntrega.panTo([lat, lng]);
+                        } else if (mapaRastreamento) {
+                            mapaRastreamento.panTo([lat, lng]);
+                        }
+                        // Atualiza popup do marcador
+                        marcadorMotorista.setPopupContent(
+                            `<b>📡 Posição Atual</b><br>🔋 Bateria: ${status.battery || '--'}%<br>📶 Rede: ${status.network || '--'}<br>🕐 Último Sinal: ${status.last_seen ? new Date(status.last_seen).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--'}`
+                        );
+                    }
                 }
                 return;
             }
