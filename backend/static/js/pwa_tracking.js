@@ -89,6 +89,12 @@ async function iniciarCoracaoTracking() {
  */
 function pararTrackingNativo() {
     console.log("🛑 [GPS Nativo] Parando rastreamento...");
+    
+    // Parar o Motor Java Nativo (Nova Arquitetura)
+    if (window.parent !== window) {
+        window.parent.postMessage({ type: 'STOP_NATIVE_GPS' }, '*');
+    }
+
     if (window.Capacitor) {
         let bgGeo = null;
         if (window.Capacitor.registerPlugin) {
@@ -184,4 +190,7 @@ async function enviarHeartbeat(overrideLat = null, overrideLng = null) {
 // Inicia o monitoramento se já tivermos um manifesto ao carregar o script
 if (typeof manifestoAtual !== 'undefined' && manifestoAtual) {
     iniciarCoracaoTracking();
+} else {
+    // Garante que o GPS Nativo (Java) seja desligado se a página carregar sem manifesto (ex: pós finalização)
+    pararTrackingNativo();
 }
