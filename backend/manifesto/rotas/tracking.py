@@ -36,6 +36,7 @@ class TrackingHeartbeatView(APIView):
         lat = data.get('lat')
         lng = data.get('lng')
         battery = data.get('battery')
+        is_charging = data.get('is_charging', False)
         network = data.get('network')
         manifesto_id = data.get('manifesto_id')
 
@@ -51,6 +52,7 @@ class TrackingHeartbeatView(APIView):
                 'lat': lat,
                 'lng': lng,
                 'battery': battery,
+                'is_charging': is_charging,
                 'network': network,
                 'manifesto_id': manifesto_id,
                 'last_seen': timezone.localtime(timezone.now()).isoformat(),
@@ -107,6 +109,7 @@ class TrackingHeartbeatView(APIView):
                                 "lat": lat,
                                 "lng": lng,
                                 "battery": battery,
+                                "is_charging": is_charging,
                                 "network": network,
                                 "last_seen": status_data.get('last_seen')
                             }

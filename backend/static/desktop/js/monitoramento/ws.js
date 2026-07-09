@@ -40,12 +40,13 @@ function conectarWebSocket() {
                     if (status.lat !== undefined && status.lat !== null) tr.setAttribute('data-lat', status.lat);
                     if (status.lng !== undefined && status.lng !== null) tr.setAttribute('data-lng', status.lng);
                     if (status.battery !== undefined && status.battery !== null) tr.setAttribute('data-bateria', status.battery);
+                    if (status.is_charging !== undefined && status.is_charging !== null) tr.setAttribute('data-carregando', status.is_charging);
                     if (status.network !== undefined && status.network !== null) tr.setAttribute('data-rede', status.network);
                     if (status.last_seen) tr.setAttribute('data-ultimo-acesso', status.last_seen);
                 }
 
                 // Atualiza Tabela (se existir no DOM)
-                updateBatteryIcon(mID, status.battery);
+                updateBatteryIcon(mID, status.battery, status.is_charging);
                 updateNetworkStatus(mID, status.network);
                 updateLastSeen(mID, status.last_seen);
 
@@ -62,14 +63,17 @@ function conectarWebSocket() {
                         }
                         // Atualiza popup do marcador
                         marcadorMotorista.setPopupContent(
-                            `<b>📡 Posição Atual</b><br>🔋 Bateria: ${status.battery || '--'}%<br>📶 Rede: ${status.network || '--'}<br>🕐 Último Sinal: ${status.last_seen ? new Date(status.last_seen).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--'}`
+                            `<b>📡 Posição Atual</b><br>🔋 Bateria: ${status.battery || '--'}% ${status.is_charging ? '⚡' : ''}<br>📶 Rede: ${status.network || '--'}<br>🕐 Último Sinal: ${status.last_seen ? new Date(status.last_seen).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--'}`
                         );
                     }
                     // Atualiza overlay de status do modal (se existir)
                     const batEl = document.getElementById('mapa-status-bat');
                     const redeEl = document.getElementById('mapa-status-rede');
                     const vistoEl = document.getElementById('mapa-status-visto');
-                    if (batEl) batEl.innerText = status.battery ? status.battery + '%' : '--%';
+                    if (batEl) {
+                        batEl.innerText = status.battery ? status.battery + '%' : '--%';
+                        if (status.is_charging) batEl.innerText += ' ⚡';
+                    }
                     if (redeEl) redeEl.innerText = status.network || '--';
                     if (vistoEl && status.last_seen) {
                         try {
@@ -249,7 +253,7 @@ function conectarWebSocket() {
         grid.insertAdjacentHTML('afterbegin', html);
     }
 
-    function updateBatteryIcon(mID, level) {
+    function updateBatteryIcon(mID, level, isCharging) {
         const container = document.getElementById(`battery-mft-${mID}`);
         if (!container) return;
 
@@ -258,10 +262,15 @@ function conectarWebSocket() {
 
         if (level !== null && level !== undefined) {
             const l = parseInt(level);
-            if (l > 80) { iconClass = "bi-battery-full"; colorClass = "text-success"; }
-            else if (l > 50) { iconClass = "bi-battery-half"; colorClass = "text-info"; }
-            else if (l > 20) { iconClass = "bi-battery-half"; colorClass = "text-warning"; }
-            else { iconClass = "bi-battery-low"; colorClass = "text-danger"; }
+            if (isCharging) {
+                iconClass = "bi-battery-charging";
+                colorClass = "text-success";
+            } else {
+                if (l > 80) { iconClass = "bi-battery-full"; colorClass = "text-success"; }
+                else if (l > 50) { iconClass = "bi-battery-half"; colorClass = "text-info"; }
+                else if (l > 20) { iconClass = "bi-battery-half"; colorClass = "text-warning"; }
+                else { iconClass = "bi-battery-low"; colorClass = "text-danger"; }
+            }
         }
 
         // Seletor específico para a parte da bateria para evitar sobrescrever a rede
