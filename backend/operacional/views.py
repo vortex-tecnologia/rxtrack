@@ -661,6 +661,106 @@ def deletar_nota_fiscal_view(request, nota_id):
         }, status=500)
     
 
+@login_required
+@apenas_operacional
+@require_POST
+def deletar_ocorrencia_view(request, nota_id):
+    """
+    Deleta a ocorrência (BaixaNF) vinculada a uma Nota Fiscal e reverte o status para PENDENTE.
+    Exige motivo obrigatório e cria log de auditoria completo.
+    """
+    from auditoria.models import LogExclusaoOcorrencia
+    
+    nota = get_object_or_404(NotaFiscal, id=nota_id)
+    
+    try:
+        data = json.loads(request.body)
+        motivo = data.get('motivo', '').strip()
+    except (json.JSONDecodeError, Exception):
+        motivo = ''
+    
+    # Validação: motivo obrigatório com mínimo de 5 caracteres
+    if not motivo or len(motivo) < 5:
+        return JsonResponse({
+            'success': False,
+            'message': 'O motivo da exclusão é obrigatório e deve ter pelo menos 5 caracteres.'
+        }, status=400)
+    
+    # Validação: nota deve ter pelo menos uma baixa
+    baixas = nota.baixa_info.all()
+    if not baixas.exists():
+        return JsonResponse({
+            'success': False,
+            'message': f'A nota NF {nota.numero_nota} não possui nenhuma ocorrência registrada.'
+        }, status=400)
+    
+    try:
+        with transaction.atomic():
+            # Nome do operador para log
+            nome_operador = request.user.get_full_name() or request.user.username
+            
+            # Para cada baixa vinculada, cria log de auditoria
+            for baixa in baixas:
+                # Snapshot completo dos dados da baixa
+                snapshot = {
+                    'id': baixa.id,
+                    'tipo': baixa.tipo,
+                    'recebedor': baixa.recebedor,
+                    'documento_recebedor': baixa.documento_recebedor,
+                    'observacao': baixa.observacao,
+                    'data_baixa': baixa.data_baixa.isoformat() if baixa.data_baixa else None,
+                    'ocorrencia_codigo': baixa.ocorrencia.codigo_tms if baixa.ocorrencia else None,
+                    'ocorrencia_descricao': baixa.ocorrencia.descricao if baixa.ocorrencia else None,
+                    'comprovante_foto_url': baixa.comprovante_foto_url,
+                    'comprovante_original_url': baixa.comprovante_original_url,
+                    'integrado_tms': baixa.integrado_tms,
+                    'processado_tms': baixa.processado_tms,
+                    'data_integracao': baixa.data_integracao.isoformat() if baixa.data_integracao else None,
+                    'log_erro_tms': baixa.log_erro_tms,
+                    'latitude': str(baixa.latitude) if baixa.latitude else None,
+                    'longitude': str(baixa.longitude) if baixa.longitude else None,
+                    'ia_yolo_status': baixa.ia_yolo_status,
+                    'ia_ocr_status': baixa.ia_ocr_status,
+                    'motivo_baixa': baixa.motivo_baixa,
+                    'payload_enviado': baixa.payload_enviado,
+                }
+                
+                LogExclusaoOcorrencia.objects.create(
+                    usuario=request.user,
+                    usuario_nome=nome_operador,
+                    nota_fiscal_id=nota.id,
+                    nota_fiscal_numero=nota.numero_nota,
+                    chave_acesso=nota.chave_acesso or '',
+                    manifesto_numero=nota.manifesto.numero_manifesto,
+                    motorista_nome=nota.manifesto.motorista.nome_completo if nota.manifesto.motorista else 'Não identificado',
+                    ocorrencia_codigo=baixa.ocorrencia.codigo_tms if baixa.ocorrencia else '',
+                    ocorrencia_descricao=baixa.ocorrencia.descricao if baixa.ocorrencia else '',
+                    tipo_baixa=baixa.tipo,
+                    estava_integrado_tms=baixa.integrado_tms or False,
+                    motivo_exclusao=motivo,
+                    dados_baixa_json=snapshot,
+                )
+            
+            # Deleta todas as baixas da nota
+            qtd_deletada = baixas.count()
+            baixas.delete()
+            
+            # Reverte o status da nota para PENDENTE
+            nota.status = 'PENDENTE'
+            nota.save(update_fields=['status'])
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Ocorrência da NF {nota.numero_nota} excluída com sucesso ({qtd_deletada} registro(s)). A nota voltou para status Pendente.'
+            })
+    
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': f'Erro ao excluir ocorrência: {str(e)}'
+        }, status=500)
+
+
 from datetime import datetime, time
 import pytz
 from django.db.models import Count, Q, ExpressionWrapper, FloatField, Case, When, Value

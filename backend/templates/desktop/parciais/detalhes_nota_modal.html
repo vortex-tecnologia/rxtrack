@@ -71,6 +71,50 @@
                                     <i class="bi bi-cloud-check-fill me-1"></i> Transmitido ao TMS ESL em {{ baixa.data_integracao|date:"d/m/Y H:i" }}
                                 </div>
                             {% endif %}
+
+                            {% if baixa %}
+                            <div class="mt-3 p-3 rounded border bg-white shadow-sm">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label class="text-muted small fw-bold text-uppercase mb-0" style="font-size: 0.65rem;">
+                                        <i class="bi bi-database me-1"></i>Registro de Ocorrência no Sistema
+                                    </label>
+                                    <span class="badge bg-primary-subtle text-primary" style="font-size: 0.65rem;">ID #{{ baixa.id }}</span>
+                                </div>
+                                <div class="row g-2 small">
+                                    <div class="col-6">
+                                        <span class="text-muted d-block" style="font-size: 0.65rem;">Tipo</span>
+                                        <strong>{{ baixa.get_tipo_display }}</strong>
+                                    </div>
+                                    <div class="col-6">
+                                        <span class="text-muted d-block" style="font-size: 0.65rem;">Ocorrência</span>
+                                        <strong>{{ baixa.ocorrencia.codigo_tms|default:"--" }}</strong>
+                                        <span class="text-muted">{{ baixa.ocorrencia.descricao|default:"" }}</span>
+                                    </div>
+                                    <div class="col-6">
+                                        <span class="text-muted d-block" style="font-size: 0.65rem;">Data do Registro</span>
+                                        <strong>{{ baixa.data_baixa|localtime|date:"d/m/Y H:i" }}</strong>
+                                    </div>
+                                    <div class="col-6">
+                                        <span class="text-muted d-block" style="font-size: 0.65rem;">Motivo</span>
+                                        <strong>{{ baixa.get_motivo_baixa_display|default:"--" }}</strong>
+                                    </div>
+                                </div>
+                                <div class="mt-3 d-flex gap-2">
+                                    <button type="button" 
+                                            class="btn btn-outline-danger btn-sm flex-fill fw-bold" 
+                                            onclick="confirmarDeletarOcorrencia('{{ registro.id }}', '{{ registro.numero_nota }}', '{{ baixa.ocorrencia.descricao|default:&quot;Sem descrição&quot; }}', {{ baixa.integrado_tms|yesno:'true,false' }})"
+                                            title="Deletar esta ocorrência e reverter nota para Pendente">
+                                        <i class="bi bi-trash me-1"></i>Deletar Ocorrência
+                                    </button>
+                                </div>
+                                {% if baixa.integrado_tms %}
+                                <div class="mt-2 p-2 rounded bg-warning-subtle text-warning-emphasis small border border-warning border-opacity-25">
+                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                    <strong>Atenção:</strong> Esta ocorrência já foi transmitida ao TMS ESL. A exclusão reverterá apenas no nosso sistema.
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endif %}
                         </div>
                         
                         <div class="col-md-5 text-center">

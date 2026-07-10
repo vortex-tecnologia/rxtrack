@@ -24,6 +24,7 @@ urlpatterns = [
     path('api/manifesto/sincronizar/<int:manifesto_id>/', views.sincronizar_manifesto_operacional_view, name='sincronizar_manifesto_operacional'),
     path('api/manifesto/deletar/<int:manifesto_id>/', views.deletar_manifesto_operacional_view, name='deletar_manifesto_operacional'),
     path('api/nota-fiscal/deletar/<int:nota_id>/', views.deletar_nota_fiscal_view, name='deletar_nota_fiscal'),
+    path('api/nota-fiscal/deletar-ocorrencia/<int:nota_id>/', views.deletar_ocorrencia_view, name='deletar_ocorrencia'),
     path('motoristas/', MotoristasPerformanceView.as_view(), name='motoristas'),
     path('motoristas/cadastrar/', views.motorista_cadastrar, name='motorista_cadastrar'),
     path('motoristas/editar/', views.motorista_editar, name='motorista_editar'),
