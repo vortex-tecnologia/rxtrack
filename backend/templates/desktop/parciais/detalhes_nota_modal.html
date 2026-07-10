@@ -102,7 +102,7 @@
                                 <div class="mt-3 d-flex gap-2">
                                     <button type="button" 
                                             class="btn btn-outline-danger btn-sm flex-fill fw-bold" 
-                                            onclick="confirmarDeletarOcorrencia('{{ registro.id }}', '{{ registro.numero_nota|escapejs }}', '{{ baixa.ocorrencia.descricao|default:\"Sem descrição\"|escapejs }}', {{ baixa.integrado_tms|yesno:'true,false' }})"
+                                            onclick="confirmarDeletarOcorrencia('{{ registro.id }}', '{{ registro.numero_nota|escapejs }}', '{{ baixa.ocorrencia.descricao|default:"Sem descrição"|escapejs }}', {{ baixa.integrado_tms|yesno:'true,false' }})"
                                             title="Deletar esta ocorrência e reverter nota para Pendente">
                                         <i class="bi bi-trash me-1"></i>Deletar Ocorrência
                                     </button>
