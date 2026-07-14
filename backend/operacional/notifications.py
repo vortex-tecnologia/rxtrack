@@ -82,6 +82,18 @@ def api_marcar_notificacoes_lidas(request):
 
 
 @login_required
+def api_marcar_notificacao_lida(request, notif_id):
+    """
+    POST: Marca uma notificação de erro específica como lida.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)
+    
+    LogBaixaNfe.objects.filter(id=notif_id).update(lido=True)
+    return JsonResponse({'success': True})
+
+
+@login_required
 def api_logs_baixa_nfe(request):
     """
     GET: Retorna todos os logs de baixa de NF-e para o modal de histórico completo.

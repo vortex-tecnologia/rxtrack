@@ -595,6 +595,22 @@
         .catch(err => console.error('Erro ao limpar notificações:', err));
     }
 
+    async function visualizarNotificacao(event, id, url) {
+        event.preventDefault();
+        try {
+            await fetch(`/api/notificacoes/marcar-lida/${id}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'Content-Type': 'application/json'
+                }
+            });
+        } catch (e) {
+            console.error('Erro ao marcar como lida', e);
+        }
+        window.location.href = url;
+    }
+
     function showErrorNotificationToast(titulo, mensagem, numeroNota) {
         const container = document.querySelector('.toast-container');
         if (!container) return;
@@ -660,7 +676,7 @@
 
                 data.notificacoes.forEach(n => {
                     html += `
-                        <div class="notif-item" onclick="window.location.href='/notas-fiscais/?q=${n.numero_nota}'">
+                        <div class="notif-item" onclick="visualizarNotificacao(event, ${n.id}, '/notas-fiscais/?q=${n.numero_nota}')">
                             <div class="notif-icon">
                                 <i class="bi bi-exclamation-circle-fill"></i>
                             </div>

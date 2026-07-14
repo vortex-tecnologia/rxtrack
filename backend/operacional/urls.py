@@ -2,7 +2,7 @@
 from django.urls import path
 from operacional.views import DashboardView, login_operacional_view, NotasFiscaisListView ,detalhes_nota_fiscal_view, ManifestosMonitoramentoView, MotoristasPerformanceView
 from operacional.rotas import buscar_e_importar_nfe, listar_manifestos_select, sincronizar_nota_tms_view, api_rastreio_manifesto
-from operacional.notifications import api_notificacoes_erros, api_marcar_notificacoes_lidas, api_logs_baixa_nfe
+from operacional.notifications import api_notificacoes_erros, api_marcar_notificacoes_lidas, api_marcar_notificacao_lida, api_logs_baixa_nfe
 from operacional import views
 
 app_name = 'operacional'
@@ -49,5 +49,6 @@ urlpatterns = [
     # Notificações de Erros (Centro de Notificações Global)
     path('api/notificacoes/erros/', api_notificacoes_erros, name='api_notificacoes_erros'),
     path('api/notificacoes/marcar-lidas/', api_marcar_notificacoes_lidas, name='api_marcar_notificacoes_lidas'),
+    path('api/notificacoes/marcar-lida/<int:notif_id>/', api_marcar_notificacao_lida, name='api_marcar_notificacao_lida'),
     path('api/logs-baixa-nfe/', api_logs_baixa_nfe, name='api_logs_baixa_nfe'),
 ]
