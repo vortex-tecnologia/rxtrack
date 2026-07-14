@@ -895,7 +895,66 @@ class MotoristasPerformanceView(LoginRequiredMixin, ListView):
         context['filial_selecionada'] = filial_param if filial_param else (str(usuario_filial.id) if usuario_filial else 'todas')
         context['sem_filial'] = not bool(usuario_filial)
         
+        # Calcular Resumo do Período
+        motoristas_list = list(context['motoristas'])
+        total_analisados = len(motoristas_list)
+        total_elegiveis = 0
+        soma_score = 0.0
+        total_notas_geral = 0
+        
+        for m in motoristas_list:
+            soma_score += (m.reputacao or 0.0)
+            # Condição para elegibilidade do bônus: Score 100% e ter feito alguma entrega
+            if (m.reputacao or 0.0) == 100.0 and m.total_notas_geral > 0:
+                total_elegiveis += 1
+                m.apto_bonus = True
+            else:
+                m.apto_bonus = False
+            total_notas_geral += m.total_notas_geral
+
+        context['resumo_media_score'] = round(soma_score / total_analisados, 1) if total_analisados > 0 else 0.0
+        context['resumo_elegiveis'] = total_elegiveis
+        context['resumo_total_analisados'] = total_analisados
+        context['resumo_total_notas'] = total_notas_geral
+        
         return context
+
+import openpyxl
+from django.http import HttpResponse
+
+class ExportMotoristasPerformanceExcel(MotoristasPerformanceView):
+    def get(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Performance de Motoristas"
+        
+        colunas = ['Nome', 'CPF', 'Filial', 'Total Manifestos', 'Total Notas', 'Sucessos', 'Pendentes', 'Falta de Tempo (20)', 'Score %', 'Elegível Bônus (100%)']
+        ws.append(colunas)
+        
+        for cell in ws[1]:
+            cell.font = openpyxl.styles.Font(bold=True)
+            
+        for m in queryset:
+            elegivel = "SIM (🏆)" if (m.reputacao or 0.0) == 100.0 and m.total_notas_geral > 0 else "NÃO"
+            ws.append([
+                m.nome_completo,
+                m.cpf,
+                m.filial.nome if m.filial else '-',
+                m.total_mfts,
+                m.total_notas_geral,
+                m.baixas_sucesso,
+                m.baixas_pendentes,
+                m.ocorrencias_20,
+                f"{m.reputacao or 0.0}%",
+                elegivel
+            ])
+            
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = 'attachment; filename=performance_motoristas.xlsx'
+        wb.save(response)
+        return response
     
 # WS PARA ATUALIZAR O PAINEL EM TEMPO REAL    
 @require_POST

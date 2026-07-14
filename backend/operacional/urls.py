@@ -1,6 +1,6 @@
 # operacional/urls.py
 from django.urls import path
-from operacional.views import DashboardView, login_operacional_view, NotasFiscaisListView ,detalhes_nota_fiscal_view, ManifestosMonitoramentoView, MotoristasPerformanceView
+from operacional.views import DashboardView, login_operacional_view, NotasFiscaisListView ,detalhes_nota_fiscal_view, ManifestosMonitoramentoView, MotoristasPerformanceView, ExportMotoristasPerformanceExcel
 from operacional.rotas import buscar_e_importar_nfe, listar_manifestos_select, sincronizar_nota_tms_view, api_rastreio_manifesto
 from operacional.notifications import api_notificacoes_erros, api_marcar_notificacoes_lidas, api_marcar_notificacao_lida, api_logs_baixa_nfe
 from operacional import views
@@ -27,6 +27,7 @@ urlpatterns = [
     path('api/nota-fiscal/deletar/<int:nota_id>/', views.deletar_nota_fiscal_view, name='deletar_nota_fiscal'),
     path('api/nota-fiscal/deletar-ocorrencia/<int:nota_id>/', views.deletar_ocorrencia_view, name='deletar_ocorrencia'),
     path('motoristas/', MotoristasPerformanceView.as_view(), name='motoristas'),
+    path('motoristas/exportar/excel/', ExportMotoristasPerformanceExcel.as_view(), name='motoristas_exportar_excel'),
     path('motoristas/cadastrar/', views.motorista_cadastrar, name='motorista_cadastrar'),
     path('motoristas/editar/', views.motorista_editar, name='motorista_editar'),
     path('motoristas/avisar-todos/', views.motoristas_avisar_massa, name='motoristas_avisar_massa'),

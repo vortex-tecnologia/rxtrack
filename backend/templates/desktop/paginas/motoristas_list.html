@@ -74,12 +74,60 @@
                     <label class="form-label small fw-bold">Data Fim</label>
                     <input type="date" name="data_fim" class="form-control" value="{{ data_fim }}">
                 </div>
-                <div class="col-md-3">
-                    <button type="submit" class="btn btn-primary w-100">
-                        <i class="bi bi-filter"></i> Filtrar Analise
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-grow-1">
+                        <i class="bi bi-filter"></i> Filtrar
                     </button>
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Exportar Relatório">
+                            <i class="bi bi-download"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
+                            <li>
+                                <a class="dropdown-item fw-bold text-success" href="{% url 'operacional:motoristas_exportar_excel' %}?filial={{ request.GET.filial }}&data_inicio={{ request.GET.data_inicio }}&data_fim={{ request.GET.data_fim }}">
+                                    <i class="bi bi-file-earmark-excel me-2"></i> Exportar p/ Excel
+                                </a>
+                            </li>
+                            <li>
+                                <button type="button" class="dropdown-item fw-bold text-danger" onclick="window.print()">
+                                    <i class="bi bi-file-earmark-pdf me-2"></i> Salvar como PDF
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Resumo Analítico para Diretoria -->
+    <div class="row g-3 mb-4 no-print">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm p-3 text-center h-100 bg-white">
+                <small class="text-muted fw-bold d-block mb-1 text-uppercase" style="font-size: 0.7rem;">Média de Score</small>
+                <h3 class="fw-bold text-primary mb-0">{{ resumo_media_score|default:"0" }}%</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm p-3 text-center h-100 bg-white">
+                <small class="text-muted fw-bold d-block mb-1 text-uppercase" style="font-size: 0.7rem;">Motoristas Analisados</small>
+                <h3 class="fw-bold text-dark mb-0">{{ resumo_total_analisados|default:"0" }}</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm p-3 text-center h-100 bg-white">
+                <small class="text-muted fw-bold d-block mb-1 text-uppercase" style="font-size: 0.7rem;">Total de Entregas</small>
+                <h3 class="fw-bold text-dark mb-0">{{ resumo_total_notas|default:"0" }}</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm p-3 text-center h-100" style="background: linear-gradient(135deg, #198754, #146c43); color: white;">
+                <small class="fw-bold d-block mb-1 text-uppercase" style="font-size: 0.7rem; opacity: 0.9;">Elegíveis ao Bônus (100%)</small>
+                <div class="d-flex justify-content-center align-items-center">
+                    <i class="bi bi-trophy-fill fs-3 me-2"></i>
+                    <h3 class="fw-bold mb-0">{{ resumo_elegiveis|default:"0" }}</h3>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -168,13 +216,18 @@
                             {% endif %}
                         </td>
                         <td style="width: 200px;">
-                            <div class="d-flex align-items-center">
+                            <div class="d-flex align-items-center mb-1">
                                 <div class="progress flex-grow-1 me-3" style="height: 8px;">
                                     <div class="progress-bar {% if m.reputacao > 80 %}bg-success{% elif m.reputacao > 50 %}bg-warning{% else %}bg-danger{% endif %}" 
-                                         role="progressbar" style="width: {{ m.reputacao }}%"></div>
+                                         role="progressbar" style="width: {{ m.reputacao|stringformat:'f' }}%"></div>
                                 </div>
                                 <span class="fw-bold small">{{ m.reputacao }}%</span>
                             </div>
+                            {% if m.apto_bonus %}
+                            <div class="text-success small fw-bold mt-1" style="font-size: 0.75rem;">
+                                <i class="bi bi-trophy-fill text-warning me-1"></i> Apto ao Bônus
+                            </div>
+                            {% endif %}
                         </td>
                         <td class="text-end pe-4">
                             <button onclick="enviarRedefinicaoSenha('{{ m.id }}')" class="btn btn-sm btn-outline-secondary border-0 me-1" title="Enviar Redefinição de Senha">
@@ -368,6 +421,15 @@
 #explicaPerformance .card {
     background-color: #f8faff;
     border-left: 5px solid #0d6efd !important;
+}
+@media print {
+    body * { visibility: hidden; }
+    .container-fluid, .container-fluid * { visibility: visible; }
+    .container-fluid { position: absolute; left: 0; top: 0; width: 100%; padding: 0; }
+    .no-print, .btn, form { display: none !important; }
+    th:last-child, td:last-child { display: none !important; } /* Esconde Ações */
+    .table-responsive { overflow: visible !important; }
+    .card { box-shadow: none !important; border: 1px solid #ddd !important; }
 }
 </style>
 
