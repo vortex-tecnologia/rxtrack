@@ -14,6 +14,58 @@
 </button>
         </div>
     </div>
+
+    <!-- Seção de Logs de Baixa/Integração NF-e -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white border-bottom-0 pt-3 pb-0 d-flex justify-content-between align-items-center" style="cursor: pointer;"
+             data-bs-toggle="collapse" data-bs-target="#collapseLogsNfe" aria-expanded="false" aria-controls="collapseLogsNfe">
+            <h6 class="fw-bold mb-0 text-secondary"><i class="bi bi-journal-text me-2"></i>Log de Baixas e Integrações</h6>
+            <i class="bi bi-chevron-down text-muted"></i>
+        </div>
+        <div class="collapse" id="collapseLogsNfe">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle mb-0" style="font-size: 0.85rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Data</th>
+                                <th>NF-e</th>
+                                <th>Manifesto</th>
+                                <th>Tipo</th>
+                                <th>Status</th>
+                                <th>Mensagem</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in ultimos_logs_baixa %}
+                            <tr>
+                                <td class="text-nowrap">{{ log.criado_em|date:"d/m H:i" }}</td>
+                                <td class="fw-bold">{{ log.numero_nota|default:"-" }}</td>
+                                <td>{% if log.manifesto_numero %}#{{ log.manifesto_numero }}{% else %}-{% endif %}</td>
+                                <td>{{ log.get_tipo_display }}</td>
+                                <td>
+                                    {% if log.is_erro %}
+                                    <span class="badge bg-danger">Erro</span>
+                                    {% else %}
+                                    <span class="badge bg-success">Sucesso</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-truncate" style="max-width: 250px;" title="{{ log.mensagem }}">{{ log.mensagem }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center py-3 text-muted">Nenhum log recente encontrado.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="text-end mt-2">
+                    <button class="btn btn-sm btn-outline-primary" onclick="abrirModalHistoricoBaixas()">Ver Histórico Completo</button>
+                </div>
+            </div>
+        </div>
+    </div>
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <form method="GET" action="." class="row g-3">
@@ -899,8 +951,83 @@ function executarDeletarOcorrencia(notaId) {
         document.getElementById('deloc-titulo').innerText = 'Erro de Conexão';
         document.getElementById('deloc-mensagem').innerText = 'Não foi possível contatar o servidor.';
     });
-}
+}}
 </script>
+
+<!-- Modal Histórico de Baixas NF-e -->
+<div class="modal fade" id="modalHistoricoBaixas" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold"><i class="bi bi-clock-history me-2"></i>Histórico Completo de Baixas e Integrações</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive" style="max-height: 60vh; overflow-y: auto;">
+                    <table class="table table-hover table-sm align-middle" id="tabelaHistoricoBaixas" style="font-size: 0.85rem;">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>Data</th>
+                                <th>NF-e</th>
+                                <th>Manifesto</th>
+                                <th>Tipo</th>
+                                <th>Status</th>
+                                <th>Mensagem</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Preenchido via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function abrirModalHistoricoBaixas() {
+        const modalElement = document.getElementById('modalHistoricoBaixas');
+        const modal = new bootstrap.Modal(modalElement);
+        const tbody = document.querySelector('#tabelaHistoricoBaixas tbody');
+        
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4"><div class="spinner-border spinner-border-sm me-2"></div>Carregando histórico...</td></tr>';
+        modal.show();
+
+        fetch('/api/logs-baixa-nfe/')
+            .then(res => res.json())
+            .then(data => {
+                tbody.innerHTML = '';
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">Nenhum log encontrado.</td></tr>';
+                    return;
+                }
+
+                data.forEach(log => {
+                    let statusBadge = log.is_erro 
+                        ? '<span class="badge bg-danger">Erro</span>' 
+                        : '<span class="badge bg-success">Sucesso</span>';
+
+                    const row = `
+                        <tr>
+                            <td class="text-nowrap">${log.data}</td>
+                            <td class="fw-bold">${log.numero_nota || '-'}</td>
+                            <td>${log.manifesto_numero ? '#' + log.manifesto_numero : '-'}</td>
+                            <td>${log.tipo}</td>
+                            <td>${statusBadge}</td>
+                            <td class="small text-muted">${log.mensagem}</td>
+                        </tr>
+                    `;
+                    tbody.insertAdjacentHTML('beforeend', row);
+                });
+            })
+            .catch(err => {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-danger">Erro ao carregar dados.</td></tr>';
+                console.error(err);
+            });
+    }
+</script>
+
 
 <script src="{% static 'desktop/js/nota_fiscal.js' %}"></script>
 

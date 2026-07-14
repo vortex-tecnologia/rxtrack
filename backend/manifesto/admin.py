@@ -1,9 +1,12 @@
 from django.contrib import admin
 from django.utils.html import format_html
+from django.utils import timezone
 from django.contrib.admin import ModelAdmin
+import json
 from .models import (
     Manifesto, NotaFiscal, Ocorrencia, BaixaNF, 
-    HistoricoOcorrencia, ManifestoBuscaLog, WebhookEventoManifestoESL, WebhookTokenControl
+    HistoricoOcorrencia, ManifestoBuscaLog, WebhookEventoManifestoESL, WebhookTokenControl,
+    LogBaixaNfe
 )
 from manifesto.tasks import enviar_baixa_esl_task
 
@@ -177,3 +180,12 @@ class WebhookTokenControlAdmin(ModelAdmin):
     list_filter = ("ativo", "data_atualizacao")
     search_fields = ("user__username", "user__email")
     readonly_fields = ("data_atualizacao",)
+
+@admin.register(LogBaixaNfe)
+class LogBaixaNfeAdmin(ModelAdmin):
+    list_display = ("numero_nota", "manifesto_numero", "tipo", "lido", "criado_em")
+    list_filter = ("tipo", "lido", "criado_em")
+    search_fields = ("numero_nota", "manifesto_numero", "mensagem")
+    readonly_fields = ("criado_em",)
+    ordering = ("-criado_em",)
+

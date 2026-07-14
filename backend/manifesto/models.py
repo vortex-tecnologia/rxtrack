@@ -358,3 +358,68 @@ class BaixaNF(models.Model):
     class Meta:
         verbose_name = "Nota Fiscal Baixada"
         verbose_name_plural = "Notas Fiscais Baixadas"
+
+
+# 6. Log de Baixa/Integração de NF-e (Notificações e Auditoria)
+class LogBaixaNfe(models.Model):
+    """
+    Registra eventos de baixa e integração de NF-e para auditoria,
+    log na página de NF-e e centro de notificações global de erros.
+    """
+    TIPO_CHOICES = [
+        ('BAIXA_SUCESSO', 'Baixa Realizada com Sucesso'),
+        ('BAIXA_ERRO', 'Erro na Baixa'),
+        ('INTEGRACAO_SUCESSO', 'Integração TMS com Sucesso'),
+        ('INTEGRACAO_ERRO', 'Erro na Integração TMS'),
+        ('IMPORTACAO_ERRO', 'Erro na Importação de Manifesto'),
+    ]
+
+    nota_fiscal = models.ForeignKey(
+        NotaFiscal, on_delete=models.CASCADE,
+        related_name='logs_baixa',
+        null=True, blank=True,
+        verbose_name="Nota Fiscal"
+    )
+    manifesto_numero = models.CharField(
+        max_length=50, blank=True, default='',
+        verbose_name="Nº Manifesto"
+    )
+    numero_nota = models.CharField(
+        max_length=50, blank=True, default='',
+        verbose_name="Nº Nota Fiscal"
+    )
+    tipo = models.CharField(
+        max_length=30, choices=TIPO_CHOICES,
+        verbose_name="Tipo do Evento"
+    )
+    mensagem = models.TextField(
+        blank=True, default='',
+        verbose_name="Mensagem/Detalhes"
+    )
+    filial = models.ForeignKey(
+        Filial, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='logs_baixa_nfe',
+        verbose_name="Filial"
+    )
+    lido = models.BooleanField(
+        default=False,
+        verbose_name="Notificação Lida"
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"[{self.get_tipo_display()}] NF {self.numero_nota} - #{self.manifesto_numero}"
+
+    @property
+    def is_erro(self):
+        return 'ERRO' in self.tipo
+
+    class Meta:
+        verbose_name = "Log de Baixa NF-e"
+        verbose_name_plural = "Logs de Baixa NF-e"
+        ordering = ['-criado_em']
+        indexes = [
+            models.Index(fields=['-criado_em']),
+            models.Index(fields=['lido', 'tipo']),
+        ]

@@ -48,3 +48,14 @@ Este documento registra todas as arquiteturas, melhorias de resiliência e corre
 * **Solução:**
   - Alteramos o botão de Histórico em [central_ajuda.html](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/templates/desktop/paginas/central_ajuda.html) para redirecionar o atendente para a URL do Painel SAC (`/suporte/painel/`), passando o `ticket_id` como parâmetro.
   - Atualizamos o script [suporte_painel.js](file:///c:/Users/Micro/Desktop/nv/nv/quicktrack_producao_repo/backend/static/js/suporte_painel.js) para capturar o `ticket_id` da URL no carregamento, identificar o status do ticket, focar a aba correta (Abertos, Meus Atendimentos ou Fechados) e carregar a conversa ativamente.
+
+---
+
+## 6. Centro de Notificações Global e Log de NF-e
+* **Problema:** A área de notas fiscais não possuía visibilidade do histórico de tentativas de baixas e retornos de integração do TMS (ESL Cloud), impossibilitando o diagnóstico rápido de erros.
+* **Solução:**
+  - Criado o modelo `LogBaixaNfe` para armazenar o histórico de sucesso/erro na baixa e na integração TMS.
+  - Adicionado `Signals` automatizados que capturam a criação e atualização da baixa para gerar logs sem necessidade de alterar o core das requisições.
+  - Criado um Centro de Notificações global na barra superior (`base.html`) com contagem (badge) e dropdown de mensagens de erro em tempo real via polling a cada 15 segundos.
+  - Ocorrências de erros geram imediatamente um *Toast* vermelho na tela para o usuário.
+  - Na tela de NF-e, adicionado bloco expansível com as 5 últimas atualizações e modal com o Histórico Completo.

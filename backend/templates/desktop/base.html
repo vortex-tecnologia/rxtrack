@@ -19,7 +19,7 @@
         --sidebar-width: 260px;
         --sidebar-collapsed-width: 75px;
         --primary-color: #0d6efd;
-        --dark-bg: #11111d; /* Tom mais escuro para destaque */
+        --dark-bg: #11111d;
     }
 
     body {
@@ -28,7 +28,6 @@
         transition: all 0.3s;
     }
 
-    /* Sidebar inicia colapsada */
     #sidebar {
         width: var(--sidebar-collapsed-width);
         height: 100vh;
@@ -38,15 +37,13 @@
         z-index: 1050;
         overflow-y: auto;
         overflow-x: hidden;
-        scrollbar-width: none; /* Firefox */
+        scrollbar-width: none;
     }
 
-    /* Ocultar barra de rolagem no Chrome/Safari/Edge */
     #sidebar::-webkit-scrollbar {
         display: none;
     }
 
-    /* Quando a classe .active é adicionada, ela expande */
     #sidebar.active {
         width: var(--sidebar-width);
     }
@@ -71,20 +68,17 @@
         font-size: 1.4rem;
     }
 
-    /* Texto do menu oculto por padrão */
     #sidebar .menu-text {
         opacity: 0;
         display: none;
         transition: opacity 0.3s;
     }
 
-    /* Exibe texto quando expandido */
     #sidebar.active .menu-text {
         display: inline-block;
         opacity: 1;
     }
 
-    /* Ajuste do conteúdo principal */
     #main-content {
         margin-left: var(--sidebar-collapsed-width);
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -99,25 +93,153 @@
         border-bottom: 1px solid #e0e0e0;
     }
 
-        .btn-toggle-menu {
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-        }
+    .btn-toggle-menu {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+    }
 
-        /* Ocultar barra lateral no mobile */
-        @media (max-width: 768px) {
-            #sidebar {
-                transform: translateX(-100%);
-                width: var(--sidebar-width) !important;
-            }
-            #sidebar.active {
-                transform: translateX(0);
-            }
-            #main-content, #main-content.expanded {
-                margin-left: 0 !important;
-            }
+    /* ========== Centro de Notificações ========== */
+    .notif-bell-wrapper {
+        position: relative;
+        cursor: pointer;
+    }
+    .notif-bell-wrapper .notif-badge {
+        position: absolute;
+        top: -4px;
+        right: -6px;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        font-size: 0.65rem;
+        font-weight: 700;
+        line-height: 18px;
+        text-align: center;
+        color: #fff;
+        background: #dc3545;
+        border-radius: 50px;
+        animation: notifPulse 2s infinite;
+    }
+    @keyframes notifPulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.15); }
+    }
+    .notif-dropdown {
+        position: absolute;
+        top: 45px;
+        right: 0;
+        width: 380px;
+        max-height: 420px;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+        border: 1px solid #e9ecef;
+        z-index: 1200;
+        display: none;
+        overflow: hidden;
+    }
+    .notif-dropdown.show {
+        display: block;
+        animation: notifSlideIn 0.2s ease-out;
+    }
+    @keyframes notifSlideIn {
+        from { opacity: 0; transform: translateY(-8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .notif-dropdown-header {
+        padding: 12px 16px;
+        background: linear-gradient(135deg, #dc3545, #c82333);
+        color: #fff;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .notif-dropdown-body {
+        max-height: 320px;
+        overflow-y: auto;
+        scrollbar-width: thin;
+    }
+    .notif-item {
+        padding: 12px 16px;
+        border-bottom: 1px solid #f0f0f0;
+        cursor: pointer;
+        transition: background 0.15s;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    .notif-item:hover {
+        background: #fff5f5;
+    }
+    .notif-item:last-child {
+        border-bottom: none;
+    }
+    .notif-item .notif-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #fee2e2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    .notif-item .notif-icon i {
+        color: #dc3545;
+        font-size: 0.9rem;
+    }
+    .notif-item .notif-content {
+        flex: 1;
+        min-width: 0;
+    }
+    .notif-item .notif-title {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #1a1a2e;
+        margin-bottom: 2px;
+    }
+    .notif-item .notif-msg {
+        font-size: 0.72rem;
+        color: #6c757d;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .notif-item .notif-time {
+        font-size: 0.65rem;
+        color: #adb5bd;
+        white-space: nowrap;
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+    .notif-empty {
+        padding: 30px;
+        text-align: center;
+        color: #adb5bd;
+    }
+
+    /* Toast de erro */
+    .toast-erro .toast-header {
+        background: linear-gradient(135deg, #dc3545, #c82333) !important;
+        color: #fff !important;
+    }
+
+    @media (max-width: 768px) {
+        #sidebar {
+            transform: translateX(-100%);
+            width: var(--sidebar-width) !important;
         }
+        #sidebar.active {
+            transform: translateX(0);
+        }
+        #main-content, #main-content.expanded {
+            margin-left: 0 !important;
+        }
+        .notif-dropdown {
+            width: calc(100vw - 30px);
+            right: -10px;
+        }
+    }
     </style>
 </head>
 <body>
@@ -203,8 +325,32 @@
         </button>
         <span class="ms-3 fw-semibold text-muted d-none d-md-inline">Painel Operacional</span>
         
-        <div class="ms-auto d-flex align-items-center">
-            <span class="me-3 small fw-bold">
+        <div class="ms-auto d-flex align-items-center gap-3">
+            <!-- Centro de Notificações de Erros -->
+            <div class="notif-bell-wrapper" id="notifBellWrapper" onclick="toggleNotifDropdown(event)">
+                <i class="bi bi-bell fs-5 text-muted"></i>
+                <span class="notif-badge" id="notifBadge" style="display: none;">0</span>
+                
+                <!-- Dropdown de Notificações -->
+                <div class="notif-dropdown" id="notifDropdown">
+                    <div class="notif-dropdown-header">
+                        <span class="fw-bold" style="font-size: 0.85rem;">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>Notificações de Erro
+                        </span>
+                        <button class="btn btn-sm btn-outline-light py-0 px-2" style="font-size: 0.7rem;" onclick="marcarTodasLidas(event)">
+                            Limpar
+                        </button>
+                    </div>
+                    <div class="notif-dropdown-body" id="notifDropdownBody">
+                        <div class="notif-empty">
+                            <i class="bi bi-check-circle fs-3 d-block mb-2"></i>
+                            <span class="small">Nenhuma notificação</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <span class="small fw-bold">
                 {% block usuario %}{% endblock %}
             </span>
             <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 35px; height: 35px;">
@@ -393,6 +539,169 @@
             setTimeout(verificarNovasMensagensSAC, 3000);
             setInterval(verificarNovasMensagensSAC, 15000);
         {% endif %}
+    });
+</script>
+
+<!-- Script para Centro de Notificações de Erros -->
+<script>
+    // Estado das notificações
+    const NOTIF_STORAGE_KEY = 'notif_error_ids';
+    let notifAberta = false;
+
+    function getNotifiedErrorIds() {
+        try {
+            const data = sessionStorage.getItem(NOTIF_STORAGE_KEY);
+            return data ? JSON.parse(data) : [];
+        } catch(e) {
+            return [];
+        }
+    }
+
+    function toggleNotifDropdown(event) {
+        event.stopPropagation();
+        const dropdown = document.getElementById('notifDropdown');
+        dropdown.classList.toggle('show');
+        notifAberta = dropdown.classList.contains('show');
+    }
+
+    // Fechar dropdown ao clicar fora
+    document.addEventListener('click', function(e) {
+        const wrapper = document.getElementById('notifBellWrapper');
+        const dropdown = document.getElementById('notifDropdown');
+        if (wrapper && dropdown && !wrapper.contains(e.target)) {
+            dropdown.classList.remove('show');
+            notifAberta = false;
+        }
+    });
+
+    function marcarTodasLidas(event) {
+        event.stopPropagation();
+        fetch('/api/notificacoes/marcar-lidas/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(() => {
+            document.getElementById('notifBadge').style.display = 'none';
+            document.getElementById('notifDropdownBody').innerHTML = `
+                <div class="notif-empty">
+                    <i class="bi bi-check-circle fs-3 d-block mb-2 text-success"></i>
+                    <span class="small">Tudo limpo!</span>
+                </div>
+            `;
+        })
+        .catch(err => console.error('Erro ao limpar notificações:', err));
+    }
+
+    function showErrorNotificationToast(titulo, mensagem, numeroNota) {
+        const container = document.querySelector('.toast-container');
+        if (!container) return;
+
+        while (container.children.length >= 5) {
+            container.removeChild(container.firstChild);
+        }
+
+        const toastId = 'toast-err-' + Date.now();
+        const toastHtml = `
+            <div id="${toastId}" class="toast toast-erro" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="8000">
+                <div class="toast-header bg-danger text-white border-0">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <strong class="me-auto">Erro no Sistema</strong>
+                    <small class="text-white-50">agora</small>
+                    <button type="button" class="btn-close btn-close-white" data-bs-toast="close" aria-label="Close" onclick="bootstrap.Toast.getInstance(document.getElementById('${toastId}')).hide()"></button>
+                </div>
+                <div class="toast-body d-flex justify-content-between align-items-center bg-white shadow-sm" style="border-radius: 0 0 var(--bs-toast-border-radius) var(--bs-toast-border-radius);">
+                    <div class="flex-grow-1 me-3">
+                        <span class="fw-bold d-block text-dark" style="font-size: 0.82rem;">${titulo}</span>
+                        <span class="text-muted text-truncate d-block small" style="max-width: 250px;">${mensagem}</span>
+                    </div>
+                    <a href="/notas-fiscais/?q=${numeroNota}" class="btn btn-outline-danger btn-sm fw-bold px-3 rounded-pill flex-shrink-0">
+                        Ver NF-e
+                    </a>
+                </div>
+            </div>
+        `;
+
+        container.insertAdjacentHTML('beforeend', toastHtml);
+        const toastEl = document.getElementById(toastId);
+        if (toastEl) {
+            const bsToast = new bootstrap.Toast(toastEl);
+            bsToast.show();
+            toastEl.addEventListener('hidden.bs.toast', function () {
+                toastEl.remove();
+            });
+        }
+    }
+
+    async function verificarNotificacoesErros() {
+        try {
+            const response = await fetch('/api/notificacoes/erros/');
+            if (!response.ok) return;
+
+            const data = await response.json();
+            const badge = document.getElementById('notifBadge');
+            const body = document.getElementById('notifDropdownBody');
+
+            // Atualiza badge
+            if (data.count > 0) {
+                badge.innerText = data.count > 99 ? '99+' : data.count;
+                badge.style.display = 'block';
+            } else {
+                badge.style.display = 'none';
+            }
+
+            // Renderiza notificações no dropdown
+            if (data.notificacoes && data.notificacoes.length > 0) {
+                let html = '';
+                const notifiedIds = getNotifiedErrorIds();
+                let updatedNotified = false;
+
+                data.notificacoes.forEach(n => {
+                    html += `
+                        <div class="notif-item" onclick="window.location.href='/notas-fiscais/?q=${n.numero_nota}'">
+                            <div class="notif-icon">
+                                <i class="bi bi-exclamation-circle-fill"></i>
+                            </div>
+                            <div class="notif-content">
+                                <div class="notif-title">${n.titulo}</div>
+                                <div class="notif-msg">${n.mensagem}</div>
+                            </div>
+                            <div class="notif-time">${n.hora}</div>
+                        </div>
+                    `;
+
+                    // Toast para novos erros
+                    if (!notifiedIds.includes(n.id)) {
+                        showErrorNotificationToast(n.titulo, n.mensagem, n.numero_nota);
+                        notifiedIds.push(n.id);
+                        updatedNotified = true;
+                    }
+                });
+
+                body.innerHTML = html;
+
+                if (updatedNotified) {
+                    sessionStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifiedIds));
+                }
+            } else {
+                body.innerHTML = `
+                    <div class="notif-empty">
+                        <i class="bi bi-check-circle fs-3 d-block mb-2 text-success"></i>
+                        <span class="small">Nenhuma notificação</span>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Erro ao verificar notificações:', error);
+        }
+    }
+
+    // Inicializa polling de notificações
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(verificarNotificacoesErros, 2000);
+        setInterval(verificarNotificacoesErros, 15000);
     });
 </script>
 

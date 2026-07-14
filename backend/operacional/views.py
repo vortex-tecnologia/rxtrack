@@ -303,6 +303,13 @@ class NotasFiscaisListView(ListView):
         context['filial_selecionada'] = filial_param if filial_param else (str(usuario_filial.id) if usuario_filial else 'todas')
         context['sem_filial'] = not bool(usuario_filial)
         
+        # Log de Baixas NF-e (últimos 5 para exibição rápida)
+        from manifesto.models import LogBaixaNfe
+        logs_qs = LogBaixaNfe.objects.all()
+        if usuario_filial:
+            logs_qs = logs_qs.filter(Q(filial=usuario_filial) | Q(filial__isnull=True))
+        context['ultimos_logs_baixa'] = logs_qs.order_by('-criado_em')[:5]
+        
         return context
 
 from django.shortcuts import render, get_object_or_404
