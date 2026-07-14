@@ -628,12 +628,12 @@
                     <small class="text-white-50">agora</small>
                     <button type="button" class="btn-close btn-close-white" data-bs-toast="close" aria-label="Close" onclick="bootstrap.Toast.getInstance(document.getElementById('${toastId}')).hide()"></button>
                 </div>
-                <div class="toast-body d-flex justify-content-between align-items-center bg-white shadow-sm" style="border-radius: 0 0 var(--bs-toast-border-radius) var(--bs-toast-border-radius);">
-                    <div class="flex-grow-1 me-3">
-                        <span class="fw-bold d-block text-dark" style="font-size: 0.82rem;">${titulo}</span>
-                        <span class="text-muted text-truncate d-block small" style="max-width: 250px;">${mensagem}</span>
+                <div class="toast-body d-flex justify-content-between align-items-center bg-white shadow-sm gap-2" style="border-radius: 0 0 var(--bs-toast-border-radius) var(--bs-toast-border-radius);">
+                    <div style="min-width: 0;">
+                        <span class="fw-bold d-block text-dark text-truncate" style="font-size: 0.85rem;">${titulo}</span>
+                        <span class="text-muted d-block small text-truncate">${mensagem}</span>
                     </div>
-                    <a href="/notas-fiscais/?q=${numeroNota}" class="btn btn-outline-danger btn-sm fw-bold px-3 rounded-pill flex-shrink-0">
+                    <a href="/notas-fiscais/?q=${numeroNota}" class="btn btn-danger btn-sm fw-bold text-nowrap flex-shrink-0">
                         Ver NF-e
                     </a>
                 </div>
