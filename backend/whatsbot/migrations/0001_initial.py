@@ -10,8 +10,8 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('manifesto', '0039_logbaixanfe'),
-        ('usuarios', '0020_alter_devicetoken_id_alter_devicetoken_ultimo_uso_and_more'),
+        ('manifesto', '0038_webhookeventosoap'),
+        ('usuarios', '0019_devicetoken'),
     ]
 
     operations = [
