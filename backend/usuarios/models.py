@@ -56,6 +56,18 @@ class Motorista(models.Model):
         verbose_name="Cargo"
     )
     
+    CATEGORIA_CHOICES = [
+        ('EMPRESA', 'Empresa'),
+        ('AGREGADO', 'Agregado'),
+        ('DEDICADO', 'Dedicado'),
+    ]
+    categoria = models.CharField(
+        max_length=20,
+        choices=CATEGORIA_CHOICES,
+        default='EMPRESA',
+        verbose_name="Categoria do Motorista"
+    )
+    
     # Campo para armazenar foto de perfil, se necessário
     foto_perfil = models.ImageField(
         upload_to='motoristas/fotos/', 

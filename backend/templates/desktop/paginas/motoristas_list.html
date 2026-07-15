@@ -55,6 +55,7 @@
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body">
             <form method="GET" class="row g-3 align-items-end">
+                <input type="hidden" name="categoria" value="{{ categoria_ativa }}">
                 <div class="col-md-3">
                     <label class="form-label small fw-bold">Filial</label>
                     <select name="filial" class="form-select">
@@ -84,7 +85,7 @@
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
                             <li>
-                                <a class="dropdown-item fw-bold text-success" href="{% url 'operacional:motoristas_exportar_excel' %}?filial={{ request.GET.filial }}&data_inicio={{ request.GET.data_inicio }}&data_fim={{ request.GET.data_fim }}">
+                                <a class="dropdown-item fw-bold text-success" href="{% url 'operacional:motoristas_exportar_excel' %}?filial={{ request.GET.filial }}&data_inicio={{ request.GET.data_inicio }}&data_fim={{ request.GET.data_fim }}&categoria={{ categoria_ativa }}">
                                     <i class="bi bi-file-earmark-excel me-2"></i> Exportar p/ Excel
                                 </a>
                             </li>
@@ -162,6 +163,25 @@
         </div>
     </div>
 
+    <!-- Abas de Categoria -->
+    <ul class="nav nav-pills mb-4 nav-fill shadow-sm p-1 bg-white rounded" style="border: 1px solid #dee2e6;">
+        <li class="nav-item">
+            <a class="nav-link fw-bold {% if categoria_ativa == 'EMPRESA' %}active{% else %}text-dark{% endif %}" href="?categoria=EMPRESA&filial={{ request.GET.filial }}&data_inicio={{ request.GET.data_inicio }}&data_fim={{ request.GET.data_fim }}">
+                <i class="bi bi-building me-1"></i> Empresa
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link fw-bold {% if categoria_ativa == 'AGREGADO' %}active{% else %}text-dark{% endif %}" href="?categoria=AGREGADO&filial={{ request.GET.filial }}&data_inicio={{ request.GET.data_inicio }}&data_fim={{ request.GET.data_fim }}">
+                <i class="bi bi-truck me-1"></i> Agregados
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link fw-bold {% if categoria_ativa == 'DEDICADO' %}active{% else %}text-dark{% endif %}" href="?categoria=DEDICADO&filial={{ request.GET.filial }}&data_inicio={{ request.GET.data_inicio }}&data_fim={{ request.GET.data_fim }}">
+                <i class="bi bi-star-fill me-1"></i> Dedicados
+            </a>
+        </li>
+    </ul>
+
     <div class="card border-0 shadow-sm">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
@@ -193,6 +213,11 @@
                                 <div>
                                     <h6 class="mb-0 fw-bold">{{ m.nome_completo }}</h6>
                                     <small class="text-muted">CPF: {{ m.cpf }}</small>
+                                    {% if m.categoria == 'AGREGADO' %}
+                                        <br><span class="badge bg-secondary opacity-75" style="font-size: 0.65rem;">AGREGADO</span>
+                                    {% elif m.categoria == 'DEDICADO' %}
+                                        <br><span class="badge bg-dark opacity-75" style="font-size: 0.65rem;">DEDICADO</span>
+                                    {% endif %}
                                 </div>
                             </div>
                         </td>
@@ -233,8 +258,8 @@
                             <button onclick="enviarRedefinicaoSenha('{{ m.id }}')" class="btn btn-sm btn-outline-secondary border-0 me-1" title="Enviar Redefinição de Senha">
                                 <i class="bi bi-envelope"></i>
                             </button>
-                            <button onclick="abrirDetalhes('{{ m.id }}', '{{ m.nome_completo }}', '{{ m.cpf }}', '{% if m.foto_perfil %}{{ m.foto_perfil.url }}{% endif %}', '{{ m.telefone|default:'' }}', '{{ m.filial_id|default:'' }}', '{{ m.email|default:'' }}', '{{ m.modelo_aparelho|default:'Desconhecido'|escapejs }}', '{{ m.memoria_ram|default:'Desconhecido'|escapejs }}', '{{ m.permitir_upload_galeria|yesno:'true,false' }}')" 
-                                    class="btn btn-sm btn-outline-primary border-0">
+                            <button class="btn btn-outline-primary btn-sm" title="Editar" data-bs-toggle="modal" data-bs-target="#modalDetalhes" 
+                                onclick="abrirDetalhes('{{ m.id }}', '{{ m.nome_completo|escapejs }}', '{{ m.cpf }}', '{{ m.foto_perfil.url|default:'' }}', '{{ m.telefone|default:'' }}', '{{ m.filial_id|default:'' }}', '{{ m.email|default:'' }}', '{{ m.hardware_info.modelo_aparelho|default:'' }}', '{{ m.hardware_info.memoria_ram|default:'' }}', '{{ m.permitir_upload_galeria|lower }}', '{{ m.categoria }}')">
                                 <i class="bi bi-pencil-square"></i> Editar
                             </button>
                         </td>
@@ -307,6 +332,14 @@
                         <input type="text" name="telefone" class="form-control phone-mask" placeholder="(00) 00000-0000">
                     </div>
                     <div class="mb-3">
+                        <label class="form-label small fw-bold">Categoria</label>
+                        <select name="categoria" class="form-select">
+                            <option value="EMPRESA">Empresa</option>
+                            <option value="AGREGADO">Agregado</option>
+                            <option value="DEDICADO">Dedicado</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label small fw-bold">Filial</label>
                         <select name="filial_id" class="form-select">
                             <option value="">Selecione uma filial...</option>
@@ -370,6 +403,14 @@
                     <div class="mb-3">
                         <label class="form-label small fw-bold">Telefone / Celular (Opcional)</label>
                         <input type="text" name="telefone" id="edit_telefone" class="form-control phone-mask" placeholder="(00) 00000-0000">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Categoria</label>
+                        <select name="categoria" id="edit_categoria" class="form-select">
+                            <option value="EMPRESA">Empresa</option>
+                            <option value="AGREGADO">Agregado</option>
+                            <option value="DEDICADO">Dedicado</option>
+                        </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-bold">Filial</label>
@@ -511,13 +552,14 @@ document.getElementById('formEdicao').addEventListener('submit', e => {
     enviarFormulario('formEdicao', "{% url 'operacional:motorista_editar' %}", 'btnSalvarEdicao', 'loaderBtnEdicao', 'msgFeedbackEdicao'); // Crie essa ID no modal de edição também
 });
 
-function abrirDetalhes(id, nome, cpf, foto, telefone, filial_id, email, modelo_aparelho, memoria_ram, permitir_galeria) {
+function abrirDetalhes(id, nome, cpf, foto, telefone, filial_id, email, modelo_aparelho, memoria_ram, permitir_galeria, categoria) {
     document.getElementById('edit_id').value = id;
     document.getElementById('edit_nome').value = nome;
     document.getElementById('edit_cpf').value = cpf;
     document.getElementById('edit_telefone').value = telefone || '';
     document.getElementById('edit_filial').value = filial_id || '';
     document.getElementById('edit_email').value = email || '';
+    document.getElementById('edit_categoria').value = categoria || 'EMPRESA';
     
     // Tratamento do Checkbox e Info de Hardware
     document.getElementById('edit_permitir_galeria').checked = (permitir_galeria === 'true');

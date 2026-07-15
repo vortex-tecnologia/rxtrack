@@ -806,6 +806,9 @@ class MotoristasPerformanceView(LoginRequiredMixin, ListView):
             queryset = queryset.filter(filial=usuario_filial)
         else:
             queryset = queryset.none()
+            
+        categoria_param = self.request.GET.get('categoria', 'EMPRESA')
+        queryset = queryset.filter(categoria=categoria_param)
 
         # 2. Captura datas do filtro
         data_inicio_str = self.request.GET.get('data_inicio')
@@ -894,6 +897,7 @@ class MotoristasPerformanceView(LoginRequiredMixin, ListView):
         context['filiais'] = Filial.objects.all().order_by('nome')
         context['filial_selecionada'] = filial_param if filial_param else (str(usuario_filial.id) if usuario_filial else 'todas')
         context['sem_filial'] = not bool(usuario_filial)
+        context['categoria_ativa'] = self.request.GET.get('categoria', 'EMPRESA')
         
         # Calcular Resumo do Período
         motoristas_list = list(context['motoristas'])
@@ -904,8 +908,8 @@ class MotoristasPerformanceView(LoginRequiredMixin, ListView):
         
         for m in motoristas_list:
             soma_score += (m.reputacao or 0.0)
-            # Condição para elegibilidade do bônus: Score 100% e ter feito alguma entrega
-            if (m.reputacao or 0.0) == 100.0 and m.total_notas_geral > 0:
+            # Condição para elegibilidade do bônus: Score 100%, ter feito entregas e ser EMPRESA
+            if m.categoria == 'EMPRESA' and (m.reputacao or 0.0) == 100.0 and m.total_notas_geral > 0:
                 total_elegiveis += 1
                 m.apto_bonus = True
             else:
@@ -937,7 +941,10 @@ class ExportMotoristasPerformanceExcel(MotoristasPerformanceView):
             cell.font = openpyxl.styles.Font(bold=True)
             
         for m in queryset:
-            elegivel = "SIM (🏆)" if (m.reputacao or 0.0) == 100.0 and m.total_notas_geral > 0 else "NÃO"
+            if m.categoria == 'EMPRESA':
+                elegivel = "SIM (🏆)" if (m.reputacao or 0.0) == 100.0 and m.total_notas_geral > 0 else "NÃO"
+            else:
+                elegivel = "NÃO (Agregado/Dedicado)"
             ws.append([
                 m.nome_completo,
                 m.cpf,
@@ -978,7 +985,8 @@ def motorista_cadastrar(request):
             telefone=telefone,
             email=email if email else None,
             filial_id=filial_id if filial_id else None,
-            foto_perfil=foto
+            foto_perfil=foto,
+            categoria=request.POST.get('categoria', 'EMPRESA')
         )
         
         if email:
@@ -1022,6 +1030,7 @@ def motorista_editar(request):
         filial_id = request.POST.get('filial_id')
         motorista.filial_id = filial_id if filial_id else None
         
+        motorista.categoria = request.POST.get('categoria', 'EMPRESA')
         motorista.permitir_upload_galeria = request.POST.get('permitir_upload_galeria') == 'on'
         
         if request.FILES.get('foto_perfil'):
