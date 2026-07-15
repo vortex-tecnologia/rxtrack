@@ -58,30 +58,9 @@ async function iniciarCoracaoTracking() {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // WEBSOCKET - Conexão real-time para painel (ambos os modos)
+    // REST API - O envio agora é 100% via REST authFetch
     // ═══════════════════════════════════════════════════════════
-    if (!socketTracking && typeof manifestoAtual !== 'undefined' && manifestoAtual) {
-        const token = localStorage.getItem('accessToken');
-        const ws_scheme = window.location.protocol === "https:" ? "wss" : "ws";
-        const filial = typeof filialIdMotorista !== 'undefined' ? filialIdMotorista : 'todas';
-        const ws_url = `${ws_scheme}://${window.location.host}/ws/painel-logistico/${filial}/?token=${token}`;
-
-        socketTracking = new WebSocket(ws_url);
-
-        socketTracking.onopen = () => {
-            console.log("💓 [PWA Tracking] WS Conectado ao servidor");
-        };
-
-        socketTracking.onclose = () => {
-            console.warn("💓 [PWA Tracking] WS Conexão perdida. Tentando reconectar em 10s...");
-            socketTracking = null;
-            setTimeout(iniciarCoracaoTracking, 10000);
-        };
-
-        socketTracking.onerror = (err) => {
-            console.error("💓 [PWA Tracking] WS erro:", err);
-        };
-    }
+    // WebSocket foi removido para evitar problemas com Tenant Middleware em background
 }
 
 /**
@@ -124,10 +103,6 @@ async function enviarHeartbeat(overrideLat = null, overrideLng = null) {
             heartbeatInterval = null;
         }
         pararTrackingNativo();
-        if (socketTracking) {
-            socketTracking.close();
-            socketTracking = null;
-        }
         return;
     }
 
@@ -143,10 +118,12 @@ async function enviarHeartbeat(overrideLat = null, overrideLng = null) {
         }
 
         let batteryLevel = null;
+        let isCharging = false;
         if ('getBattery' in navigator) {
             try {
                 const battery = await navigator.getBattery();
                 batteryLevel = Math.round(battery.level * 100);
+                isCharging = battery.charging;
             } catch (e) {}
         }
 
@@ -162,25 +139,22 @@ async function enviarHeartbeat(overrideLat = null, overrideLng = null) {
             lat: lat,
             lng: lng,
             battery: batteryLevel,
+            is_charging: isCharging,
             network: connectionType,
             manifesto_id: manifestoAtual
         };
 
-        if (socketTracking && socketTracking.readyState === WebSocket.OPEN) {
-            socketTracking.send(JSON.stringify(payload));
-            console.log("💓 [PWA Tracking] Heartbeat enviado via WS", lat, lng);
+        console.log("💓 [PWA Tracking] Enviando via REST...");
+        const url = `${window.API_BASE}manifesto/app/tracking-heartbeat/`;
+        const response = await authFetch(url, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        
+        if (response && response.ok) {
+            console.log("💓 [PWA Tracking] Heartbeat enviado via REST com sucesso", lat, lng);
         } else {
-            console.log("💓 [PWA Tracking] WS offline. Enviando via REST...");
-            const url = `${window.API_BASE}manifesto/app/tracking-heartbeat/`;
-            const response = await authFetch(url, {
-                method: 'POST',
-                body: JSON.stringify(payload)
-            });
-            if (response && response.ok) {
-                console.log("💓 [PWA Tracking] Heartbeat enviado via REST com sucesso", lat, lng);
-            } else {
-                console.warn("💓 [PWA Tracking] Falha ao enviar via REST:", response ? response.status : 'sem resposta');
-            }
+            console.warn("💓 [PWA Tracking] Falha ao enviar via REST:", response ? response.status : 'sem resposta');
         }
     } catch (err) {
         console.error("❌ [PWA Tracking] Erro no batimento:", err);
