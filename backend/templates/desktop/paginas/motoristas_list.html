@@ -259,7 +259,7 @@
                                 <i class="bi bi-envelope"></i>
                             </button>
                             <button class="btn btn-outline-primary btn-sm" title="Editar" data-bs-toggle="modal" data-bs-target="#modalDetalhes" 
-                                onclick="abrirDetalhes('{{ m.id }}', '{{ m.nome_completo|escapejs }}', '{{ m.cpf }}', '{{ m.foto_perfil.url|default:'' }}', '{{ m.telefone|default:'' }}', '{{ m.filial_id|default:'' }}', '{{ m.email|default:'' }}', '{{ m.hardware_info.modelo_aparelho|default:'' }}', '{{ m.hardware_info.memoria_ram|default:'' }}', '{{ m.permitir_upload_galeria|lower }}', '{{ m.categoria }}')">
+                                onclick="abrirDetalhes('{{ m.id }}', '{{ m.nome_completo|escapejs }}', '{{ m.cpf }}', '{% if m.foto_perfil %}{{ m.foto_perfil.url }}{% endif %}', '{{ m.telefone|default:'' }}', '{{ m.filial_id|default:'' }}', '{{ m.email|default:'' }}', '{{ m.hardware_info.modelo_aparelho|default:'' }}', '{{ m.hardware_info.memoria_ram|default:'' }}', '{{ m.permitir_upload_galeria|lower }}', '{{ m.categoria }}')">
                                 <i class="bi bi-pencil-square"></i> Editar
                             </button>
                         </td>
