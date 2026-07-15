@@ -806,14 +806,8 @@
         // -------------------------------------------------------------------
         
         // SCRIPT PARA EXTRAIR E MOSTRAR AS VERSÕES DINAMICAMENTE NO MODAL
-        document.addEventListener('DOMContentLoaded', function () {
-            // Data da última atualização na interface HTML (pode ser hardcoded aqui sempre que houver update significativo)
-            const htmlLastUpdate = "11/06/2026";
-
-            const btnDispData = document.getElementById('disp-html-data');
-            if (btnDispData) btnDispData.textContent = htmlLastUpdate;
-
-            // Encontrar a versão do manifesto_vXX.js olhando as tags script na própria página
+        document.addEventListener('DOMContentLoaded', async function () {
+            // 1. Encontrar a versão do manifesto_vXX.js olhando as tags script na própria página
             const scripts = document.getElementsByTagName('script');
             let appVersionFound = "Desconhecido";
             for (let i = 0; i < scripts.length; i++) {
@@ -830,12 +824,34 @@
             const btnDispApp = document.getElementById('disp-app-versao');
             if (btnDispApp) btnDispApp.textContent = "v" + appVersionFound;
 
-            // Encontrar a versão do ServiceWorker listada no arquivo estaticamente
-            // (Para PWA, como o cacheName está no sw.js, o mais performático é hardcodar a versão paralela aqui 
-            // no HTML. Sempre recomendo alterar aqui com o SW)
-            const currentSwVersion = "1.35";
-            const btnDispSw = document.getElementById('disp-sw-versao');
-            if (btnDispSw) btnDispSw.textContent = "v" + currentSwVersion;
+            // 2. Buscar dinamicamente a versão e a data do serviceworker.js do servidor
+            try {
+                // Adiciona um timestamp para forçar bypass do cache local na leitura da versão
+                const response = await fetch('/static/js/serviceworker.js?_=' + new Date().getTime(), { 
+                    method: 'GET', 
+                    cache: 'no-cache' 
+                });
+                
+                // Extrair Data de Atualização (Last-Modified) enviada pelo servidor
+                const lastModified = response.headers.get('Last-Modified');
+                if (lastModified) {
+                    const dateObj = new Date(lastModified);
+                    const formattedDate = dateObj.toLocaleDateString('pt-BR'); // Ex: 15/07/2026
+                    const btnDispData = document.getElementById('disp-html-data');
+                    if (btnDispData) btnDispData.textContent = formattedDate;
+                }
+                
+                // Extrair Versão do Cache do código-fonte do arquivo
+                const swText = await response.text();
+                const versionMatch = swText.match(/CACHE_NAME\s*=\s*['"](?:.*?-v)?([\d\.]+)['"]/);
+                if (versionMatch && versionMatch[1]) {
+                    const currentSwVersion = versionMatch[1];
+                    const btnDispSw = document.getElementById('disp-sw-versao');
+                    if (btnDispSw) btnDispSw.textContent = "v" + currentSwVersion;
+                }
+            } catch (err) {
+                console.error("Erro ao buscar versão do SW dinamicamente:", err);
+            }
         });
 
         // FUNÇÃO BRUTA PARA LIMPAR CACHE TOTAL
