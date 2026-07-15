@@ -897,10 +897,18 @@
                     }
                 }
 
-                // Espera um milisegundo e força recarregamento ignorando tudo (Hard Refresh equivalente a Ctrl+F5)
+                // 5. Tratamento de Reload ou Logout Nativo (APK vs PWA puro)
                 setTimeout(() => {
-                    alert('As memórias foram limpas com sucesso. O aplicativo irá recarregar...');
-                    window.location.reload(true);
+                    alert('As memórias foram limpas com sucesso. O aplicativo será reiniciado.');
+                    
+                    if (window.parent !== window) {
+                        // Modo APK Nativo: Avisa a camada Java/Capacitor para deslogar e zerar o app
+                        console.log("Enviando sinal de LOGOUT_APP para o wrapper nativo");
+                        window.parent.postMessage({ type: 'LOGOUT_APP' }, '*');
+                    } else {
+                        // Modo PWA (Navegador): Faz hard-refresh
+                        window.location.reload(true);
+                    }
                 }, 500);
             }
         }
