@@ -15,7 +15,6 @@ from usuarios.models import DeviceToken
 
 @method_decorator(csrf_exempt, name='dispatch')
 class TrackingHeartbeatView(APIView):
-    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request):
