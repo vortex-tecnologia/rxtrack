@@ -1277,6 +1277,7 @@ def salvar_configuracao_view(request):
         config.enviar_email_falhas = data.get('enviar_email_falhas', config.enviar_email_falhas)
         config.emails_notificacao = data.get('emails_notificacao', config.emails_notificacao)
         config.armazenar_foto_backup = data.get('armazenar_foto_backup', config.armazenar_foto_backup)
+        config.modulo_torre_erros = data.get('modulo_torre_erros', config.modulo_torre_erros)
         
         # IA
         config.codigos_ocorrencia_yolo = data.get('codigos_ocorrencia_yolo', config.codigos_ocorrencia_yolo)

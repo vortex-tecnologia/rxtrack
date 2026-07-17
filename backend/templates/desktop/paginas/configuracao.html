@@ -115,6 +115,13 @@
                         </div>
                     </div>
                     <div class="col-md-6">
+                        <div class="form-check form-switch p-3 border rounded border-danger bg-danger bg-opacity-10">
+                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="modulo_torre_erros" {% if config.modulo_torre_erros %}checked{% endif %} {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                            <label class="form-check-label fw-bold small text-danger">🚨 Módulo Torre de Erros</label>
+                            <div class="text-muted" style="font-size: 0.75rem;">Ativar monitoramento de falhas em tempo real</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
                         <div class="form-check form-switch p-3 border rounded">
                             <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="armazenar_foto_backup" {% if config.armazenar_foto_backup %}checked{% endif %} {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
                             <label class="form-check-label fw-bold small">💾 Foto de Backup</label>
@@ -260,6 +267,7 @@
             enviar_email_falhas: document.getElementById('enviar_email_falhas').checked,
             emails_notificacao: document.getElementById('emails_notificacao').value,
             armazenar_foto_backup: document.getElementById('armazenar_foto_backup').checked,
+            modulo_torre_erros: document.getElementById('modulo_torre_erros').checked,
             codigos_ocorrencia_yolo: document.getElementById('codigos_ocorrencia_yolo').value,
             grupos_relatorio_whatsapp: document.getElementById('grupos_relatorio_whatsapp').value,
         };
