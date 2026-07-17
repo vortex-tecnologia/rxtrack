@@ -21,6 +21,7 @@ def api_notificacoes_erros(request):
         return JsonResponse({'count': 0, 'notificacoes': []})
 
     # Busca apenas logs de ERRO não lidos (da filial do usuário ou sem filial)
+    from operacional.models import LogErroOperacional
     erros_qs = LogBaixaNfe.objects.filter(
         tipo__icontains='ERRO',
         lido=False,
@@ -47,9 +48,16 @@ def api_notificacoes_erros(request):
             'manifesto_numero': log.manifesto_numero,
         })
 
+    # Conta os erros operacionais pendentes na Torre de Erros para pulsar o botão
+    erros_op_qs = LogErroOperacional.objects.filter(resolvido=False)
+    if filial:
+        erros_op_qs = erros_op_qs.filter(Q(filial=filial) | Q(filial__isnull=True))
+    pendentes_torre = erros_op_qs.count()
+
     return JsonResponse({
         'count': total_nao_lidos,
         'notificacoes': notificacoes,
+        'erros_pendentes_torre': pendentes_torre,
     })
 
 
