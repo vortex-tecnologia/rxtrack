@@ -24,6 +24,7 @@ class ConfiguracaoSistemaAdmin(admin.ModelAdmin):
         }),
         ('⚙️ Feature Flags - Ações Secundárias', {
             'fields': (
+                'modulo_torre_erros',
                 'processar_yolo', 
                 'processar_ocr', 
                 'enviar_tms', 
