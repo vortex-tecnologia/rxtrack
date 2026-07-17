@@ -11,13 +11,15 @@ from channels.auth import AuthMiddlewareStack
 
 import manifesto.routing
 import suporte.routing
+import operacional.routing
 
 application = ProtocolTypeRouter({
     "http": django_asgi_app,
     "websocket": AuthMiddlewareStack(
         URLRouter(
             manifesto.routing.websocket_urlpatterns +
-            suporte.routing.websocket_urlpatterns
+            suporte.routing.websocket_urlpatterns +
+            operacional.routing.websocket_urlpatterns
         )
     ),
 })

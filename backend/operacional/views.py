@@ -1378,3 +1378,183 @@ def buscar_grupos_whatsapp_view(request):
         
     except Exception as e:
         return JsonResponse({'status': 'erro', 'message': str(e)}, status=400)
+
+
+# ==========================================
+# TORRE DE CONTROLE DE ERROS
+# ==========================================
+from django.views.generic import TemplateView
+from django.core.paginator import Paginator
+from operacional.models import LogErroOperacional
+
+@method_decorator(login_required(login_url='/login/'), name='dispatch')
+@method_decorator(apenas_operacional, name='dispatch')
+class TorreErrosView(TemplateView):
+    """Renderiza a página principal da Torre de Controle de Erros"""
+    template_name = 'desktop/paginas/painel/torre_erros.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        usuario_filial = None
+        if self.request.user.is_authenticated:
+            try:
+                perfil = Motorista.objects.get(user=self.request.user)
+                usuario_filial = perfil.filial
+            except Motorista.DoesNotExist:
+                pass
+                
+        # Estatísticas do dia para o cabeçalho
+        agora = timezone.localtime()
+        hoje_inicio = agora.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        qs_base = LogErroOperacional.objects.all()
+        
+        # Gestores veem tudo, operacionais veem sua filial
+        if usuario_filial and getattr(self.request.user, 'motorista_perfil', None) and self.request.user.motorista_perfil.tipo_usuario != 'GESTOR':
+            qs_base = qs_base.filter(filial=usuario_filial)
+            
+        # Filtra apenas quem não é de SAC para quem não for do SAC
+        tipo_user = getattr(self.request.user.motorista_perfil, 'tipo_usuario', 'OPERACIONAL') if hasattr(self.request.user, 'motorista_perfil') else 'OPERACIONAL'
+        if tipo_user == 'SAC':
+            qs_base = qs_base.filter(publico_alvo__in=['SAC', 'AMBOS'])
+        elif tipo_user == 'OPERACIONAL':
+            qs_base = qs_base.filter(publico_alvo__in=['OPERACIONAL', 'AMBOS'])
+
+        erros_abertos = qs_base.filter(status='ABERTO')
+        
+        context['count_criticos'] = erros_abertos.filter(severidade='CRITICO').count()
+        context['count_atencao'] = erros_abertos.filter(severidade='ATENCAO').count()
+        context['count_info'] = erros_abertos.filter(severidade='INFO').count()
+        
+        context['count_resolvidos_hoje'] = qs_base.filter(
+            status='RESOLVIDO', 
+            data_resolucao__gte=hoje_inicio
+        ).count()
+        
+        context['filial_ws'] = str(usuario_filial.id) if usuario_filial and tipo_user != 'GESTOR' else 'todas'
+        
+        # Categorias para filtro
+        context['categorias'] = LogErroOperacional.CATEGORIA_CHOICES
+        context['titulo'] = "Torre de Controle de Erros"
+        context['usuario_nome'] = self.request.user.get_full_name() or self.request.user.username
+        
+        return context
+
+@login_required
+def api_erros_torre(request):
+    """API para listar os erros na Torre de Controle (Lazy Loading)"""
+    try:
+        usuario_filial = None
+        try:
+            perfil = Motorista.objects.get(user=request.user)
+            usuario_filial = perfil.filial
+            tipo_user = perfil.tipo_usuario
+        except Motorista.DoesNotExist:
+            tipo_user = 'OPERACIONAL'
+            
+        qs = LogErroOperacional.objects.all().select_related('filial')
+        
+        # Regras de visibilidade
+        if usuario_filial and tipo_user != 'GESTOR':
+            qs = qs.filter(filial=usuario_filial)
+            
+        if tipo_user == 'SAC':
+            qs = qs.filter(publico_alvo__in=['SAC', 'AMBOS'])
+        elif tipo_user == 'OPERACIONAL':
+            qs = qs.filter(publico_alvo__in=['OPERACIONAL', 'AMBOS'])
+            
+        # Filtros
+        status = request.GET.get('status', 'ABERTO')
+        if status:
+            qs = qs.filter(status=status)
+            
+        severidade = request.GET.get('severidade')
+        if severidade:
+            qs = qs.filter(severidade=severidade)
+            
+        categoria = request.GET.get('categoria')
+        if categoria:
+            qs = qs.filter(categoria=categoria)
+            
+        qs = qs.order_by('-criado_em')
+        
+        # Paginação
+        page = int(request.GET.get('page', 1))
+        paginator = Paginator(qs, 30)  # 30 erros por página
+        
+        if page > paginator.num_pages:
+            erros = []
+        else:
+            erros = paginator.page(page)
+            
+        lista = []
+        for e in erros:
+            lista.append({
+                "id": e.id,
+                "severidade": e.severidade,
+                "categoria": e.categoria,
+                "categoria_display": e.get_categoria_display(),
+                "titulo": e.titulo,
+                "descricao": e.descricao[:300],
+                "manifesto_numero": e.manifesto_numero,
+                "nota_fiscal_numero": e.nota_fiscal_numero,
+                "motorista_nome": e.motorista_nome,
+                "criado_em": timezone.localtime(e.criado_em).isoformat(),
+                "publico_alvo": e.publico_alvo,
+                "status": e.status
+            })
+            
+        return JsonResponse({
+            'status': 'sucesso',
+            'erros': lista,
+            'has_next': page < paginator.num_pages
+        })
+    except Exception as e:
+        return JsonResponse({'status': 'erro', 'message': str(e)}, status=500)
+
+@login_required
+@require_POST
+def resolver_erro_torre(request, erro_id):
+    """Marca um erro como resolvido e notifica via WS"""
+    try:
+        erro = LogErroOperacional.objects.get(id=erro_id)
+        
+        # Verifica se o usuário tem permissão (mesma filial ou gestor)
+        try:
+            perfil = Motorista.objects.get(user=request.user)
+            if perfil.tipo_usuario != 'GESTOR' and perfil.filial != erro.filial:
+                return JsonResponse({'status': 'erro', 'message': 'Sem permissão para resolver erros desta filial.'}, status=403)
+        except Motorista.DoesNotExist:
+            pass
+            
+        erro.status = 'RESOLVIDO'
+        erro.resolvido_por = request.user
+        erro.data_resolucao = timezone.now()
+        erro.save()
+        
+        # Notifica via WebSocket
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+        
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            payload = {
+                "type": "erro_resolvido",
+                "data": {
+                    "id": erro.id,
+                    "resolvido_por_nome": request.user.get_full_name() or request.user.username,
+                    "data_resolucao": timezone.localtime(erro.data_resolucao).isoformat()
+                }
+            }
+            grupo_filial = f"torre_erros_{erro.filial_id}"
+            async_to_sync(channel_layer.group_send)(grupo_filial, payload)
+            
+            if grupo_filial != "torre_erros_todas":
+                async_to_sync(channel_layer.group_send)("torre_erros_todas", payload)
+                
+        return JsonResponse({'status': 'sucesso', 'message': 'Erro marcado como resolvido.'})
+    except LogErroOperacional.DoesNotExist:
+        return JsonResponse({'status': 'erro', 'message': 'Erro não encontrado.'}, status=404)
+    except Exception as e:
+        return JsonResponse({'status': 'erro', 'message': str(e)}, status=500)

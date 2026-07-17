@@ -715,6 +715,22 @@ class ESLCloudAdapter(BaseTMSAdapter):
             baixa.integrado_tms = False
             baixa.save()
 
+            try:
+                from operacional.services import registrar_erro_torre
+                registrar_erro_torre(
+                    filial=manifesto.filial,
+                    categoria='INTEGRACAO_BAIXA',
+                    severidade_padrao='CRITICO',
+                    titulo=f"Falha integração NF {nf.numero_nota}",
+                    descricao=f"Manifesto #{manifesto.numero_manifesto} - {msg_erro[:300]}",
+                    erro_raw=msg_erro,
+                    manifesto_numero=manifesto.numero_manifesto,
+                    nota_fiscal_numero=nf.numero_nota,
+                    motorista_nome=motorista,
+                )
+            except Exception as tr_exc:
+                logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+
             if status and 400 <= status < 500:
                 notificar_falha_tms(baixa_id, msg_erro, "enviar_baixa_esl_task")
                 return f"Erro de validação ESL: {msg_erro}"
@@ -728,6 +744,22 @@ class ESLCloudAdapter(BaseTMSAdapter):
             msg = f"Erro inesperado: {str(e)}"
             baixa.log_erro_tms = msg[:500]
             baixa.save()
+            
+            try:
+                from operacional.services import registrar_erro_torre
+                registrar_erro_torre(
+                    filial=manifesto.filial,
+                    categoria='INTEGRACAO_BAIXA',
+                    severidade_padrao='CRITICO',
+                    titulo=f"Erro inesperado NF {nf.numero_nota}",
+                    descricao=f"Manifesto #{manifesto.numero_manifesto} - {msg[:300]}",
+                    erro_raw=msg,
+                    manifesto_numero=manifesto.numero_manifesto,
+                    nota_fiscal_numero=nf.numero_nota,
+                    motorista_nome=motorista,
+                )
+            except Exception as tr_exc:
+                logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
             if task:
                 raise task.retry(exc=e, countdown=60)
             raise
@@ -894,6 +926,22 @@ class ESLCloudAdapter(BaseTMSAdapter):
             baixa.integrado_tms = False
             baixa.save()
             
+            try:
+                from operacional.services import registrar_erro_torre
+                registrar_erro_torre(
+                    filial=nf.manifesto.filial,
+                    categoria='INTEGRACAO_MINUTA',
+                    severidade_padrao='CRITICO',
+                    titulo=f"Falha na Minuta {nf.numero_nota}",
+                    descricao=f"Manifesto #{nf.manifesto.numero_manifesto} - {msg_falha[:300]}",
+                    erro_raw=msg_falha,
+                    manifesto_numero=nf.manifesto.numero_manifesto,
+                    nota_fiscal_numero=nf.numero_nota,
+                    motorista_nome=nf.manifesto.motorista.nome_completo if nf.manifesto.motorista else "Desconhecido",
+                )
+            except Exception as tr_exc:
+                logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+            
             notificar_falha_tms(baixa_id, msg_falha, "enviar_baixa_minuta_task")
             
             if task:
@@ -983,6 +1031,22 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 baixa.payload_enviado = payload
                 baixa.save()
                 
+                try:
+                    from operacional.services import registrar_erro_torre
+                    registrar_erro_torre(
+                        filial=manifesto.filial,
+                        categoria='INTEGRACAO_COLETA',
+                        severidade_padrao='CRITICO',
+                        titulo=f"Falha na Coleta {identificador}",
+                        descricao=f"Manifesto #{manifesto.numero_manifesto} - {msg_erro[:300]}",
+                        erro_raw=msg_erro,
+                        manifesto_numero=manifesto.numero_manifesto,
+                        nota_fiscal_numero=identificador,
+                        motorista_nome=manifesto.motorista.nome_completo if manifesto.motorista else "Desconhecido",
+                    )
+                except Exception as tr_exc:
+                    logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+                
                 notificar_falha_tms(baixa_id, msg_erro, "enviar_coleta_esl_task")
                 
                 if response.status_code == 404 and is_numeric:
@@ -992,6 +1056,20 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
         except Exception as e:
             logger.error(f"Erro enviar_coleta_esl_task ({baixa_id}): {str(e)}")
+            
+            try:
+                from operacional.services import registrar_erro_torre
+                registrar_erro_torre(
+                    filial=manifesto.filial,
+                    categoria='INTEGRACAO_COLETA',
+                    severidade_padrao='CRITICO',
+                    titulo=f"Erro inesperado na Coleta {baixa_id}",
+                    descricao=str(e)[:300],
+                    erro_raw=str(e),
+                    manifesto_numero=manifesto.numero_manifesto,
+                )
+            except Exception as tr_exc:
+                logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
             if task:
                 raise task.retry(exc=e, countdown=60)
             raise
@@ -1082,6 +1160,21 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     notificar_finalizacao_manifesto_grupos(manifesto_id, tms_sucesso=False, tms_erro_msg=str(exc))
                 except Exception as notif_err:
                     logger.error(f"Erro ao notificar grupos (erro TMS/Rede): {notif_err}")
+                    
+                try:
+                    from operacional.services import registrar_erro_torre
+                    registrar_erro_torre(
+                        filial=manifesto.filial,
+                        categoria='FINALIZACAO_MANIFESTO',
+                        severidade_padrao='CRITICO',
+                        titulo=f"Falha finalização Manifesto #{manifesto.numero_manifesto}",
+                        descricao=str(exc)[:300],
+                        erro_raw=str(exc),
+                        manifesto_numero=manifesto.numero_manifesto,
+                        motorista_nome=manifesto.motorista.nome_completo if manifesto.motorista else "Desconhecido",
+                    )
+                except Exception as tr_exc:
+                    logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
 
             if task:
                 raise task.retry(exc=exc, countdown=300)

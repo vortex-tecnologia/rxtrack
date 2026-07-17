@@ -52,4 +52,9 @@ urlpatterns = [
     path('api/notificacoes/marcar-lidas/', api_marcar_notificacoes_lidas, name='api_marcar_notificacoes_lidas'),
     path('api/notificacoes/marcar-lida/<int:notif_id>/', api_marcar_notificacao_lida, name='api_marcar_notificacao_lida'),
     path('api/logs-baixa-nfe/', api_logs_baixa_nfe, name='api_logs_baixa_nfe'),
+
+    # Torre de Controle de Erros
+    path('torre-erros/', views.TorreErrosView.as_view(), name='torre_erros'),
+    path('api/torre-erros/resolver/<int:erro_id>/', views.resolver_erro_torre, name='resolver_erro_torre'),
+    path('api/torre-erros/listar/', views.api_erros_torre, name='api_erros_torre'),
 ]

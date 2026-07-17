@@ -278,6 +278,22 @@ def processar_webhook_manifesto_task(self, event_id):
                 status='ERRO',
                 mensagem_erro=f"Webhook Error: {str(e)}"
             )
+            
+            try:
+                from operacional.services import registrar_erro_torre
+                registrar_erro_torre(
+                    filial=motorista.filial if motorista and motorista.filial else None,
+                    categoria='WEBHOOK_MANIFESTO',
+                    severidade_padrao='ATENCAO',
+                    titulo=f"Falha ao processar Webhook Manifesto {num_mani}",
+                    descricao=f"Falha durante webhook: {str(e)[:300]}",
+                    erro_raw=str(e),
+                    manifesto_numero=num_mani,
+                    motorista_nome=motorista.nome_completo if motorista else "Desconhecido"
+                )
+            except Exception as tr_exc:
+                logger.error(f"Erro registrar torre de controle webhook: {tr_exc}")
+                
         except Exception as logger_err:
             logger.error(f"Falha ao registrar log de erro do webhook: {logger_err}")
             
@@ -433,6 +449,20 @@ def processar_soap_task(self, evento_id):
             evt.status = 'ERRO'
             evt.erro = str(e)
             evt.save()
+            
+            try:
+                from operacional.services import registrar_erro_torre
+                registrar_erro_torre(
+                    filial=evt.filial if hasattr(evt, 'filial') else None,
+                    categoria='WEBHOOK_MANIFESTO',
+                    severidade_padrao='ATENCAO',
+                    titulo=f"Falha ao processar SOAP Manifesto {evt.numero_manifesto}",
+                    descricao=f"Falha durante SOAP: {str(e)[:300]}",
+                    erro_raw=str(e),
+                    manifesto_numero=evt.numero_manifesto
+                )
+            except Exception as tr_exc:
+                logger.error(f"Erro registrar torre de controle SOAP: {tr_exc}")
         except:
             pass
         raise self.retry(exc=e, countdown=60)

@@ -368,11 +368,36 @@ docker-compose restart web celery_worker celery_beat
 > [!IMPORTANT]
 > **Celery Beat obrigatório:** O bot depende do Celery Beat rodando para disparar as tasks agendadas. Certifique-se de que o serviço `celery_beat` está ativo no `docker-compose.yml`. Caso não exista, adicione:
 > ```yaml
-> celery_beat:
->   build: ./backend
 >   command: celery -A core beat --loglevel=info
 >   depends_on:
 >     - redis
 >     - web
 > ```
+
+---
+
+**Data:** 17/07/2026
+**Hora:** 15:40
+
+## Torre de Controle de Erros 🛠️
+
+Novo módulo centralizado para monitoramento e detecção de falhas de integrações e operacionais em tempo real.
+
+### Principais Funcionalidades:
+1. **Monitoramento em Tempo Real:** 
+   - Utilização de **WebSockets (Django Channels)** para refletir os erros de integração (TMS, Webhooks) instantaneamente no painel operacional.
+   - Divisão de visualização por filial (Gestores visualizam o fluxo global).
+2. **Motor de Classificação Dinâmico:**
+   - Erros não possuem códigos padronizados do TMS. Por isso, foi criado um motor de regras (`RegraClassificacaoErro`) configurável via Painel Admin que aplica *Regex* nas mensagens de erro.
+   - Categorização automática em Severidades (`CRITICO`, `ATENCAO`, `INFO`) e Direcionamento por Público (`OPERACIONAL`, `SAC`, `AMBOS`).
+3. **Visibilidade (Multi-Tenant SaaS):**
+   - O recurso pode ser ligado/desligado por cliente (Tenant) através da configuração global (`modulo_torre_erros`).
+   - UI adaptativa com animações específicas para erros críticos (Efeito `Pulse` pulsante) e informativos (opacidade reduzida).
+4. **Resolução Rápida:**
+   - Botão para marcar erro como `Resolvido` no grid. A alteração oculta imediatamente a notificação da tela de toda a equipe da filial.
+
+### Componentes Atualizados:
+- `operacional/models.py`, `services.py`, `consumers.py`, `views.py`
+- `integracoes/providers/esl_cloud.py` (Captura de falhas em Baixas, Coletas e Finalizações)
+- `manifesto/tasks.py` (Captura de falhas no processamento de Webhooks SOAP e REST)
 

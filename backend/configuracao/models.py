@@ -95,6 +95,13 @@ class ConfiguracaoSistema(models.Model):
         help_text="Se ligado, o ícone de chat flutuante será visível para os motoristas no app Mobile."
     )
 
+    # ===== MÓDULO: TORRE DE ERROS =====
+    modulo_torre_erros = models.BooleanField(
+        default=False,
+        verbose_name="🚨 Módulo Torre de Controle de Erros",
+        help_text="Se desativado, a Torre de Erros não aparece no menu e nenhum log é gerado."
+    )
+
     # ===== PROVEDOR TMS =====
     TMS_CHOICES = [
         ('esl_cloud', 'ESL Cloud'),

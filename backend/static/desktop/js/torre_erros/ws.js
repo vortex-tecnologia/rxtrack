@@ -1,0 +1,316 @@
+document.addEventListener("DOMContentLoaded", function() {
+    let currentPage = 1;
+    let isLoading = false;
+    let hasNext = true;
+
+    const tableBody = document.getElementById('erros-tbody');
+    const loadingSpinner = document.getElementById('loading-spinner');
+    const emptyState = document.getElementById('empty-state');
+    const loadMoreBtn = document.getElementById('btn-load-more');
+    const paginationContainer = document.getElementById('pagination-container');
+    
+    // Contadores
+    const countCriticos = document.getElementById('count-criticos');
+    const countAtencao = document.getElementById('count-atencao');
+    const countInfo = document.getElementById('count-info');
+    const countResolvidos = document.getElementById('count-resolvidos');
+
+    // Filtros
+    const filterSeveridade = document.getElementById('filter-severidade');
+    const filterCategoria = document.getElementById('filter-categoria');
+    const btnRefresh = document.getElementById('btn-refresh');
+
+    // Inicializar
+    carregarErros(true);
+
+    // Eventos dos filtros
+    filterSeveridade.addEventListener('change', () => carregarErros(true));
+    filterCategoria.addEventListener('change', () => carregarErros(true));
+    btnRefresh.addEventListener('click', () => carregarErros(true));
+    loadMoreBtn.addEventListener('click', () => {
+        if (!isLoading && hasNext) {
+            currentPage++;
+            carregarErros(false);
+        }
+    });
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    function formatDate(isoString) {
+        if (!isoString) return '-';
+        const date = new Date(isoString);
+        return date.toLocaleString('pt-BR');
+    }
+
+    function getBadgeClass(severidade) {
+        switch(severidade) {
+            case 'CRITICO': return 'bg-danger';
+            case 'ATENCAO': return 'bg-warning text-dark';
+            case 'INFO': return 'bg-info text-dark';
+            default: return 'bg-secondary';
+        }
+    }
+    
+    function getRowClass(severidade) {
+        switch(severidade) {
+            case 'CRITICO': return 'row-critico';
+            case 'ATENCAO': return 'row-atencao';
+            case 'INFO': return 'row-info';
+            default: return '';
+        }
+    }
+
+    function createRowHTML(erro) {
+        const refs = [];
+        if (erro.manifesto_numero) refs.push(`MFT: ${erro.manifesto_numero}`);
+        if (erro.nota_fiscal_numero) refs.push(`NF: ${erro.nota_fiscal_numero}`);
+        
+        let actions = '';
+        if (erro.status === 'ABERTO') {
+            actions = `<button class="btn btn-sm btn-outline-success btn-resolver" data-id="${erro.id}">
+                        <i class="bi bi-check2"></i> Resolver
+                      </button>`;
+        } else {
+            actions = `<span class="badge bg-success">Resolvido</span>`;
+        }
+
+        return `
+            <tr id="erro-${erro.id}" class="${getRowClass(erro.severidade)}">
+                <td><span class="badge ${getBadgeClass(erro.severidade)}">${erro.severidade}</span></td>
+                <td><small class="fw-bold text-secondary">${erro.categoria_display}</small></td>
+                <td><small>${formatDate(erro.criado_em)}</small></td>
+                <td>
+                    <div class="small fw-bold">${refs.join(' | ')}</div>
+                    ${erro.motorista_nome ? `<small class="text-muted"><i class="bi bi-person"></i> ${erro.motorista_nome}</small>` : ''}
+                </td>
+                <td>
+                    <strong class="d-block text-truncate" style="max-width: 250px;" title="${erro.titulo}">${erro.titulo}</strong>
+                    <small class="text-muted d-inline-block text-truncate" style="max-width: 300px;" title="${erro.descricao}">${erro.descricao}</small>
+                </td>
+                <td>${actions}</td>
+            </tr>
+        `;
+    }
+
+    function carregarErros(reset = false) {
+        if (reset) {
+            currentPage = 1;
+            tableBody.innerHTML = '';
+            emptyState.classList.add('d-none');
+            paginationContainer.classList.add('d-none');
+        }
+        
+        isLoading = true;
+        loadingSpinner.classList.remove('d-none');
+
+        const params = new URLSearchParams({
+            page: currentPage,
+            status: 'ABERTO',
+            severidade: filterSeveridade.value,
+            categoria: filterCategoria.value
+        });
+
+        fetch(`/api/torre-erros/listar/?${params.toString()}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'sucesso') {
+                    hasNext = data.has_next;
+                    
+                    if (reset && data.erros.length === 0) {
+                        emptyState.classList.remove('d-none');
+                    } else {
+                        data.erros.forEach(erro => {
+                            tableBody.insertAdjacentHTML('beforeend', createRowHTML(erro));
+                        });
+                        
+                        if (hasNext) {
+                            paginationContainer.classList.remove('d-none');
+                        } else {
+                            paginationContainer.classList.add('d-none');
+                        }
+                    }
+                    
+                    attachResolverEvents();
+                } else {
+                    console.error('Erro ao carregar erros:', data.message);
+                }
+            })
+            .catch(err => console.error('Request failed', err))
+            .finally(() => {
+                isLoading = false;
+                loadingSpinner.classList.add('d-none');
+            });
+    }
+
+    function attachResolverEvents() {
+        document.querySelectorAll('.btn-resolver').forEach(btn => {
+            // Remove evento anterior para não duplicar
+            btn.replaceWith(btn.cloneNode(true));
+        });
+        
+        document.querySelectorAll('.btn-resolver').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const erroId = this.getAttribute('data-id');
+                const btnRef = this;
+                btnRef.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+                btnRef.disabled = true;
+
+                fetch(`/api/torre-erros/resolver/${erroId}/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    }
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'sucesso') {
+                        // A interface será atualizada pelo WebSocket, mas caso queira já adiantar:
+                        const row = document.getElementById(`erro-${erroId}`);
+                        if (row) {
+                            row.style.opacity = '0.5';
+                            btnRef.parentElement.innerHTML = '<span class="badge bg-success">Resolvido</span>';
+                        }
+                    } else {
+                        alert(`Erro: ${data.message}`);
+                        btnRef.innerHTML = '<i class="bi bi-check2"></i> Resolver';
+                        btnRef.disabled = false;
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    btnRef.innerHTML = '<i class="bi bi-check2"></i> Resolver';
+                    btnRef.disabled = false;
+                });
+            });
+        });
+    }
+
+    // ==========================================
+    // WEBSOCKET (Atualização em Tempo Real)
+    // ==========================================
+    const wsFilialId = JSON.parse(document.getElementById('filial-ws-id').textContent) || 'todas';
+    const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+    
+    // Tentativa de reconexão
+    let socket;
+    function connectWS() {
+        socket = new WebSocket(`${wsScheme}://${window.location.host}/ws/torre-erros/${wsFilialId}/`);
+
+        socket.onopen = function(e) {
+            console.log('TorreErros WebSocket conectado');
+            const statusBadge = document.getElementById('ws-status');
+            statusBadge.classList.remove('bg-danger');
+            statusBadge.classList.add('bg-success');
+            statusBadge.innerHTML = '<i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i> Conectado';
+        };
+
+        socket.onmessage = function(e) {
+            const parsedData = JSON.parse(e.data);
+            const tipoEvento = parsedData.type;
+            const dados = parsedData.dados;
+
+            if (tipoEvento === 'novo_erro') {
+                // Atualiza contadores
+                if (dados.severidade === 'CRITICO') {
+                    countCriticos.innerText = parseInt(countCriticos.innerText) + 1;
+                } else if (dados.severidade === 'ATENCAO') {
+                    countAtencao.innerText = parseInt(countAtencao.innerText) + 1;
+                } else if (dados.severidade === 'INFO') {
+                    countInfo.innerText = parseInt(countInfo.innerText) + 1;
+                }
+
+                // Insere no topo da tabela se não tiver filtro restritivo aplicado
+                if (
+                    (!filterSeveridade.value || filterSeveridade.value === dados.severidade) &&
+                    (!filterCategoria.value || filterCategoria.value === dados.categoria)
+                ) {
+                    emptyState.classList.add('d-none');
+                    tableBody.insertAdjacentHTML('afterbegin', createRowHTML(dados));
+                    attachResolverEvents();
+                }
+
+                // Se for crítico, pode exibir toast/alerta
+                if (dados.severidade === 'CRITICO') {
+                    mostrarToastNotificacao('Erro Crítico Registrado', dados.titulo, 'danger');
+                }
+
+            } else if (tipoEvento === 'erro_resolvido') {
+                const row = document.getElementById(`erro-${dados.id}`);
+                if (row) {
+                    // Descobre a severidade para decrementar
+                    const badgeText = row.querySelector('td .badge').innerText;
+                    
+                    if (badgeText === 'CRITICO') countCriticos.innerText = Math.max(0, parseInt(countCriticos.innerText) - 1);
+                    if (badgeText === 'ATENCAO') countAtencao.innerText = Math.max(0, parseInt(countAtencao.innerText) - 1);
+                    if (badgeText === 'INFO') countInfo.innerText = Math.max(0, parseInt(countInfo.innerText) - 1);
+
+                    countResolvidos.innerText = parseInt(countResolvidos.innerText) + 1;
+                    
+                    // Remove linha com animação suave
+                    row.style.transition = 'all 0.5s ease';
+                    row.style.opacity = '0';
+                    row.style.transform = 'translateX(20px)';
+                    setTimeout(() => {
+                        row.remove();
+                        if (tableBody.children.length === 0) {
+                            emptyState.classList.remove('d-none');
+                        }
+                    }, 500);
+                }
+            }
+        };
+
+        socket.onclose = function(e) {
+            console.error('TorreErros WebSocket desconectado inesperadamente');
+            const statusBadge = document.getElementById('ws-status');
+            statusBadge.classList.remove('bg-success');
+            statusBadge.classList.add('bg-danger');
+            statusBadge.innerHTML = '<i class="bi bi-x-circle-fill me-1" style="font-size: 0.5rem;"></i> Desconectado';
+            
+            // Tenta reconectar a cada 5s
+            setTimeout(connectWS, 5000);
+        };
+    }
+
+    connectWS();
+
+    // Helper de Toast (usando Bootstrap)
+    function mostrarToastNotificacao(titulo, mensagem, type = 'info') {
+        const toastContainer = document.querySelector('.toast-container');
+        if (!toastContainer) return;
+        
+        const toastHTML = `
+            <div class="toast align-items-center text-bg-${type} border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true" data-bs-autohide="true" data-bs-delay="10000">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <strong class="d-block">${titulo}</strong>
+                        ${mensagem}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        `;
+        
+        toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+        const toastEl = toastContainer.lastElementChild;
+        const toast = new bootstrap.Toast(toastEl);
+        toast.show();
+        
+        toastEl.addEventListener('hidden.bs.toast', () => {
+            toastEl.remove();
+        });
+    }
+});
