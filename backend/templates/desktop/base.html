@@ -286,7 +286,7 @@
             <span class="menu-text">Motoristas</span>
         </a>
 
-        {% if configuracao.modulo_torre_erros %}
+        {% if config_sistema.modulo_torre_erros %}
         <a href="{% url 'operacional:torre_erros' %}" class="nav-link {% if '/torre-erros/' in request.path %}active-menu{% endif %}">
             <i class="bi bi-activity"></i>
             <span class="menu-text">Torre de Erros</span>
