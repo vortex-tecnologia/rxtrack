@@ -49,7 +49,7 @@ def api_notificacoes_erros(request):
         })
 
     # Conta os erros operacionais pendentes na Torre de Erros para pulsar o botão
-    erros_op_qs = LogErroOperacional.objects.filter(resolvido=False)
+    erros_op_qs = LogErroOperacional.objects.filter(status='ABERTO')
     if filial:
         erros_op_qs = erros_op_qs.filter(Q(filial=filial) | Q(filial__isnull=True))
     pendentes_torre = erros_op_qs.count()
