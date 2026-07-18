@@ -70,7 +70,8 @@ class LogErroOperacional(models.Model):
     
     STATUS_CHOICES = [
         ('ABERTO', 'Aberto'),
-        ('RESOLVIDO', 'Resolvido'),
+        ('RESOLVIDO', 'Resolvido (Manual)'),
+        ('AUTO_RESOLVIDO', 'Resolvido (Automático)'),
         ('IGNORADO', 'Ignorado'),
     ]
 
@@ -97,10 +98,14 @@ class LogErroOperacional(models.Model):
         on_delete=models.SET_NULL, verbose_name="Regra que classificou")
     
     # Status de resolução
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='ABERTO')
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='ABERTO')
     resolvido_por = models.ForeignKey('auth.User', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='erros_resolvidos')
     data_resolucao = models.DateTimeField(null=True, blank=True)
+    resolucao_automatica = models.BooleanField(default=False, 
+        help_text="Indica se o erro foi resolvido automaticamente por uma retentativa bem-sucedida")
+    observacao_resolucao = models.TextField(blank=True, null=True,
+        verbose_name="Observação da Resolução", help_text="Anotação opcional do operador")
     
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)

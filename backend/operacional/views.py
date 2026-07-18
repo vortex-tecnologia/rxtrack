@@ -1514,6 +1514,100 @@ def api_erros_torre(request):
     except Exception as e:
         return JsonResponse({'status': 'erro', 'message': str(e)}, status=500)
 
+
+@login_required
+def api_erro_detalhe(request, erro_id):
+    """Retorna detalhes completos de um erro para o modal"""
+    try:
+        e = LogErroOperacional.objects.select_related('regra_aplicada', 'resolvido_por').get(id=erro_id)
+        
+        return JsonResponse({
+            'status': 'sucesso',
+            'erro': {
+                'id': e.id,
+                'severidade': e.severidade,
+                'categoria': e.get_categoria_display(),
+                'titulo': e.titulo,
+                'descricao': e.descricao,
+                'erro_raw': e.erro_raw or 'Nenhum log adicional retornado.',
+                'manifesto_numero': e.manifesto_numero,
+                'nota_fiscal_numero': e.nota_fiscal_numero,
+                'motorista_nome': e.motorista_nome,
+                'criado_em': timezone.localtime(e.criado_em).strftime('%d/%m/%Y %H:%M:%S'),
+                'regra_aplicada': e.regra_aplicada.nome if e.regra_aplicada else 'Padrão do Sistema',
+                'status': e.status,
+                'resolvido_por': e.resolvido_por.get_full_name() or e.resolvido_por.username if e.resolvido_por else None,
+                'data_resolucao': timezone.localtime(e.data_resolucao).strftime('%d/%m/%Y %H:%M:%S') if e.data_resolucao else None,
+                'resolucao_automatica': getattr(e, 'resolucao_automatica', False),
+                'observacao_resolucao': getattr(e, 'observacao_resolucao', '')
+            }
+        })
+    except LogErroOperacional.DoesNotExist:
+        return JsonResponse({'status': 'erro', 'message': 'Erro não encontrado.'}, status=404)
+        
+@login_required
+def api_erros_resolvidos(request):
+    """Lista erros já resolvidos (Manuais ou Automáticos) com filtro de data"""
+    try:
+        usuario_filial = None
+        try:
+            perfil = Motorista.objects.get(user=request.user)
+            usuario_filial = perfil.filial
+            tipo_user = perfil.tipo_usuario
+        except Motorista.DoesNotExist:
+            tipo_user = 'OPERACIONAL'
+            
+        qs = LogErroOperacional.objects.filter(status__in=['RESOLVIDO', 'AUTO_RESOLVIDO']).select_related('filial', 'resolvido_por')
+        
+        if usuario_filial and tipo_user != 'GESTOR':
+            qs = qs.filter(filial=usuario_filial)
+            
+        # Filtros de data
+        import datetime
+        data_inicio = request.GET.get('data_inicio')
+        data_fim = request.GET.get('data_fim')
+        
+        if data_inicio:
+            qs = qs.filter(data_resolucao__gte=datetime.datetime.strptime(data_inicio, '%Y-%m-%d'))
+        if data_fim:
+            # Inclui o fim do dia
+            fim = datetime.datetime.strptime(data_fim, '%Y-%m-%d') + datetime.timedelta(days=1)
+            qs = qs.filter(data_resolucao__lt=fim)
+            
+        qs = qs.order_by('-data_resolucao')
+        
+        # Paginação
+        page = int(request.GET.get('page', 1))
+        paginator = Paginator(qs, 30)
+        
+        if page > paginator.num_pages:
+            erros = []
+        else:
+            erros = paginator.page(page)
+            
+        lista = []
+        for e in erros:
+            lista.append({
+                "id": e.id,
+                "severidade": e.severidade,
+                "categoria_display": e.get_categoria_display(),
+                "titulo": e.titulo,
+                "manifesto_numero": e.manifesto_numero,
+                "nota_fiscal_numero": e.nota_fiscal_numero,
+                "motorista_nome": e.motorista_nome,
+                "status": e.status,
+                "resolvido_por_nome": e.resolvido_por.get_full_name() or e.resolvido_por.username if e.resolvido_por else "Sistema (Auto)",
+                "data_resolucao": timezone.localtime(e.data_resolucao).strftime('%d/%m/%Y %H:%M') if e.data_resolucao else "",
+            })
+            
+        return JsonResponse({
+            'status': 'sucesso',
+            'erros': lista,
+            'has_next': page < paginator.num_pages
+        })
+    except Exception as e:
+        return JsonResponse({'status': 'erro', 'message': str(e)}, status=500)
+
 @login_required
 @require_POST
 def resolver_erro_torre(request, erro_id):
@@ -1529,9 +1623,20 @@ def resolver_erro_torre(request, erro_id):
         except Motorista.DoesNotExist:
             pass
             
+        import json
+        obs = ""
+        if request.body:
+            try:
+                body = json.loads(request.body)
+                obs = body.get('observacao', '')
+            except:
+                pass
+
         erro.status = 'RESOLVIDO'
         erro.resolvido_por = request.user
         erro.data_resolucao = timezone.now()
+        if hasattr(erro, 'observacao_resolucao'):
+            erro.observacao_resolucao = obs
         erro.save()
         
         # Notifica via WebSocket

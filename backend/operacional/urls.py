@@ -57,4 +57,6 @@ urlpatterns = [
     path('torre-erros/', views.TorreErrosView.as_view(), name='torre_erros'),
     path('api/torre-erros/resolver/<int:erro_id>/', views.resolver_erro_torre, name='resolver_erro_torre'),
     path('api/torre-erros/listar/', views.api_erros_torre, name='api_erros_torre'),
+    path('api/torre-erros/detalhe/<int:erro_id>/', views.api_erro_detalhe, name='api_erro_detalhe'),
+    path('api/torre-erros/resolvidos/', views.api_erros_resolvidos, name='api_erros_resolvidos'),
 ]

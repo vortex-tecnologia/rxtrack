@@ -701,6 +701,13 @@ class ESLCloudAdapter(BaseTMSAdapter):
             baixa.data_integracao = timezone.now()
             baixa.log_erro_tms = "Sucesso: Integrado com ESL vinculando ao Manifesto"
             baixa.save()
+            
+            try:
+                from operacional.services import resolver_erros_automaticamente
+                resolver_erros_automaticamente(manifesto.numero_manifesto, nf.numero_nota, manifesto.filial)
+            except Exception as e:
+                logger.error(f"Erro auto-resolucao: {e}")
+                
             return f"Baixa {baixa_id} integrada com sucesso."
 
         except BaixaNF.DoesNotExist:
@@ -915,6 +922,12 @@ class ESLCloudAdapter(BaseTMSAdapter):
             baixa.log_erro_tms = f"Sucesso: Baixa de Minuta integrada via Freight ID {freight_id}"
             baixa.save()
             
+            try:
+                from operacional.services import resolver_erros_automaticamente
+                resolver_erros_automaticamente(nf.manifesto.numero_manifesto, nf.numero_nota, nf.manifesto.filial)
+            except Exception as auto_e:
+                logger.error(f"Erro auto-resolucao minuta: {auto_e}")
+            
             return f"Baixa de Minuta {nf.numero_nota} enviada com sucesso (Freight: {freight_id})."
 
         except Exception as e:
@@ -1022,6 +1035,13 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 baixa.log_erro_tms = f"Sucesso: Coleta registrada ({'V1' if is_numeric else 'V2'}: {identificador})"
                 baixa.payload_enviado = payload
                 baixa.save()
+                
+                try:
+                    from operacional.services import resolver_erros_automaticamente
+                    resolver_erros_automaticamente(manifesto.numero_manifesto, identificador, manifesto.filial)
+                except Exception as auto_e:
+                    logger.error(f"Erro auto-resolucao coleta: {auto_e}")
+                    
                 return f"Coleta {identificador} enviada com sucesso ao ESL ({'V1' if is_numeric else 'V2'})."
             else:
                 msg_erro = f"Status: {response.status_code} - {response.text}"
@@ -1125,6 +1145,12 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 manifesto.status = 'FINALIZADO'
                 manifesto.save()
                 
+                try:
+                    from operacional.services import resolver_erros_automaticamente
+                    resolver_erros_automaticamente(manifesto.numero_manifesto, None, manifesto.filial)
+                except Exception as e:
+                    pass
+                
                 # Notifica grupos: TMS OK
                 try:
                     from whatsbot.tasks import notificar_finalizacao_manifesto_grupos
@@ -1139,6 +1165,12 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 if "already closed" in str(erros).lower():
                     manifesto.status = 'FINALIZADO'
                     manifesto.save()
+                    
+                    try:
+                        from operacional.services import resolver_erros_automaticamente
+                        resolver_erros_automaticamente(manifesto.numero_manifesto, None, manifesto.filial)
+                    except Exception as e:
+                        pass
                     
                     # Notifica grupos: TMS já estava fechado (consideramos sucesso)
                     try:
@@ -1161,20 +1193,20 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 except Exception as notif_err:
                     logger.error(f"Erro ao notificar grupos (erro TMS/Rede): {notif_err}")
                     
-                try:
-                    from operacional.services import registrar_erro_torre
-                    registrar_erro_torre(
-                        filial=manifesto.filial,
-                        categoria='FINALIZACAO_MANIFESTO',
-                        severidade_padrao='CRITICO',
-                        titulo=f"Falha finalização Manifesto #{manifesto.numero_manifesto}",
-                        descricao=str(exc)[:300],
-                        erro_raw=str(exc),
-                        manifesto_numero=manifesto.numero_manifesto,
-                        motorista_nome=manifesto.motorista.nome_completo if manifesto.motorista else "Desconhecido",
-                    )
-                except Exception as tr_exc:
-                    logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+            try:
+                from operacional.services import registrar_erro_torre
+                registrar_erro_torre(
+                    filial=manifesto.filial,
+                    categoria='FINALIZACAO_MANIFESTO',
+                    severidade_padrao='CRITICO',
+                    titulo=f"Falha finalização Manifesto #{manifesto.numero_manifesto}",
+                    descricao=str(exc)[:300],
+                    erro_raw=str(exc),
+                    manifesto_numero=manifesto.numero_manifesto,
+                    motorista_nome=manifesto.motorista.nome_completo if manifesto.motorista else "Desconhecido",
+                )
+            except Exception as tr_exc:
+                logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
 
             if task:
                 raise task.retry(exc=exc, countdown=300)

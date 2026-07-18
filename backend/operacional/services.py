@@ -102,3 +102,62 @@ def enviar_erro_torre_ws(erro):
     # Envia também para "todas"
     if grupo_filial != "torre_erros_todas":
         async_to_sync(channel_layer.group_send)("torre_erros_todas", payload)
+
+
+def resolver_erros_automaticamente(manifesto_numero, nota_fiscal_numero, filial):
+    """
+    Quando uma tentativa posterior (retry) dá certo, o sistema resolve
+    automaticamente os erros anteriores da mesma NF ou Manifesto.
+    """
+    from operacional.models import LogErroOperacional
+    from django.db.models import Q
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+    from django.utils import timezone
+    
+    if not manifesto_numero and not nota_fiscal_numero:
+        return
+        
+    qs = LogErroOperacional.objects.filter(status='ABERTO')
+    
+    if filial:
+        qs = qs.filter(Q(filial=filial) | Q(filial__isnull=True))
+        
+    if manifesto_numero and nota_fiscal_numero:
+        qs = qs.filter(manifesto_numero=manifesto_numero, nota_fiscal_numero=nota_fiscal_numero)
+    elif manifesto_numero:
+        qs = qs.filter(manifesto_numero=manifesto_numero)
+    elif nota_fiscal_numero:
+        qs = qs.filter(nota_fiscal_numero=nota_fiscal_numero)
+        
+    erros_para_resolver = list(qs)
+    if not erros_para_resolver:
+        return
+        
+    qs.update(
+        status='AUTO_RESOLVIDO',
+        resolucao_automatica=True,
+        data_resolucao=timezone.now(),
+        observacao_resolucao="Resolvido automaticamente (retentativa de integração bem sucedida)."
+    )
+    
+    # Notificar via WebSocket
+    channel_layer = get_channel_layer()
+    if not channel_layer:
+        return
+        
+    for erro in erros_para_resolver:
+        payload = {
+            "type": "erro_resolvido",
+            "data": {
+                "id": erro.id,
+                "resolvido_por_nome": "Sistema (Automático)",
+                "data_resolucao": timezone.localtime(timezone.now()).isoformat()
+            }
+        }
+        
+        grupo_filial = f"torre_erros_{erro.filial_id}" if erro.filial_id else "torre_erros_todas"
+        async_to_sync(channel_layer.group_send)(grupo_filial, payload)
+        
+        if grupo_filial != "torre_erros_todas":
+            async_to_sync(channel_layer.group_send)("torre_erros_todas", payload)

@@ -96,7 +96,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     <div class="small fw-bold">${refs.join(' | ')}</div>
                     ${erro.motorista_nome ? `<small class="text-muted"><i class="bi bi-person"></i> ${erro.motorista_nome}</small>` : ''}
                 </td>
-                <td>
+                <td style="cursor: pointer;" onclick="abrirModalErro(${erro.id})">
                     <strong class="d-block text-truncate" style="max-width: 250px;" title="${erro.titulo}">${erro.titulo}</strong>
                     <small class="text-muted d-inline-block text-truncate" style="max-width: 300px;" title="${erro.descricao}">${erro.descricao}</small>
                 </td>
@@ -249,6 +249,12 @@ document.addEventListener("DOMContentLoaded", function() {
 
             } else if (tipoEvento === 'erro_resolvido') {
                 const row = document.getElementById(`erro-${dados.id}`);
+                
+                // Mostrar toast notificando se foi auto-resolvido
+                if (dados.resolvido_por_nome && dados.resolvido_por_nome.includes('Auto')) {
+                    mostrarToastNotificacao('✅ Erro Auto-Resolvido', `O erro #${dados.id} foi resolvido automaticamente por uma retentativa.`, 'success');
+                }
+
                 if (row) {
                     // Descobre a severidade para decrementar
                     const badgeText = row.querySelector('td .badge').innerText;
@@ -313,4 +319,155 @@ document.addEventListener("DOMContentLoaded", function() {
             toastEl.remove();
         });
     }
+
+    // ==========================================
+    // MODAIS DE DETALHE E RESOLVIDOS
+    // ==========================================
+    
+    window.abrirModalErro = function(erroId) {
+        fetch(`/api/torre-erros/detalhe/${erroId}/`)
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'sucesso') {
+                    const e = data.erro;
+                    document.getElementById('modalErroSeveridade').className = `badge ${getBadgeClass(e.severidade)}`;
+                    document.getElementById('modalErroSeveridade').innerText = e.severidade;
+                    document.getElementById('modalErroCategoria').innerText = e.categoria;
+                    document.getElementById('modalErroManifesto').innerText = e.manifesto_numero || '-';
+                    document.getElementById('modalErroNF').innerText = e.nota_fiscal_numero || '-';
+                    document.getElementById('modalErroMotorista').innerText = e.motorista_nome || '-';
+                    document.getElementById('modalErroData').innerText = e.criado_em;
+                    document.getElementById('modalErroRegra').innerText = e.regra_aplicada;
+                    document.getElementById('modalErroDescricao').innerText = e.descricao;
+                    document.getElementById('modalErroRaw').innerText = e.erro_raw;
+                    
+                    const acoesDiv = document.getElementById('modalErroAcoes');
+                    const infoResolvido = document.getElementById('modalErroResolvidoInfo');
+                    const observacaoInput = document.getElementById('modalErroObservacaoInput');
+                    
+                    if(e.status === 'ABERTO') {
+                        acoesDiv.classList.remove('d-none');
+                        infoResolvido.classList.add('d-none');
+                        observacaoInput.value = '';
+                        
+                        const btnResolver = document.getElementById('btnModalResolverErro');
+                        btnResolver.onclick = function() {
+                            resolverErroModal(e.id);
+                        };
+                    } else {
+                        acoesDiv.classList.add('d-none');
+                        infoResolvido.classList.remove('d-none');
+                        document.getElementById('modalErroResolvidoPor').innerText = e.resolvido_por || 'Sistema (Auto)';
+                        document.getElementById('modalErroDataResolucao').innerText = e.data_resolucao;
+                        document.getElementById('modalErroObservacao').innerText = e.observacao_resolucao ? `Obs: ${e.observacao_resolucao}` : '';
+                    }
+
+                    const modal = new bootstrap.Modal(document.getElementById('modalErroDetalhe'));
+                    modal.show();
+                } else {
+                    alert('Erro ao carregar detalhes: ' + data.message);
+                }
+            })
+            .catch(err => console.error(err));
+    }
+    
+    function resolverErroModal(erroId) {
+        const obs = document.getElementById('modalErroObservacaoInput').value;
+        const btnResolver = document.getElementById('btnModalResolverErro');
+        btnResolver.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+        btnResolver.disabled = true;
+
+        fetch(`/api/torre-erros/resolver/${erroId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ observacao: obs })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'sucesso') {
+                bootstrap.Modal.getInstance(document.getElementById('modalErroDetalhe')).hide();
+                // WebSocket já vai esconder a linha
+            } else {
+                alert(`Erro: ${data.message}`);
+            }
+        })
+        .catch(err => console.error(err))
+        .finally(() => {
+            btnResolver.innerHTML = '<i class="bi bi-check-lg me-1"></i> Marcar como Resolvido';
+            btnResolver.disabled = false;
+        });
+    }
+
+    let resolvidosPage = 1;
+    window.abrirModalResolvidos = function() {
+        // Inicializa com data de hoje
+        const hoje = new Date().toISOString().split('T')[0];
+        document.getElementById('filtroResolvidosInicio').value = hoje;
+        document.getElementById('filtroResolvidosFim').value = hoje;
+        carregarErrosResolvidos(false);
+        
+        const modal = new bootstrap.Modal(document.getElementById('modalResolvidos'));
+        modal.show();
+    }
+    
+    window.carregarErrosResolvidos = function(loadMore = false) {
+        if(!loadMore) {
+            resolvidosPage = 1;
+            document.getElementById('resolvidos-tbody').innerHTML = '';
+        } else {
+            resolvidosPage++;
+        }
+        
+        document.getElementById('loading-resolvidos').classList.remove('d-none');
+        document.getElementById('btn-load-more-resolvidos').classList.add('d-none');
+        
+        const dataInicio = document.getElementById('filtroResolvidosInicio').value;
+        const dataFim = document.getElementById('filtroResolvidosFim').value;
+        
+        fetch(`/api/torre-erros/resolvidos/?page=${resolvidosPage}&data_inicio=${dataInicio}&data_fim=${dataFim}`)
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'sucesso') {
+                    const tbody = document.getElementById('resolvidos-tbody');
+                    data.erros.forEach(e => {
+                        const refs = [];
+                        if (e.manifesto_numero) refs.push(`MFT: ${e.manifesto_numero}`);
+                        if (e.nota_fiscal_numero) refs.push(`NF: ${e.nota_fiscal_numero}`);
+                        
+                        const tr = document.createElement('tr');
+                        tr.style.cursor = 'pointer';
+                        tr.onclick = () => abrirModalErro(e.id);
+                        
+                        let resolverHtml = `<strong>${e.resolvido_por_nome}</strong>`;
+                        if(e.status === 'AUTO_RESOLVIDO') {
+                            resolverHtml = `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary"><i class="bi bi-robot me-1"></i>Auto</span>`;
+                        }
+                        
+                        tr.innerHTML = `
+                            <td><span class="badge ${getBadgeClass(e.severidade)}">${e.severidade}</span></td>
+                            <td><small class="fw-bold text-secondary">${e.categoria_display}</small></td>
+                            <td><small>${e.data_resolucao}</small></td>
+                            <td>${resolverHtml}</td>
+                            <td>
+                                <div class="small fw-bold">${refs.join(' | ')}</div>
+                                <div class="text-truncate text-muted small" style="max-width: 250px;">${e.titulo}</div>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                    
+                    if(data.has_next) {
+                        document.getElementById('btn-load-more-resolvidos').classList.remove('d-none');
+                    }
+                }
+            })
+            .catch(err => console.error(err))
+            .finally(() => {
+                document.getElementById('loading-resolvidos').classList.add('d-none');
+            });
+    }
+
 });
