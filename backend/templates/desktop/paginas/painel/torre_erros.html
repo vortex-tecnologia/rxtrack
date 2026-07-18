@@ -1,6 +1,10 @@
 {% extends 'desktop/base.html' %}
 {% load static %}
 
+{% block title %}Torre de Erros | Quick Track{% endblock %}
+
+{% block usuario %}{{ usuario_nome }}{% if cargo %} ({{ cargo }}){% endif %}{% endblock %}
+
 {% block content %}
 <!-- Torre de Controle de Erros Dashboard -->
 <div class="d-flex justify-content-between align-items-center mb-4">

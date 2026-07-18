@@ -1439,6 +1439,7 @@ class TorreErrosView(TemplateView):
         context['categorias'] = LogErroOperacional.CATEGORIA_CHOICES
         context['titulo'] = "Torre de Controle de Erros"
         context['usuario_nome'] = self.request.user.get_full_name() or self.request.user.username
+        context['cargo'] = tipo_user
         
         return context
 
