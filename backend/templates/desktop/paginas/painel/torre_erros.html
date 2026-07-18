@@ -16,6 +16,9 @@
         <span class="badge bg-success" id="ws-status">
             <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i> Conectado
         </span>
+        <a href="#" id="btn-tour-torre" class="btn btn-sm btn-outline-primary ms-2" title="Ver tutorial desta página">
+            <i class="bi bi-question-circle me-1"></i> Tour Guiado
+        </a>
     </div>
 </div>
 
@@ -294,10 +297,50 @@
 .row-info:hover {
     opacity: 1; /* Volta ao normal no hover */
 }
+
+/* Tour Guiado - Customizações do Driver.js */
+.qt-tour-popover .driver-popover-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+}
+.qt-tour-popover .driver-popover-description {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: #444;
+    font-family: 'Inter', sans-serif;
+}
+.qt-tour-popover .driver-popover-progress-text {
+    font-size: 0.75rem;
+    color: #888;
+}
+.qt-tour-popover .driver-popover-next-btn {
+    background-color: #0d6efd;
+    color: white;
+    border: none;
+    font-weight: 600;
+    padding: 6px 16px;
+    border-radius: 6px;
+    text-shadow: none;
+}
+.qt-tour-popover .driver-popover-next-btn:hover {
+    background-color: #0b5ed7;
+}
+.qt-tour-popover .driver-popover-prev-btn {
+    color: #666;
+    border: 1px solid #ddd;
+    background: white;
+    font-weight: 500;
+    padding: 6px 16px;
+    border-radius: 6px;
+    text-shadow: none;
+}
 </style>
 {% endblock %}
 
 {% block extra_js %}
 <!-- Adiciona o script JS isolado -->
 <script src="{% static 'desktop/js/torre_erros/ws.js' %}"></script>
+<!-- Tour Guiado -->
+<script src="{% static 'desktop/js/torre_erros/tour.js' %}"></script>
 {% endblock %}

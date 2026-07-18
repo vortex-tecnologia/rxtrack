@@ -118,3 +118,25 @@ class LogErroOperacional(models.Model):
             models.Index(fields=['filial', 'status', '-criado_em']),
             models.Index(fields=['severidade', 'status']),
         ]
+
+
+class TutorialUsuario(models.Model):
+    """
+    Rastreia quais tutoriais guiados (onboarding tours) cada usuário já concluiu.
+    Se o registro existe com concluido=True, o tour não dispara automaticamente.
+    """
+    usuario = models.ForeignKey('auth.User', on_delete=models.CASCADE, related_name='tutoriais_vistos')
+    pagina = models.CharField(max_length=100, verbose_name="Identificador da Página",
+        help_text="Ex: 'torre_erros', 'dashboard', 'manifestos'")
+    concluido = models.BooleanField(default=False)
+    data_conclusao = models.DateTimeField(null=True, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Tutorial do Usuário"
+        verbose_name_plural = "Tutoriais dos Usuários"
+        unique_together = ('usuario', 'pagina')
+
+    def __str__(self):
+        status = "✅" if self.concluido else "⏳"
+        return f"{status} {self.usuario.username} - {self.pagina}"

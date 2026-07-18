@@ -1665,3 +1665,42 @@ def resolver_erro_torre(request, erro_id):
         return JsonResponse({'status': 'erro', 'message': 'Erro não encontrado.'}, status=404)
     except Exception as e:
         return JsonResponse({'status': 'erro', 'message': str(e)}, status=500)
+
+
+# ==========================================
+# TUTORIAIS GUIADOS (ONBOARDING TOURS)
+# ==========================================
+from operacional.models import TutorialUsuario
+
+@login_required
+def api_tutorial_status(request, pagina):
+    """GET: Verifica se o usuário já concluiu o tutorial de uma página"""
+    try:
+        tutorial = TutorialUsuario.objects.get(usuario=request.user, pagina=pagina)
+        return JsonResponse({'concluido': tutorial.concluido})
+    except TutorialUsuario.DoesNotExist:
+        return JsonResponse({'concluido': False})
+
+@login_required
+@require_POST
+def api_tutorial_concluir(request, pagina):
+    """POST: Marca o tutorial de uma página como concluído"""
+    tutorial, created = TutorialUsuario.objects.get_or_create(
+        usuario=request.user,
+        pagina=pagina,
+        defaults={'concluido': True, 'data_conclusao': timezone.now()}
+    )
+    if not created:
+        tutorial.concluido = True
+        tutorial.data_conclusao = timezone.now()
+        tutorial.save()
+    return JsonResponse({'status': 'sucesso'})
+
+@login_required
+@require_POST
+def api_tutorial_resetar(request, pagina):
+    """POST: Reseta o tutorial para que ele apareça novamente"""
+    TutorialUsuario.objects.filter(usuario=request.user, pagina=pagina).update(
+        concluido=False, data_conclusao=None
+    )
+    return JsonResponse({'status': 'sucesso'})

@@ -59,4 +59,9 @@ urlpatterns = [
     path('api/torre-erros/listar/', views.api_erros_torre, name='api_erros_torre'),
     path('api/torre-erros/detalhe/<int:erro_id>/', views.api_erro_detalhe, name='api_erro_detalhe'),
     path('api/torre-erros/resolvidos/', views.api_erros_resolvidos, name='api_erros_resolvidos'),
+
+    # Tutoriais Guiados (Onboarding Tours)
+    path('api/tutorial/status/<str:pagina>/', views.api_tutorial_status, name='api_tutorial_status'),
+    path('api/tutorial/concluir/<str:pagina>/', views.api_tutorial_concluir, name='api_tutorial_concluir'),
+    path('api/tutorial/resetar/<str:pagina>/', views.api_tutorial_resetar, name='api_tutorial_resetar'),
 ]
