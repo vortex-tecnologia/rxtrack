@@ -80,15 +80,13 @@ document.addEventListener("DOMContentLoaded", function() {
         
         let actions = '';
         if (erro.status === 'ABERTO') {
-            actions = `<button class="btn btn-sm btn-outline-success btn-resolver" data-id="${erro.id}">
-                        <i class="bi bi-check2"></i> Resolver
-                      </button>`;
+            actions = `<span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> Aguardando Ação</span>`;
         } else {
             actions = `<span class="badge bg-success">Resolvido</span>`;
         }
 
         return `
-            <tr id="erro-${erro.id}" class="${getRowClass(erro.severidade)}">
+            <tr id="erro-${erro.id}" class="${getRowClass(erro.severidade)}" style="cursor: pointer;" onclick="abrirModalErro(${erro.id})">
                 <td><span class="badge ${getBadgeClass(erro.severidade)}">${erro.severidade}</span></td>
                 <td><small class="fw-bold text-secondary">${erro.categoria_display}</small></td>
                 <td><small>${formatDate(erro.criado_em)}</small></td>
@@ -96,7 +94,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     <div class="small fw-bold">${refs.join(' | ')}</div>
                     ${erro.motorista_nome ? `<small class="text-muted"><i class="bi bi-person"></i> ${erro.motorista_nome}</small>` : ''}
                 </td>
-                <td style="cursor: pointer;" onclick="abrirModalErro(${erro.id})">
+                <td>
                     <strong class="d-block text-truncate" style="max-width: 250px;" title="${erro.titulo}">${erro.titulo}</strong>
                     <small class="text-muted d-inline-block text-truncate" style="max-width: 300px;" title="${erro.descricao}">${erro.descricao}</small>
                 </td>
@@ -142,8 +140,6 @@ document.addEventListener("DOMContentLoaded", function() {
                             paginationContainer.classList.add('d-none');
                         }
                     }
-                    
-                    attachResolverEvents();
                 } else {
                     console.error('Erro ao carregar erros:', data.message);
                 }
@@ -239,7 +235,6 @@ document.addEventListener("DOMContentLoaded", function() {
                 ) {
                     emptyState.classList.add('d-none');
                     tableBody.insertAdjacentHTML('afterbegin', createRowHTML(dados));
-                    attachResolverEvents();
                 }
 
                 // Se for crítico, pode exibir toast/alerta
@@ -325,6 +320,13 @@ document.addEventListener("DOMContentLoaded", function() {
     // ==========================================
     
     window.abrirModalErro = function(erroId) {
+        // Se o modal de resolvidos estiver aberto, escondemos ele para evitar sobreposição
+        const modalResolvidosEl = document.getElementById('modalResolvidos');
+        if (modalResolvidosEl && modalResolvidosEl.classList.contains('show')) {
+            const modalInstance = bootstrap.Modal.getInstance(modalResolvidosEl);
+            if (modalInstance) modalInstance.hide();
+        }
+
         fetch(`/api/torre-erros/detalhe/${erroId}/`)
             .then(res => res.json())
             .then(data => {
