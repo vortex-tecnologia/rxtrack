@@ -833,6 +833,19 @@ class ESLCloudAdapter(BaseTMSAdapter):
         except requests.exceptions.HTTPError as exc:
             status = exc.response.status_code if hasattr(exc, 'response') and exc.response is not None else None
             detalhe_erro = exc.response.text if hasattr(exc, 'response') and exc.response is not None else str(exc)
+            
+            # --- AUTO-BYPASS PARA TRATATIVAS DE CT-E MÚLTIPLAS NOTAS ---
+            # Se der 422 dizendo que o CT-e não permite alteração e a ocorrência que estamos mandando é uma ocorrência (não entrega)
+            if status == 422 and "não permite alteração de status" in detalhe_erro:
+                if codigo_ocorrencia not in [1, 2]: 
+                    logger.info(f"Bypass de erro 422 para NF {nf.numero_nota}: CT-e {nf.frete.numero_cte if nf.frete else ''} já está em tratativa.")
+                    baixa.log_erro_tms = "Sucesso (Bypass): CT-e já se encontra em tratativa no TMS."
+                    baixa.processado_tms = True
+                    baixa.integrado_tms = True
+                    baixa.data_integracao = timezone.now()
+                    baixa.save()
+                    return f"Baixa {baixa_id} integrada (Bypass Tratativa)."
+
             msg_erro = f"Erro {status}: {detalhe_erro}"
 
             baixa.log_erro_tms = msg_erro[:500]
