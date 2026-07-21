@@ -836,15 +836,35 @@ class ESLCloudAdapter(BaseTMSAdapter):
             
             # --- AUTO-BYPASS PARA TRATATIVAS DE CT-E MÚLTIPLAS NOTAS ---
             # Se der 422 dizendo que o CT-e não permite alteração e a ocorrência que estamos mandando é uma ocorrência (não entrega)
-            if status == 422 and "não permite alteração de status" in detalhe_erro:
-                if codigo_ocorrencia not in [1, 2]: 
-                    logger.info(f"Bypass de erro 422 para NF {nf.numero_nota}: CT-e {nf.frete.numero_cte if nf.frete else ''} já está em tratativa.")
-                    baixa.log_erro_tms = "Sucesso (Bypass): CT-e já se encontra em tratativa no TMS."
-                    baixa.processado_tms = True
-                    baixa.integrado_tms = True
-                    baixa.data_integracao = timezone.now()
-                    baixa.save()
-                    return f"Baixa {baixa_id} integrada (Bypass Tratativa)."
+            detalhe_lower = detalhe_erro.lower()
+            eh_tratativa_cte = (
+                status == 422 and (
+                    "não permite alteração de status" in detalhe_erro or
+                    "nao permite alteracao de status" in detalhe_lower or
+                    "n\u00e3o permite altera\u00e7\u00e3o" in detalhe_lower
+                )
+            )
+            if eh_tratativa_cte and codigo_ocorrencia not in [1, 2]:
+                logger.info(f"Bypass de erro 422 para NF {nf.numero_nota}: CT-e {nf.frete.numero_cte if nf.frete else 'N/A'} já está em tratativa na ESL.")
+                baixa.log_erro_tms = "Sucesso (Bypass): CT-e já se encontra em tratativa no TMS. Ocorrência aceita localmente."
+                baixa.processado_tms = True
+                baixa.integrado_tms = True
+                baixa.data_integracao = timezone.now()
+                baixa.save()
+                
+                # Atualiza status da NF para OCORRENCIA, já que o CT-e inteiro foi recusado
+                if nf.status != 'OCORRENCIA':
+                    nf.status = 'OCORRENCIA'
+                    nf.save(update_fields=['status'])
+                
+                # Limpa erros anteriores desta nota na Torre de Erros
+                try:
+                    from operacional.services import resolver_erros_automaticamente
+                    resolver_erros_automaticamente(manifesto.numero_manifesto, nf.numero_nota, manifesto.filial)
+                except Exception as e:
+                    logger.error(f"Erro auto-resolucao bypass: {e}")
+                
+                return f"Baixa {baixa_id} integrada (Bypass Tratativa)."
 
             msg_erro = f"Erro {status}: {detalhe_erro}"
 
