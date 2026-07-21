@@ -723,6 +723,109 @@ class ESLCloudAdapter(BaseTMSAdapter):
             data_br = baixa.data_baixa.astimezone(fuso_brasilia)
             data_ocorrencia_str = data_br.strftime('%Y-%m-%dT%H:%M:%S.000-03:00')
 
+            # =====================================================
+            # OCORRÊNCIA 125 (RECUSA TOTAL) - ENVIO INTELIGENTE POR FRETE
+            # Quando é recusa (125), envia direto para o endpoint de FRETE
+            # ao invés de enviar nota por nota. Isso evita o bloqueio 422 da ESL.
+            # =====================================================
+            CODIGOS_RECUSA_TOTAL = [125]
+            
+            if codigo_ocorrencia in CODIGOS_RECUSA_TOTAL and nf.frete and nf.frete.freight_id_tms:
+                frete = nf.frete
+                
+                # Verifica se outra nota do mesmo frete JÁ foi integrada com sucesso (recusa já enviada pro frete)
+                ja_integrado_no_frete = BaixaNF.objects.filter(
+                    nota_fiscal__frete=frete,
+                    integrado_tms=True,
+                    ocorrencia=baixa.ocorrencia  # mesma ocorrência (125)
+                ).exclude(id=baixa_id).exists()
+                
+                if ja_integrado_no_frete:
+                    # BYPASS: O frete já recebeu a recusa pela primeira nota. Não precisa enviar de novo.
+                    logger.info(f"Bypass inteligente: Frete {frete.freight_id_tms} já recebeu recusa. NF {nf.numero_nota} marcada localmente.")
+                    baixa.log_erro_tms = f"Sucesso (Bypass): Recusa já registrada no Frete {frete.freight_id_tms}. Ocorrência aceita localmente."
+                    baixa.processado_tms = True
+                    baixa.integrado_tms = True
+                    baixa.data_integracao = timezone.now()
+                    baixa.payload_enviado = {"bypass": True, "motivo": "Frete já possui recusa integrada"}
+                    baixa.save()
+                    
+                    if nf.status != 'OCORRENCIA':
+                        nf.status = 'OCORRENCIA'
+                        nf.save(update_fields=['status'])
+                    
+                    try:
+                        from operacional.services import resolver_erros_automaticamente
+                        resolver_erros_automaticamente(manifesto.numero_manifesto, nf.numero_nota, manifesto.filial)
+                    except Exception as e:
+                        logger.error(f"Erro auto-resolucao bypass: {e}")
+                    
+                    return f"Baixa {baixa_id} integrada (Bypass - Frete já recusado)."
+                
+                # PRIMEIRA NOTA DO FRETE COM RECUSA: Envia para o endpoint de FRETE
+                logger.info(f"Ocorrência 125 detectada. Enviando recusa para FRETE {frete.freight_id_tms} ao invés de nota individual.")
+                
+                comentario_final = f"Recusa total via App - Motorista: {motorista}. NF: {nf.numero_nota}. Obs: {baixa.observacao or ''}"
+                
+                url_frete_endpoint = f"https://{self.config.dominio_esl}/api/v1/freights/{frete.freight_id_tms}/invoice_occurrences"
+                payload_frete = {
+                    "invoice_occurrence": {
+                        "receiver": baixa.recebedor or "Nao identificado",
+                        "document_number": baixa.documento_recebedor or "",
+                        "comments": comentario_final,
+                        "occurrence_at": data_ocorrencia_str,
+                        "occurrence": {
+                            "code": codigo_ocorrencia
+                        }
+                    }
+                }
+                
+                url_foto = baixa.comprovante_foto_url or ""
+                if url_foto:
+                    payload_frete["invoice_occurrence"]["delivery_receipt_url"] = url_foto
+                
+                baixa.payload_enviado = payload_frete
+                
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {TOKEN}"
+                }
+                
+                print(f"Enviando recusa (125) para FRETE {frete.freight_id_tms} - CT-e: {frete.numero_cte}")
+                
+                response = requests.post(
+                    url_frete_endpoint,
+                    json=payload_frete,
+                    headers=headers,
+                    timeout=30
+                )
+                
+                response.raise_for_status()
+                
+                # Sucesso! Marca a baixa como integrada
+                baixa.processado_tms = True
+                baixa.integrado_tms = True
+                baixa.data_integracao = timezone.now()
+                baixa.log_erro_tms = f"Sucesso: Recusa integrada via Frete {frete.freight_id_tms} (CT-e {frete.numero_cte})"
+                baixa.save()
+                
+                # Marca TODAS as notas deste frete no mesmo manifesto como OCORRENCIA
+                notas_do_frete = NotaFiscal.objects.filter(frete=frete, manifesto=manifesto)
+                notas_atualizadas = notas_do_frete.exclude(status='OCORRENCIA').update(status='OCORRENCIA')
+                logger.info(f"Marcadas {notas_atualizadas} notas do Frete {frete.freight_id_tms} como OCORRENCIA.")
+                
+                try:
+                    from operacional.services import resolver_erros_automaticamente
+                    resolver_erros_automaticamente(manifesto.numero_manifesto, nf.numero_nota, manifesto.filial)
+                except Exception as e:
+                    logger.error(f"Erro auto-resolucao: {e}")
+                
+                return f"Baixa {baixa_id} integrada via Frete {frete.freight_id_tms}."
+            
+            # =====================================================
+            # FLUXO NORMAL (entregas, ocorrências parciais, etc.)
+            # =====================================================
+
             if codigo_ocorrencia in [1, 2]:
                 invoice_data = {
                     "key": nf.chave_acesso,
