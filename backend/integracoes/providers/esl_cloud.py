@@ -763,11 +763,12 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     return f"Baixa {baixa_id} integrada (Bypass - Frete já recusado)."
                 
                 # PRIMEIRA NOTA DO FRETE COM RECUSA: Envia para o endpoint de FRETE
-                logger.info(f"Ocorrência 125 detectada. Enviando recusa para FRETE {frete.freight_id_tms} ao invés de nota individual.")
+                id_interno_frete = nf.freight_id_tms or frete.freight_id_tms
+                logger.info(f"Ocorrência 125 detectada. Enviando recusa para FRETE ID {id_interno_frete} ao invés de nota individual.")
                 
                 comentario_final = f"Recusa total via App - Motorista: {motorista}. NF: {nf.numero_nota}. Obs: {baixa.observacao or ''}"
                 
-                url_frete_endpoint = f"https://{self.config.dominio_esl}/api/v1/freights/{frete.freight_id_tms}/invoice_occurrences"
+                url_frete_endpoint = f"https://{self.config.dominio_esl}/api/v1/freights/{id_interno_frete}/invoice_occurrences"
                 payload_frete = {
                     "invoice_occurrence": {
                         "receiver": baixa.recebedor or "Nao identificado",
