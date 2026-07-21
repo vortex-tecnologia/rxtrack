@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('usuarios', '0022_filial_horario_rebusca_esl'),
+        ('usuarios', '0021_motorista_categoria'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
