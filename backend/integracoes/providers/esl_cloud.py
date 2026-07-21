@@ -780,9 +780,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     }
                 }
                 
-                url_foto = baixa.comprovante_foto_url or ""
-                if url_foto:
-                    payload_frete["invoice_occurrence"]["delivery_receipt_url"] = url_foto
+                # ESL Cloud não aceita 'delivery_receipt_url' no endpoint de Frete.
+                # Removemos a lógica de enviar foto nesse endpoint.
                 
                 baixa.payload_enviado = payload_frete
                 
