@@ -4,7 +4,7 @@ from django.http import JsonResponse
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login
 from usuarios.models import Motorista , Filial
-from manifesto.models import Manifesto, Ocorrencia , NotaFiscal , BaixaNF , ManifestoBuscaLog, HistoricoOcorrencia
+from manifesto.models import Manifesto, Ocorrencia , NotaFiscal , BaixaNF , ManifestoBuscaLog, HistoricoOcorrencia, Frete
 from suporte.models import TicketSuporte
 from tutoriais.models import VideoTreinamento
 import json
@@ -1665,6 +1665,80 @@ def resolver_erro_torre(request, erro_id):
         return JsonResponse({'status': 'erro', 'message': 'Erro não encontrado.'}, status=404)
     except Exception as e:
         return JsonResponse({'status': 'erro', 'message': str(e)}, status=500)
+
+
+@login_required(login_url='/login/')
+@apenas_operacional
+def api_fretes_listar(request):
+    usuario_filial = None
+    if request.user.is_authenticated:
+        try:
+            perfil = Motorista.objects.get(user=request.user)
+            usuario_filial = perfil.filial
+        except Motorista.DoesNotExist:
+            pass
+
+    queryset = Frete.objects.all().order_by('-criado_em')
+
+    filial_param = request.GET.get('filial')
+    q = request.GET.get('q')
+    modal_param = request.GET.get('modal')
+
+    if filial_param and filial_param != 'todas':
+        queryset = queryset.filter(notas__manifesto__filial_id=filial_param).distinct()
+    elif usuario_filial:
+        queryset = queryset.filter(notas__manifesto__filial=usuario_filial).distinct()
+
+    if q:
+        queryset = queryset.filter(
+            Q(freight_id_tms__icontains=q) | 
+            Q(numero_cte__icontains=q) |
+            Q(chave_cte__icontains=q)
+        )
+    
+    if modal_param:
+        queryset = queryset.filter(modal=modal_param)
+
+    fretes = queryset[:100]
+    
+    dados = []
+    for f in fretes:
+        qtd_notas = f.notas.count()
+        dados.append({
+            'id': f.id,
+            'freight_id_tms': f.freight_id_tms,
+            'numero_cte': f.numero_cte,
+            'chave_cte': f.chave_cte,
+            'modal': f.get_modal_display() if hasattr(f, 'get_modal_display') else f.modal,
+            'remetente': f.remetente,
+            'pagador_nome': f.pagador_nome,
+            'qtd_notas': qtd_notas,
+            'criado_em': f.criado_em.strftime('%d/%m/%Y %H:%M') if f.criado_em else ''
+        })
+
+    return JsonResponse({'fretes': dados})
+
+
+@login_required(login_url='/login/')
+@apenas_operacional
+def api_fretes_detalhes_notas(request, frete_id):
+    from django.shortcuts import get_object_or_404
+    frete = get_object_or_404(Frete, id=frete_id)
+    notas = frete.notas.select_related('manifesto', 'manifesto__motorista').all()
+    
+    dados_notas = []
+    for n in notas:
+        dados_notas.append({
+            'id': n.id,
+            'numero_nota': n.numero_nota,
+            'chave_acesso': n.chave_acesso,
+            'destinatario': n.destinatario,
+            'status': n.get_status_display() if hasattr(n, 'get_status_display') else n.status,
+            'manifesto': n.manifesto.numero_manifesto if n.manifesto else '-',
+            'motorista': n.manifesto.motorista.nome_completo if n.manifesto and n.manifesto.motorista else '-'
+        })
+        
+    return JsonResponse({'notas': dados_notas})
 
 
 # ==========================================

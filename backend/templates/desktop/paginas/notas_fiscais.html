@@ -66,7 +66,24 @@
             </div>
         </div>
     </div>
-<div class="card border-0 shadow-sm mb-4">
+    <!-- Tabs Navigation -->
+    <ul class="nav nav-tabs mb-4" id="nfeTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active fw-bold" id="tab-nfe" data-bs-toggle="tab" data-bs-target="#panel-nfe" type="button" role="tab" aria-controls="panel-nfe" aria-selected="true">
+                <i class="bi bi-receipt me-2"></i>Notas Fiscais
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold" id="tab-fretes" data-bs-toggle="tab" data-bs-target="#panel-fretes" type="button" role="tab" aria-controls="panel-fretes" aria-selected="false" onclick="carregarFretes()">
+                <i class="bi bi-truck me-2"></i>Fretes / CT-e
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="nfeTabsContent">
+        <!-- PAINEL NF-E -->
+        <div class="tab-pane fade show active" id="panel-nfe" role="tabpanel" aria-labelledby="tab-nfe">
+            <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <form method="GET" action="." class="row g-3">
             <div class="col-md-2">
@@ -292,6 +309,59 @@
     </div>
 </div>
 
+</div>
+
+        </div> <!-- /PAINEL NF-E -->
+
+        <!-- PAINEL FRETES -->
+        <div class="tab-pane fade" id="panel-fretes" role="tabpanel" aria-labelledby="tab-fretes">
+            
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body">
+                    <form id="formFiltroFretes" onsubmit="event.preventDefault(); carregarFretes();" class="row g-3">
+                        <div class="col-md-3">
+                            <label class="small fw-bold text-muted">Buscar CT-e / ID Frete</label>
+                            <input type="text" id="filtroFreteQ" class="form-control form-control-sm" placeholder="Ex: 123456">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="small fw-bold text-muted">Modal</label>
+                            <select id="filtroFreteModal" class="form-select form-select-sm">
+                                <option value="">Todos</option>
+                                <option value="road">Rodoviário</option>
+                                <option value="air">Aéreo</option>
+                            </select>
+                        </div>
+                        <div class="col-md-1 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-search"></i> Buscar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="tabelaFretes">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID Frete TMS</th>
+                                <th>Nº CT-e / Chave</th>
+                                <th>Modal</th>
+                                <th>Remetente / Pagador</th>
+                                <th>Notas</th>
+                                <th>Criado Em</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="6" class="text-center py-4 text-muted">Carregando fretes...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div> <!-- /PAINEL FRETES -->
+    </div> <!-- /tab-content -->
 </div>
 
 <!-- Modal Detalhes Nota -->
@@ -1028,6 +1098,152 @@ function executarDeletarOcorrencia(notaId) {
     }
 </script>
 
+
+<!-- Modal Detalhes do Frete -->
+<div class="modal fade" id="modalFreteNotas" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-dark text-white border-bottom-0">
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-box-seam me-2"></i>Notas Fiscais do Frete <span id="freteModalTitulo" class="text-warning"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="tabelaFreteNotas" style="font-size: 0.85rem;">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>Número NF</th>
+                                <th>Chave de Acesso</th>
+                                <th>Destinatário</th>
+                                <th>Manifesto / Motorista</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Preenchido via JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="loadingFreteNotas" class="text-center py-5 d-none">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted fw-bold mb-0">Buscando notas...</p>
+                </div>
+            </div>
+            <div class="modal-footer border-top-0">
+                <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- LÓGICA DA ABA DE FRETES --- //
+    
+    let fretesCarregados = false;
+
+    function carregarFretes() {
+        // Previne multi-loads desnecessários no primeiro click da tab
+        const q = document.getElementById('filtroFreteQ').value;
+        const modalParam = document.getElementById('filtroFreteModal').value;
+        const tbody = document.querySelector('#tabelaFretes tbody');
+        
+        let url = '/api/fretes/?';
+        if (q) url += `q=${encodeURIComponent(q)}&`;
+        if (modalParam) url += `modal=${encodeURIComponent(modalParam)}&`;
+
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4"><div class="spinner-border text-primary spinner-border-sm me-2"></div>Buscando dados...</td></tr>';
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                fretesCarregados = true;
+                tbody.innerHTML = '';
+                
+                if (!data.fretes || data.fretes.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">Nenhum Frete / CT-e encontrado.</td></tr>';
+                    return;
+                }
+
+                data.fretes.forEach(frete => {
+                    let badgeModal = frete.modal === 'Air' || frete.modal === 'Aéreo' || frete.modal === 'air' 
+                        ? '<span class="badge bg-info text-dark"><i class="bi bi-airplane-fill me-1"></i>Aéreo</span>' 
+                        : '<span class="badge bg-secondary"><i class="bi bi-truck me-1"></i>Rodoviário</span>';
+
+                    let row = `
+                        <tr style="cursor: pointer;" onclick="abrirModalFreteNotas(${frete.id}, '${frete.freight_id_tms}')">
+                            <td class="fw-bold text-primary">#${frete.freight_id_tms || '-'}</td>
+                            <td>
+                                <span class="fw-bold">${frete.numero_cte || 'Sem Nº CT-e'}</span><br>
+                                <small class="text-muted" style="font-size: 0.7rem;">${frete.chave_cte || '-'}</small>
+                            </td>
+                            <td>${badgeModal}</td>
+                            <td>
+                                <span class="d-block small text-dark text-truncate" style="max-width:200px;" title="${frete.remetente || ''}">${frete.remetente || '-'}</span>
+                                <small class="text-muted d-block text-truncate" style="max-width:200px;" title="Pagador: ${frete.pagador_nome || ''}">${frete.pagador_nome || ''}</small>
+                            </td>
+                            <td><span class="badge bg-primary rounded-pill">${frete.qtd_notas}</span> notas</td>
+                            <td class="text-muted small">${frete.criado_em}</td>
+                        </tr>
+                    `;
+                    tbody.insertAdjacentHTML('beforeend', row);
+                });
+            })
+            .catch(err => {
+                console.error('Erro ao carregar fretes:', err);
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Erro ao carregar fretes.</td></tr>';
+            });
+    }
+
+    function abrirModalFreteNotas(freteId, freightIdTms) {
+        document.getElementById('freteModalTitulo').innerText = `#${freightIdTms}`;
+        const tbody = document.querySelector('#tabelaFreteNotas tbody');
+        const loading = document.getElementById('loadingFreteNotas');
+        
+        tbody.innerHTML = '';
+        loading.classList.remove('d-none');
+        
+        const modal = new bootstrap.Modal(document.getElementById('modalFreteNotas'));
+        modal.show();
+
+        fetch(`/api/fretes/${freteId}/notas/`)
+            .then(res => res.json())
+            .then(data => {
+                loading.classList.add('d-none');
+                if (!data.notas || data.notas.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Nenhuma nota vinculada a este frete.</td></tr>';
+                    return;
+                }
+
+                data.notas.forEach(nota => {
+                    let badgeStatus = '';
+                    if(nota.status === 'BAIXADA' || nota.status === 'Entregue' || nota.status === 'Coletado') badgeStatus = '<span class="badge bg-success">Baixada</span>';
+                    else if(nota.status === 'PENDENTE' || nota.status === 'Pendente') badgeStatus = '<span class="badge bg-warning text-dark">Pendente</span>';
+                    else badgeStatus = `<span class="badge bg-danger">${nota.status}</span>`;
+
+                    let row = `
+                        <tr>
+                            <td class="fw-bold text-dark">${nota.numero_nota || '-'}</td>
+                            <td><code class="small">${nota.chave_acesso || '-'}</code></td>
+                            <td class="small text-truncate" style="max-width:180px;" title="${nota.destinatario || ''}">${nota.destinatario || '-'}</td>
+                            <td>
+                                <span class="d-block small fw-bold">#${nota.manifesto}</span>
+                                <small class="text-muted">${nota.motorista}</small>
+                            </td>
+                            <td>${badgeStatus}</td>
+                        </tr>
+                    `;
+                    tbody.insertAdjacentHTML('beforeend', row);
+                });
+            })
+            .catch(err => {
+                console.error(err);
+                loading.classList.add('d-none');
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">Erro ao carregar notas.</td></tr>';
+            });
+    }
+</script>
 
 <script src="{% static 'desktop/js/nota_fiscal.js' %}"></script>
 
