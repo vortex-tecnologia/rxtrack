@@ -1171,8 +1171,24 @@ function executarDeletarOcorrencia(notaId) {
                         ? '<span class="badge bg-info text-dark"><i class="bi bi-airplane-fill me-1"></i>Aéreo</span>' 
                         : '<span class="badge bg-secondary"><i class="bi bi-truck me-1"></i>Rodoviário</span>';
 
+                    let notasHtml = `<div class="d-flex flex-column gap-1">
+                        <span class="badge bg-primary rounded-pill w-100">${frete.qtd_notas} total</span>`;
+                    
+                    if (frete.notas_entregues > 0) {
+                        notasHtml += `<span class="badge bg-success rounded-pill w-100"><i class="bi bi-check-circle"></i> ${frete.notas_entregues} entregues</span>`;
+                    }
+                    if (frete.notas_ocorrencias > 0) {
+                        notasHtml += `<span class="badge bg-danger rounded-pill w-100"><i class="bi bi-exclamation-circle"></i> ${frete.notas_ocorrencias} ocorrências</span>`;
+                    }
+                    if (frete.notas_pendentes > 0) {
+                        notasHtml += `<span class="badge bg-warning text-dark rounded-pill w-100"><i class="bi bi-clock"></i> ${frete.notas_pendentes} pendentes</span>`;
+                    }
+                    notasHtml += `</div>`;
+
+                    let rowClass = frete.notas_ocorrencias > 0 ? 'table-danger' : (frete.notas_pendentes === 0 && frete.qtd_notas > 0 ? 'table-success' : '');
+
                     let row = `
-                        <tr style="cursor: pointer;" onclick="abrirModalFreteNotas(${frete.id}, '${frete.freight_id_tms}')">
+                        <tr class="${rowClass}" style="cursor: pointer;" onclick="abrirModalFreteNotas(${frete.id}, '${frete.freight_id_tms}')">
                             <td class="fw-bold text-primary">#${frete.freight_id_tms || '-'}</td>
                             <td>
                                 <span class="fw-bold">${frete.numero_cte || 'Sem Nº CT-e'}</span><br>
@@ -1183,7 +1199,7 @@ function executarDeletarOcorrencia(notaId) {
                                 <span class="d-block small text-dark text-truncate" style="max-width:200px;" title="${frete.remetente || ''}">${frete.remetente || '-'}</span>
                                 <small class="text-muted d-block text-truncate" style="max-width:200px;" title="Pagador: ${frete.pagador_nome || ''}">${frete.pagador_nome || ''}</small>
                             </td>
-                            <td><span class="badge bg-primary rounded-pill">${frete.qtd_notas}</span> notas</td>
+                            <td style="min-width: 120px;">${notasHtml}</td>
                             <td class="text-muted small">${frete.criado_em}</td>
                         </tr>
                     `;

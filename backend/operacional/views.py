@@ -1699,11 +1699,20 @@ def api_fretes_listar(request):
     if modal_param:
         queryset = queryset.filter(modal=modal_param)
 
-    fretes = queryset[:100]
+    fretes = queryset.prefetch_related('notas')[:100]
     
     dados = []
+    from django.utils import timezone
     for f in fretes:
-        qtd_notas = f.notas.count()
+        todas_notas = f.notas.all()
+        qtd_notas = len(todas_notas)
+        
+        entregues = sum(1 for n in todas_notas if n.status in ['BAIXADA', 'Entregue', 'Coletado'])
+        ocorrencias = sum(1 for n in todas_notas if n.status == 'OCORRENCIA')
+        pendentes = sum(1 for n in todas_notas if n.status in ['PENDENTE', 'Pendente'])
+        
+        data_local = timezone.localtime(f.criado_em) if f.criado_em else None
+
         dados.append({
             'id': f.id,
             'freight_id_tms': f.freight_id_tms,
@@ -1713,7 +1722,10 @@ def api_fretes_listar(request):
             'remetente': f.remetente,
             'pagador_nome': f.pagador_nome,
             'qtd_notas': qtd_notas,
-            'criado_em': f.criado_em.strftime('%d/%m/%Y %H:%M') if f.criado_em else ''
+            'notas_entregues': entregues,
+            'notas_ocorrencias': ocorrencias,
+            'notas_pendentes': pendentes,
+            'criado_em': data_local.strftime('%d/%m/%Y %H:%M') if data_local else ''
         })
 
     return JsonResponse({'fretes': dados})
