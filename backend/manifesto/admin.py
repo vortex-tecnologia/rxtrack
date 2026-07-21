@@ -6,7 +6,7 @@ import json
 from .models import (
     Manifesto, NotaFiscal, Ocorrencia, BaixaNF, 
     HistoricoOcorrencia, ManifestoBuscaLog, WebhookEventoManifestoESL, WebhookTokenControl,
-    LogBaixaNfe
+    LogBaixaNfe, Frete
 )
 from manifesto.tasks import enviar_baixa_esl_task
 
@@ -115,6 +115,12 @@ class ManifestoAdmin(ModelAdmin):
     list_display = ("numero_manifesto", "motorista", "status", "data_criacao")
     list_filter = ("status", "finalizado")
     search_fields = ("numero_manifesto", "motorista__nome_completo")
+
+@admin.register(Frete)
+class FreteAdmin(ModelAdmin):
+    list_display = ("freight_id_tms", "numero_cte", "modal", "remetente", "criado_em")
+    search_fields = ("freight_id_tms", "numero_cte", "chave_cte", "remetente")
+    list_filter = ("modal", "criado_em")
 
 @admin.register(NotaFiscal)
 class NotaFiscalAdmin(ModelAdmin):
