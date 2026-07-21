@@ -153,6 +153,61 @@ class ESLCloudAdapter(BaseTMSAdapter):
         except: pass
         return None
 
+    def buscar_dados_frete_report_7693(self, chave, numero, token):
+        """Busca os dados de frete (CT-e, valores, pagador) no relatório 7693"""
+        from datetime import datetime, timedelta
+        data_fim_dt = datetime.now()
+        data_inicio_dt = data_fim_dt - timedelta(days=365)
+        
+        data_inicio_service = data_inicio_dt.strftime("%Y-%m-%d")
+        data_fim = data_fim_dt.strftime("%Y-%m-%d")
+        
+        url = f"https://{self.config.dominio_esl}/api/analytics/reports/7693/data"
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        
+        def fazer_busca(payload):
+            try:
+                r = requests.get(url, headers=headers, json=payload, timeout=30)
+                if r.status_code == 200:
+                    data = r.json()
+                    if data and len(data) > 0:
+                        if chave:
+                            for registro in data:
+                                if registro.get("fit_fis_ioe_key") == chave:
+                                    return registro
+                        return data[0]
+            except Exception as e:
+                logger.error(f"Erro no report 7693: {e}")
+            return None
+
+        # Tentativa 1: Por chave_nfe (se existir)
+        if chave:
+            payload_chave = {
+                "search": {
+                    "freights": {"service_at": f"{data_inicio_service} - {data_fim}"},
+                    "scopes": {"by_invoice_key": chave}
+                },
+                "page": 1, "per": 50
+            }
+            resultado = fazer_busca(payload_chave)
+            if resultado:
+                return resultado
+                
+        # Tentativa 2: Por numero_nfe (fallback ou para minutas sem chave)
+        if numero:
+            payload_numero = {
+                "search": {
+                    "freights": {"service_at": f"{data_inicio_service} - {data_fim}"},
+                    "scopes": {"from_invoice_number": str(numero)}
+                },
+                "page": 1, "per": 50
+            }
+            resultado = fazer_busca(payload_numero)
+            if resultado:
+                return resultado
+                
+        return None
+
     def buscar_coletas_esl(self, numero_manifesto, token, dominio, report_coletas):
         """Busca coletas no Data Export usando o sequence_code do manifesto."""
         url = f"https://{dominio}/api/analytics/reports/{report_coletas}/data"
@@ -404,6 +459,34 @@ class ESLCloudAdapter(BaseTMSAdapter):
                             if rua:
                                 endereco = f"{rua} {num}".strip().upper()
 
+                    time.sleep(1.5)
+                    dados_frete = self.buscar_dados_frete_report_7693(chave, numero, token_geral)
+                    frete_obj = None
+                    if dados_frete:
+                        seq_code_frete = dados_frete.get('sequence_code')
+                        if seq_code_frete:
+                            from manifesto.models import Frete
+                            def extrair_decimal(valor):
+                                try: return float(valor) if valor else None
+                                except: return None
+                            
+                            frete_obj, _ = Frete.objects.get_or_create(
+                                freight_id_tms=str(seq_code_frete),
+                                defaults={
+                                    'numero_cte': str(dados_frete.get('fit_fhe_cte_number', '')) if dados_frete.get('fit_fhe_cte_number') else None,
+                                    'chave_cte': dados_frete.get('fit_fhe_cte_key'),
+                                    'modal': dados_frete.get('modal'),
+                                    'valor_frete': extrair_decimal(dados_frete.get('total')),
+                                    'peso_taxado': extrair_decimal(dados_frete.get('taxed_weight')),
+                                    'volumes': int(dados_frete.get('invoices_volumes', 0)) if dados_frete.get('invoices_volumes') else None,
+                                    'remetente': dados_frete.get('fit_sdr_nickname'),
+                                    'pagador_nome': dados_frete.get('fit_pyr_nickname'),
+                                    'pagador_documento': dados_frete.get('fit_pyr_document'),
+                                    'natureza_carga': dados_frete.get('fit_psn_name')
+                                }
+                            )
+
+                    if chave:
                         nota_no_manifesto = NotaFiscal.objects.filter(
                             manifesto=manifesto_obj, 
                             numero_nota=str(numero),
@@ -421,7 +504,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
                                 'endereco_entrega': endereco,
                                 'tipo_operacao': tipo_operacao,
                                 'status': status_final,
-                                'freight_id_tms': str(freight_id) if freight_id else None
+                                'freight_id_tms': str(freight_id) if freight_id else None,
+                                'frete': frete_obj
                             }
                         )
                         ids_processadas.append(nota_obj.id)
@@ -443,7 +527,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
                                 'endereco_entrega': endereco,
                                 'tipo_operacao': tipo_operacao,
                                 'status': status_final,
-                                'freight_id_tms': str(freight_id) if freight_id else None
+                                'freight_id_tms': str(freight_id) if freight_id else None,
+                                'frete': frete_obj
                             }
                         )
                         ids_processadas.append(nota_obj.id)
@@ -708,6 +793,38 @@ class ESLCloudAdapter(BaseTMSAdapter):
             except Exception as e:
                 logger.error(f"Erro auto-resolucao: {e}")
                 
+            try:
+                if nf.frete and nf.frete.modal in ['air', 'road']:
+                    notas_pendentes = nf.frete.notas.filter(
+                        manifesto=manifesto, 
+                        status__in=['PENDENTE', 'AGUARDANDO']
+                    ).exclude(id=nf.id).count()
+                    
+                    if notas_pendentes == 0:
+                        logger.info(f"Todas as NF-es do Frete {nf.frete.freight_id_tms} no Manifesto {manifesto.numero_manifesto} foram baixadas. Fechando o CT-e.")
+                        url_frete = f"https://{self.config.dominio_esl}/api/v1/freights/{nf.frete.freight_id_tms}/invoice_occurrences"
+                        payload_frete = {
+                            "invoice_occurrence": {
+                                "occurrence_at": data_ocorrencia_str,
+                                "occurrence": {
+                                    "code": codigo_ocorrencia
+                                },
+                                "comments": f"Fechamento automático do CT-e - {comentario_final}"
+                            }
+                        }
+                        if url_foto:
+                            payload_frete["invoice_occurrence"]["delivery_receipt_url"] = url_foto
+                            
+                        res_frete = requests.post(url_frete, json=payload_frete, headers=headers, timeout=30)
+                        if res_frete.status_code in [200, 201]:
+                            logger.info(f"CT-e (Frete {nf.frete.freight_id_tms}) baixado com sucesso.")
+                            baixa.log_erro_tms += " | CT-e Fechado com Sucesso"
+                            baixa.save(update_fields=['log_erro_tms'])
+                        else:
+                            logger.warning(f"Falha ao baixar CT-e (Frete {nf.frete.freight_id_tms}): {res_frete.text}")
+            except Exception as e:
+                logger.error(f"Erro na baixa inteligente do Frete: {e}")
+
             return f"Baixa {baixa_id} integrada com sucesso."
 
         except BaixaNF.DoesNotExist:

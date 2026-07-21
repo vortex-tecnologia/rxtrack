@@ -257,6 +257,7 @@ def criar_permissoes_automaticamente(sender, instance, created, **kwargs):
 class Filial(models.Model):
     nome = models.CharField(max_length=100)
     id_filial_tms = models.CharField(max_length=50, blank=True, null=True)
+    horario_rebusca_esl = models.TimeField(null=True, blank=True, verbose_name="Horário da Rebusca Automática (ESL)")
 
     def __str__(self):
         return self.nome

@@ -123,6 +123,31 @@ class Ocorrencia(models.Model):
 
 
 # 2. Manifesto de Carga
+class Frete(models.Model):
+    freight_id_tms = models.CharField(max_length=50, unique=True, verbose_name="ID do Frete na ESL (sequence_code)")
+    numero_cte = models.CharField(max_length=50, null=True, blank=True, verbose_name="Número do CT-e")
+    chave_cte = models.CharField(max_length=44, null=True, blank=True, verbose_name="Chave do CT-e")
+    modal = models.CharField(max_length=50, null=True, blank=True, verbose_name="Modal")
+    
+    valor_frete = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    peso_taxado = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    volumes = models.IntegerField(null=True, blank=True)
+    
+    remetente = models.CharField(max_length=255, null=True, blank=True)
+    pagador_nome = models.CharField(max_length=255, null=True, blank=True)
+    pagador_documento = models.CharField(max_length=50, null=True, blank=True)
+    natureza_carga = models.CharField(max_length=255, null=True, blank=True)
+    
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Frete {self.freight_id_tms} - CT-e: {self.numero_cte}"
+
+    class Meta:
+        verbose_name = "Frete/CT-e"
+        verbose_name_plural = "Fretes/CT-es"
+
+
 class Manifesto(models.Model):
     STATUS_CHOICES = [
         ('AGUARDANDO', 'Aguardando'),
@@ -225,6 +250,7 @@ class NotaFiscal(models.Model):
     Representa uma NF-e dentro de um manifesto. A NF-e pode se repetir em outros manifestos.
     """
     manifesto = models.ForeignKey(Manifesto, on_delete=models.CASCADE, related_name='notas_fiscais')
+    frete = models.ForeignKey(Frete, on_delete=models.SET_NULL, null=True, blank=True, related_name='notas')
     freight_id_tms = models.CharField(max_length=50, null=True, blank=True)
     
     # Chave de acesso e Número não são únicos globalmente, mas são únicos DENTRO DESTE MANIFESTO

@@ -133,6 +133,11 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'whatsbot.tasks.sincronizar_fotos_motoristas_whatsapp_task',
         'schedule': crontab(hour=3, minute=0),
     },
+    # Verificação de agendamentos de rebusca ESL por filial (roda a cada minuto)
+    'verificar-rebusca-filial': {
+        'task': 'sac_mobile.tasks.verificar_agendamentos_rebusca_task',
+        'schedule': crontab(),  # A cada minuto
+    },
 }
 
 CHANNEL_LAYERS = {

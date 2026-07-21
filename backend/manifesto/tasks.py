@@ -205,6 +205,29 @@ def processar_webhook_manifesto_task(self, event_id):
                     filtros_busca['numero_nota'] = numero_item
                     filtros_busca['tipo_operacao'] = tipo_item
 
+                frete_obj = None
+                if id_tms:
+                    from manifesto.models import Frete
+                    def extrair_decimal(valor):
+                        try: return float(valor) if valor else None
+                        except: return None
+                        
+                    frete_obj, _ = Frete.objects.get_or_create(
+                        freight_id_tms=str(id_tms),
+                        defaults={
+                            'numero_cte': normalizar_valor(item.get('numero_cte')),
+                            'chave_cte': chave_cte,
+                            'modal': item.get('modal'),
+                            'valor_frete': extrair_decimal(item.get('valor_frete')),
+                            'peso_taxado': extrair_decimal(item.get('peso_taxado')),
+                            'volumes': int(item.get('volumes')) if str(item.get('volumes')).isdigit() else None,
+                            'remetente': item.get('remetente'),
+                            'pagador_nome': item.get('pagador_nome'),
+                            'pagador_documento': item.get('pagador_documento'),
+                            'natureza_carga': item.get('natureza_carga')
+                        }
+                    )
+
                 nota_obj, _ = NotaFiscal.objects.update_or_create(
                     **filtros_busca,
                     defaults={
@@ -216,7 +239,8 @@ def processar_webhook_manifesto_task(self, event_id):
                         'chave_acesso': chave_nfe,
                         'numero_coleta': num_coleta,
                         'numero_cte': normalizar_valor(item.get('numero_cte')),
-                        'chave_cte': chave_cte
+                        'chave_cte': chave_cte,
+                        'frete': frete_obj
                     }
                 )
                 ids_processadas.append(nota_obj.id)

@@ -639,3 +639,69 @@ def api_registrar_baixa_auditoria_sac(request):
 
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated])
+def api_config_rebusca(request):
+    try:
+        perfil = request.user.motorista_perfil
+        filial = perfil.filial
+        if not filial:
+            return Response({"error": "Usuário sem filial vinculada."}, status=400)
+            
+        if request.method == 'GET':
+            from sac_mobile.models import LogRebuscaFilial
+            horario = filial.horario_rebusca_esl.strftime('%H:%M') if filial.horario_rebusca_esl else ''
+            logs = LogRebuscaFilial.objects.filter(filial=filial).order_by('-criado_em')[:10]
+            logs_data = []
+            for log in logs:
+                logs_data.append({
+                    "id": log.id,
+                    "tipo": log.tipo,
+                    "status": log.status,
+                    "criado_em": log.criado_em.strftime('%d/%m %H:%M'),
+                    "concluido_em": log.concluido_em.strftime('%H:%M') if log.concluido_em else '-',
+                    "detalhes": log.detalhes_manifestos
+                })
+                
+            return Response({
+                "horario_rebusca": horario,
+                "logs": logs_data
+            })
+            
+        elif request.method == 'PUT':
+            horario = request.data.get('horario_rebusca')
+            if not horario:
+                filial.horario_rebusca_esl = None
+            else:
+                from datetime import datetime
+                try:
+                    filial.horario_rebusca_esl = datetime.strptime(horario, '%H:%M').time()
+                except ValueError:
+                    return Response({"error": "Formato de hora inválido. Use HH:MM"}, status=400)
+                    
+            filial.save()
+            return Response({"status": "sucesso", "mensagem": "Horário atualizado com sucesso!"})
+            
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_rebusca_agora(request):
+    try:
+        perfil = request.user.motorista_perfil
+        filial = perfil.filial
+        if not filial:
+            return Response({"error": "Usuário sem filial vinculada."}, status=400)
+            
+        from sac_mobile.tasks import executar_rebusca_filial_task
+        executar_rebusca_filial_task.delay(filial.id, 'MANUAL')
+        
+        return Response({
+            "status": "sucesso",
+            "mensagem": "Sincronização iniciada! Acompanhe o status pelo histórico."
+        })
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)

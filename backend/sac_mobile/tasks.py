@@ -344,3 +344,84 @@ def processar_canhoto_sac_task(self, historico_id, dados_baixa):
         logger.warning(f"[SAC IA] Esgotou retries. Seguindo para ESL com foto original.")
         processar_envio_sac_tms_task.delay(dados_baixa)
         return "Esgotou retries IA"
+@shared_task(bind=True, max_retries=1)
+def executar_rebusca_filial_task(self, filial_id, tipo='AUTOMATICA'):
+    from manifesto.models import Manifesto, ManifestoBuscaLog
+    from usuarios.models import Filial
+    from sac_mobile.models import LogRebuscaFilial
+    from integracoes.registry import get_tms_adapter
+    from django.utils import timezone
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    try:
+        filial = Filial.objects.get(id=filial_id)
+    except Filial.DoesNotExist:
+        return "Filial não encontrada."
+        
+    log_rebusca = LogRebuscaFilial.objects.create(
+        filial=filial,
+        tipo=tipo,
+        status='PROCESSANDO'
+    )
+    
+    adapter = get_tms_adapter()
+    if not adapter:
+        log_rebusca.status = 'ERRO'
+        log_rebusca.concluido_em = timezone.now()
+        log_rebusca.save()
+        return "TMS Adapter não encontrado."
+        
+    manifestos = Manifesto.objects.filter(filial=filial, status='EM_TRANSPORTE')
+    detalhes = []
+    
+    for manifesto in manifestos:
+        busca_log = ManifestoBuscaLog.objects.create(
+            numero_manifesto=manifesto.numero_manifesto,
+            motorista=manifesto.motorista,
+            status='PROCESSANDO'
+        )
+        try:
+            notas_antes = manifesto.notas_fiscais.count()
+            resultado = adapter.buscar_manifesto_completo(busca_log.id)
+            notas_depois = manifesto.notas_fiscais.count()
+            
+            diff = notas_depois - notas_antes
+            inseridas = diff if diff > 0 else 0
+            removidas = abs(diff) if diff < 0 else 0
+            
+            detalhes.append({
+                "manifesto": manifesto.numero_manifesto,
+                "inseridas": inseridas,
+                "removidas": removidas,
+                "resultado": str(resultado)
+            })
+        except Exception as e:
+            logger.error(f"Erro ao buscar manifesto {manifesto.numero_manifesto} na rebusca: {e}")
+            detalhes.append({
+                "manifesto": manifesto.numero_manifesto,
+                "erro": str(e)
+            })
+            
+    log_rebusca.detalhes_manifestos = detalhes
+    log_rebusca.status = 'CONCLUIDO'
+    log_rebusca.concluido_em = timezone.now()
+    log_rebusca.save(update_fields=['detalhes_manifestos', 'status', 'concluido_em'])
+    
+    return f"Rebusca filial {filial.nome} concluída. {len(manifestos)} manifestos verificados."
+
+
+@shared_task
+def verificar_agendamentos_rebusca_task():
+    from usuarios.models import Filial
+    from django.utils import timezone
+    
+    agora_br = timezone.localtime(timezone.now())
+    hora_atual_str = agora_br.strftime('%H:%M')
+    
+    filiais = Filial.objects.exclude(horario_rebusca_esl__isnull=True)
+    for filial in filiais:
+        horario_str = filial.horario_rebusca_esl.strftime('%H:%M')
+        if hora_atual_str == horario_str:
+            executar_rebusca_filial_task.delay(filial.id, 'AUTOMATICA')

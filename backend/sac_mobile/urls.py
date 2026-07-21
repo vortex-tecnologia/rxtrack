@@ -15,4 +15,8 @@ urlpatterns = [
     path('api/auditoria/manifestos/', views.api_listar_manifestos_auditoria_sac, name='api_listar_manifestos_auditoria'),
     path('api/auditoria/manifesto/<int:manifesto_id>/notas/', views.api_detalhes_manifesto_auditoria_sac, name='api_detalhes_manifesto_auditoria'),
     path('api/auditoria/baixa/', views.api_registrar_baixa_auditoria_sac, name='api_registrar_baixa_auditoria'),
+    
+    # NOVAS ROTAS DE REBUSCA (GESTÃO SAC)
+    path('api/configuracao/rebusca/', views.api_config_rebusca, name='api_config_rebusca'),
+    path('api/configuracao/rebusca/agora/', views.api_rebusca_agora, name='api_rebusca_agora'),
 ]

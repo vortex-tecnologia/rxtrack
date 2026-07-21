@@ -43,3 +43,31 @@ class HistoricoBaixaSAC(models.Model):
     def __str__(self):
         ident = self.chave_acesso if self.chave_acesso else f"Frete: {self.freight_id}"
         return f"Baixa SAC - {ident}"
+
+class LogRebuscaFilial(models.Model):
+    TIPO_CHOICES = [
+        ('MANUAL', 'Manual'),
+        ('AUTOMATICA', 'Automática')
+    ]
+    STATUS_CHOICES = [
+        ('PROCESSANDO', 'Processando'),
+        ('CONCLUIDO', 'Concluído'),
+        ('ERRO', 'Erro')
+    ]
+    
+    filial = models.ForeignKey('usuarios.Filial', on_delete=models.CASCADE, related_name='logs_rebusca')
+    tipo = models.CharField(max_length=15, choices=TIPO_CHOICES)
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='PROCESSANDO')
+    
+    detalhes_manifestos = models.JSONField(default=list, blank=True) 
+    
+    criado_em = models.DateTimeField(auto_now_add=True)
+    concluido_em = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Log de Rebusca (Filial)"
+        verbose_name_plural = "Logs de Rebusca (Filiais)"
+        ordering = ['-criado_em']
+
+    def __str__(self):
+        return f"Log {self.filial.nome} - {self.criado_em.strftime('%d/%m/%Y %H:%M')}"
