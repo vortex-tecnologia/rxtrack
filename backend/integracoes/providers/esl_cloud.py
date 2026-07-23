@@ -702,6 +702,16 @@ class ESLCloudAdapter(BaseTMSAdapter):
             ).get(id=baixa_id)
 
             nf = baixa.nota_fiscal
+            
+            # --- SE FOR MODAL AÉREO, REDIRECIONA PARA BAIXA POR FRETE/MINUTA ---
+            is_aereo = False
+            if nf.frete and nf.frete.modal:
+                is_aereo = nf.frete.modal.lower() in ['air', 'aereo', 'aéreo', 'aérea', 'aerea']
+                
+            if is_aereo:
+                logger.info(f"Redirecionando baixa {baixa_id} (Aéreo) para enviar_baixa_minuta")
+                return self.enviar_baixa_minuta(baixa_id, task=task)
+
             if not nf.chave_acesso:
                 # Coletas usam endpoint próprio (/api/v1/picks/) e não precisam de freight_id
                 if nf.numero_coleta or nf.tipo_operacao == 'COLETA':
@@ -1093,20 +1103,48 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     nf.freight_id_tms = freight_id
                     nf.save(update_fields=['freight_id_tms'])
                     logger.info(f"Minuta {nf.numero_nota}: freight_id encontrado = {freight_id}")
-                else:
-                    logger.warning(f"Minuta {nf.numero_nota}: freight_id não encontrado na ESL.")
-
+            
             if not freight_id:
                 raise Exception(
                     f"Minuta {nf.numero_nota} sem freight_id. "
                     f"Não é possível enviar baixa sem freight_id (endpoint geral exige chave NF-e)."
                 )
 
+            # --- AUTO-BYPASS PARA FRETES JÁ INTEGRADOS ---
+            # Se outra nota do mesmo frete já foi integrada com sucesso com a mesma ocorrência
+            if nf.frete:
+                ja_integrado_no_frete = BaixaNF.objects.filter(
+                    nota_fiscal__frete=nf.frete,
+                    integrado_tms=True,
+                    ocorrencia=baixa.ocorrencia
+                ).exclude(id=baixa_id).exists()
+                
+                if ja_integrado_no_frete:
+                    logger.info(f"Bypass inteligente Minuta/Aéreo: Frete {nf.frete.freight_id_tms} já possui ocorrência {codigo_ocorrencia} integrada.")
+                    baixa.log_erro_tms = f"Sucesso (Bypass): Ocorrência já registrada no Frete {nf.frete.freight_id_tms}."
+                    baixa.processado_tms = True
+                    baixa.integrado_tms = True
+                    baixa.data_integracao = timezone.now()
+                    baixa.payload_enviado = {"bypass": True, "motivo": "Frete já possui essa ocorrência integrada"}
+                    baixa.save()
+                    
+                    status_destino = 'OCORRENCIA' if codigo_ocorrencia not in [1, 2] else 'BAIXADA'
+                    if nf.status != status_destino:
+                        nf.status = status_destino
+                        nf.save(update_fields=['status'])
+                    
+                    try:
+                        from operacional.services import resolver_erros_automaticamente
+                        resolver_erros_automaticamente(manifesto.numero_manifesto, nf.numero_nota, manifesto.filial)
+                    except Exception as e:
+                        logger.error(f"Erro auto-resolucao bypass: {e}")
+                    
+                    return f"Baixa {baixa_id} integrada (Bypass - Frete já atualizado)."
+
             # Envia via endpoint V1 de freight (único que funciona para minutas)
             URL_ESL_FRETE = f"https://{self.config.dominio_esl}/api/v1/freights/{freight_id}/invoice_occurrences"
             
             motorista = manifesto.motorista.nome_completo if (manifesto and manifesto.motorista) else "Motorista não identificado"
-            url_foto = baixa.comprovante_foto_url or ""
             
             payload = {
                 "invoice_occurrence": {
@@ -1122,9 +1160,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 }
             }
             
-            # Adiciona foto
-            if url_foto:
-                payload["invoice_occurrence"]["delivery_receipt_url"] = url_foto
+            # ESL Cloud não aceita 'delivery_receipt_url' no endpoint de Frete.
+            # Lógica de enviar foto comentada/removida para evitar Erro 400.
             
             baixa.payload_enviado = payload
             
