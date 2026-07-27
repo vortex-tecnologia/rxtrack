@@ -36,21 +36,33 @@ def inicializar_firebase():
         _firebase_app_initialized = True
         return True, "Firebase já inicializado"
 
-    # Procura pelo arquivo de credenciais do Firebase (serviceAccountKey.json)
+    # Procura pelo arquivo de credenciais do Firebase (*firebase*.json ou firebase-credentials.json)
     cred_path = getattr(settings, 'FIREBASE_CREDENTIALS_PATH', None)
-    if not cred_path:
+    if not cred_path or not os.path.exists(cred_path):
+        import glob
         base_dir = getattr(settings, 'BASE_DIR', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        cred_path = os.path.join(base_dir, 'firebase-credentials.json')
-
-    if not os.path.exists(cred_path):
+        possible_paths = [
+            os.path.join(base_dir, 'firebase-credentials.json'),
+            os.path.join(base_dir, 'firebase-adminsdk.json'),
+        ]
+        possible_paths.extend(glob.glob(os.path.join(base_dir, '*firebase*.json')))
+        possible_paths.extend(glob.glob(os.path.join(os.path.dirname(base_dir), '*firebase*.json')))
+        
         env_cred = os.getenv('FIREBASE_CREDENTIALS_PATH')
-        if env_cred and os.path.exists(env_cred):
-            cred_path = env_cred
+        if env_cred:
+            possible_paths.insert(0, env_cred)
 
-    if not os.path.exists(cred_path):
-        msg = f"Arquivo de credenciais do Firebase não encontrado em: {cred_path}"
+        cred_path = None
+        for p in possible_paths:
+            if p and os.path.exists(p):
+                cred_path = p
+                break
+
+    if not cred_path or not os.path.exists(cred_path):
+        msg = f"Arquivo de credenciais do Firebase (*firebase*.json) não encontrado no diretório do projeto."
         logger.warning(msg)
         return False, msg
+
 
     try:
         cred = credentials.Certificate(cred_path)
