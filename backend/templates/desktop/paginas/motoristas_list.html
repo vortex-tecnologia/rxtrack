@@ -260,10 +260,11 @@
                             <button onclick="enviarRedefinicaoSenha('{{ m.id }}')" class="btn btn-sm btn-outline-secondary border-0 me-1" title="Enviar Redefinição de Senha">
                                 <i class="bi bi-envelope"></i>
                             </button>
-                            <button class="btn btn-outline-primary btn-sm" title="Editar" data-bs-toggle="modal" data-bs-target="#modalDetalhes" 
+                            <button class="btn btn-outline-primary btn-sm" title="Editar" 
                                 onclick="abrirDetalhes('{{ m.id }}', '{{ m.nome_completo|escapejs }}', '{{ m.cpf }}', '{% if m.foto_perfil %}{{ m.foto_perfil.url }}{% endif %}', '{{ m.telefone|default:'' }}', '{{ m.filial_id|default:'' }}', '{{ m.email|default:'' }}', '{{ m.modelo_aparelho|default:'' }}', '{{ m.memoria_ram|default:'' }}', '{{ m.permitir_upload_galeria|lower }}', '{{ m.categoria }}')">
                                 <i class="bi bi-pencil-square"></i> Editar
                             </button>
+
                         </td>
                     </tr>
                     {% empty %}
@@ -618,7 +619,8 @@ function abrirDetalhes(id, nome, cpf, foto, telefone, filial_id, email, modelo_a
     const img = document.getElementById('view_foto');
     if(foto) { img.src = foto; img.style.display = 'inline-block'; } 
     else { img.style.display = 'none'; }
-    new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDetalhes')).show();
+
 }
 
 async function enviarRedefinicaoSenha(id) {
