@@ -614,8 +614,10 @@ async function enviarRedefinicaoSenha(id) {
     } catch (e) {
         alert("Erro ao comunicar com o servidor.");
     }
+}
 
-    function enviarAvisoMassa() {
+function enviarAvisoMassa() {
+
         const mensagem = document.getElementById('avisoMensagem').value;
         const filialId = document.getElementById('avisoFilialId').value;
 
@@ -702,9 +704,11 @@ async function enviarRedefinicaoSenha(id) {
                     break;
                 }
             }
-        }
         return cookieValue;
     }
-}
+
+    window.enviarAvisoMassa = enviarAvisoMassa;
+    window.getCookie = getCookie;
 </script>
 {% endblock %}
+
