@@ -132,7 +132,6 @@ def enviar_notificacao_push(motorista, titulo, mensagem, tipo='SISTEMA', dados_p
                     sound='rxtrack_notification',
                     default_sound=False,
                     default_vibrate_timings=True,
-                    notification_priority='PRIORITY_MAX',
                     channel_id='rxtrack_push_channel'
                 )
             )
@@ -233,7 +232,6 @@ def enviar_notificacao_topico(topico, titulo, mensagem, tipo='SISTEMA', dados_pa
                     sound='rxtrack_notification',
                     default_sound=False,
                     default_vibrate_timings=True,
-                    notification_priority='PRIORITY_MAX',
                     channel_id='rxtrack_push_channel'
                 )
             )
