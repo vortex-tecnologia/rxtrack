@@ -63,3 +63,42 @@ def notificar_alerta_motorista(motorista, titulo, mensagem, dados_extras=None):
         tipo='ALERTA',
         dados_payload=dados_extras
     )
+
+
+def varrer_e_notificar_manifestos_ativos():
+    """
+    Varre todos os manifestos ativos ('EM_TRANSPORTE' ou 'AGUARDANDO') no sistema
+    e envia uma notificação push para os motoristas vinculados que utilizam o APK.
+    """
+    from manifesto.models import Manifesto
+
+    manifestos_ativos = Manifesto.objects.filter(
+        status__in=['EM_TRANSPORTE', 'AGUARDANDO'],
+        motorista__fcm_token__isnull=False
+    ).exclude(motorista__fcm_token='').select_related('motorista')
+
+    count = 0
+    motoristas_notificados = set()
+
+    for mft in manifestos_ativos:
+        motorista = mft.motorista
+        if not motorista or motorista.id in motoristas_notificados:
+            continue
+
+        titulo = f"🚛 Viagem em Andamento (#{mft.numero_manifesto})"
+        mensagem = f"Olá {motorista.nome_completo.split()[0]}! Seu manifesto #{mft.numero_manifesto} está ativo. Mantenha o aplicativo aberto e o GPS ligado."
+        
+        ok, _ = enviar_notificacao_push(
+            motorista=motorista,
+            titulo=titulo,
+            mensagem=mensagem,
+            tipo='LEMBRETE',
+            dados_payload={'manifesto': str(mft.numero_manifesto), 'status': mft.status}
+        )
+        if ok:
+            count += 1
+            motoristas_notificados.add(motorista.id)
+
+    logger.info(f"🔎 Varredura de manifestos ativos: {count} motorista(s) notificado(s) via Push FCM.")
+    return count
+

@@ -284,8 +284,27 @@ def _notificar_motorista(filial, motorista, numero_mft, rodada, data_hoje):
         )
         tipo = 'ATIVACAO'
 
+    # 📲 DISPARO DE NOTIFICAÇÃO PUSH (FCM) PARA O APLICATIVO APK DO MOTORISTA
+    if motorista and motorista.fcm_token:
+        try:
+            from common.fcm_service import enviar_notificacao_push
+            titulos_rodada = {
+                1: "🚛 Novo Manifesto Atribuído",
+                2: "📋 Lembrete: Ativação de Manifesto",
+                3: "⏰ Manifesto Pendente de Ativação",
+                4: "🔔 Urgente: Manifesto sem Ativação (15h)",
+                5: "🚨 Última Chamada: Ative seu Manifesto"
+            }
+            titulo_push = titulos_rodada.get(rodada, "📢 Lembrete de Viagem RXTrack")
+            msg_push = f"Olá {nome}! O manifesto #{numero_mft} aguarda ativação no aplicativo. Acesse para iniciar sua viagem."
+            enviar_notificacao_push(motorista, titulo_push, msg_push, tipo='LEMBRETE', dados_payload={'manifesto': str(numero_mft)})
+            logger.info(f"📲 Push FCM R{rodada} enviado para {motorista.nome_completo} (MFT #{numero_mft})")
+        except Exception as fcm_err:
+            logger.error(f"Erro ao enviar Push FCM R{rodada} para {motorista.nome_completo}: {fcm_err}")
+
     # Obtém o adapter WhatsApp da filial
     adapter = get_whatsapp_adapter(filial)
+
     if not adapter:
         logger.warning(f"⚠️ Sem adapter WhatsApp para filial {filial.nome}")
         return

@@ -277,7 +277,17 @@ def processar_webhook_manifesto_task(self, event_id):
             event.processed_at = timezone.now()
             event.save()
 
+            # 📲 DISPARO INSTANTÂNEO DE NOTIFICAÇÃO PUSH (FCM) PARA O MOTORISTA (APK)
+            try:
+                if motorista_obj and motorista_obj.fcm_token:
+                    from common.tasks_notificacoes import notificar_atribuicao_manifesto
+                    notificar_atribuicao_manifesto(motorista_obj, num_mani, count_notas)
+                    logger.info(f"📲 Push FCM de novo manifesto enviado com sucesso para {motorista_obj.nome_completo} (MFT: #{num_mani})")
+            except Exception as push_err:
+                logger.error(f"⚠️ Erro ao disparar Notificação Push Webhook para MFT {num_mani}: {push_err}")
+
             return f"Manifesto {num_mani} (Motorista: {nome_mot}) processado com sucesso. {count_notas} notas."
+
 
     except Exception as e:
         logger.error(f"Erro ao processar Webhook {event_id}: {str(e)}")
