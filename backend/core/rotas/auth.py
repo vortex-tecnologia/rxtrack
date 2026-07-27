@@ -11,6 +11,8 @@ from usuarios.views_login.auth_views import (
 )
 from usuarios.views_login.device_token_views import auto_login_device, criar_device_token
 
+from usuarios.views import AtualizarFcmTokenView
+
 urlpatterns = [
     path('verificar-cpf/', VerificarCPFView.as_view(), name='verificar-cpf'),
     path('primeiro-acesso/', PrimeiroAcessoView.as_view(), name='primeiro-acesso'),
@@ -22,4 +24,6 @@ urlpatterns = [
     # Auto-login APK (Device Token)
     path('auto-login/', auto_login_device, name='auto_login_device'),
     path('device-token/', criar_device_token, name='criar_device_token'),
+    path('fcm-token/', AtualizarFcmTokenView.as_view(), name='fcm_token_api'),
 ]
+
