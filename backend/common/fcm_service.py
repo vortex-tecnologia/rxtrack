@@ -130,9 +130,13 @@ def enviar_notificacao_push(motorista, titulo, mensagem, tipo='SISTEMA', dados_p
                 priority='high',
                 notification=messaging.AndroidNotification(
                     sound='default',
-                    click_action='FLUTTER_NOTIFICATION_CLICK'
+                    default_sound=True,
+                    default_vibrate_timings=True,
+                    notification_priority='PRIORITY_MAX',
+                    channel_id='rxtrack_push_channel'
                 )
             )
+
         )
 
         # Envia a notificação via SDK
@@ -223,7 +227,18 @@ def enviar_notificacao_topico(topico, titulo, mensagem, tipo='SISTEMA', dados_pa
             ),
             data=payload_clean if payload_clean else None,
             topic=topico,
+            android=messaging.AndroidConfig(
+                priority='high',
+                notification=messaging.AndroidNotification(
+                    sound='default',
+                    default_sound=True,
+                    default_vibrate_timings=True,
+                    notification_priority='PRIORITY_MAX',
+                    channel_id='rxtrack_push_channel'
+                )
+            )
         )
+
         response_id = messaging.send(message)
         logger.info(f"📲 Push de tópico [{topico}] enviado! ID: {response_id}")
         return True, str(response_id)
