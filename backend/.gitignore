@@ -12,3 +12,5 @@ node_modules/
 dist/
 build/
 *.log
+firebase-credentials.json
+*firebase*.json
