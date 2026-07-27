@@ -149,9 +149,13 @@
                         data-ultimo-acesso="{{ m.ultimo_acesso|date:'c'|default:'' }}">
                         <td class="fw-bold text-primary">#{{ m.numero_manifesto }}</td>
                         <td>
-                            <div class="small fw-bold">{{ m.motorista.nome_completo }}</div>
+                            <div class="small fw-bold d-flex align-items-center gap-1">
+                                <span>{{ m.motorista.nome_completo }}</span>
+                                {{ m.motorista.icone_dispositivo_html|safe }}
+                            </div>
                             <small class="text-muted">{{ m.motorista.cpf }}</small>
                         </td>
+
                         <td>
                             {% if m.status == 'EM_TRANSPORTE' %}
                             <span class="badge bg-info">Em Rota</span>

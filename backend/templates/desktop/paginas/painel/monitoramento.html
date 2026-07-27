@@ -38,9 +38,12 @@
                                 {% endif %}
                             </div>
                             <div class="ms-3">
-                                <h6 class="mb-0 fw-bold">
-                                    {{ m.motorista.user.get_full_name|default:m.motorista.user.username}}</h6>
+                                <h6 class="mb-0 fw-bold d-flex align-items-center gap-1">
+                                    <span>{{ m.motorista.nome_completo|default:m.motorista.user.username }}</span>
+                                    {{ m.motorista.icone_dispositivo_html|safe }}
+                                </h6>
                                 <small class="text-muted">Manifesto: #{{ m.numero_manifesto }}</small>
+
                                 <small class="text-muted d-block mt-1" style="font-size: 9px;" id="data-registro-{{ m.numero_manifesto }}">
                                     <i class="bi bi-clock pe-1"></i>{{ m.data_criacao|date:"d/m/Y H:i" }}
                                 </small>

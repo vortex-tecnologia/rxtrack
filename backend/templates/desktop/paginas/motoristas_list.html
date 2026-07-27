@@ -211,7 +211,10 @@
                                     {% endif %}
                                 </div>
                                 <div>
-                                    <h6 class="mb-0 fw-bold">{{ m.nome_completo }}</h6>
+                                    <h6 class="mb-0 fw-bold d-flex align-items-center gap-1">
+                                        <span>{{ m.nome_completo }}</span>
+                                        {{ m.icone_dispositivo_html|safe }}
+                                    </h6>
                                     <small class="text-muted">CPF: {{ m.cpf }}</small>
                                     {% if m.categoria == 'AGREGADO' %}
                                         <br><span class="badge bg-secondary opacity-75" style="font-size: 0.65rem;">AGREGADO</span>
@@ -219,6 +222,7 @@
                                         <br><span class="badge bg-dark opacity-75" style="font-size: 0.65rem;">DEDICADO</span>
                                     {% endif %}
                                 </div>
+
                             </div>
                         </td>
                         <td class="text-center fw-bold text-dark">{{ m.total_mfts }}</td>

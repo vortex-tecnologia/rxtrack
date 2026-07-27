@@ -111,12 +111,49 @@ class Motorista(models.Model):
     fcm_token = models.TextField(null=True, blank=True, verbose_name="Token Firebase FCM")
     fcm_token_atualizado_em = models.DateTimeField(null=True, blank=True, verbose_name="Última Atualização FCM")
 
+    @property
+    def tipo_dispositivo(self):
+        """
+        Retorna 'APK' (App Nativo Android), 'IOS' (iPhone) ou 'PWA' (Navegador).
+        """
+        if self.fcm_token:
+            return 'APK'
+        mod = (self.modelo_aparelho or '').lower()
+        if any(x in mod for x in ['iphone', 'ipad', 'ios', 'apple']):
+            return 'IOS'
+        return 'PWA'
+
+    @property
+    def icone_dispositivo_html(self):
+        """
+        Retorna o ícone HTML formatado de acordo com a plataforma (Android, iOS ou PWA).
+        """
+        if self.fcm_token:
+            return '<i class="bi bi-android2 text-success ms-1" style="font-size: 1.1rem;" title="App Android (APK) Instalado - Push FCM Ativo"></i>'
+        mod = (self.modelo_aparelho or '').lower()
+        if any(x in mod for x in ['iphone', 'ipad', 'ios', 'apple']):
+            return '<i class="bi bi-apple text-dark ms-1" style="font-size: 1.1rem;" title="iPhone (iOS)"></i>'
+        return '<i class="bi bi-globe text-secondary ms-1" style="font-size: 0.95rem;" title="Navegador Web (PWA)"></i>'
+
+    @property
+    def badge_dispositivo_html(self):
+        """
+        Retorna uma badge colorida elegante com ícone para tabelas.
+        """
+        if self.fcm_token:
+            return '<span class="badge bg-success-subtle text-success border border-success ms-1" title="App Android (APK) Instalado - Push FCM Ativo"><i class="bi bi-android2 me-1"></i>APK</span>'
+        mod = (self.modelo_aparelho or '').lower()
+        if any(x in mod for x in ['iphone', 'ipad', 'ios', 'apple']):
+            return '<span class="badge bg-dark-subtle text-dark border border-secondary ms-1" title="iPhone (iOS)"><i class="bi bi-apple me-1"></i>iOS</span>'
+        return '<span class="badge bg-secondary-subtle text-secondary border border-secondary ms-1" title="Navegador Web (PWA)"><i class="bi bi-globe me-1"></i>PWA</span>'
+
     def __str__(self):
         return self.nome_completo
 
     class Meta:
         verbose_name = "Motorista"
         verbose_name_plural = "Motoristas"
+
 
 
 class PermissaoUsuario(models.Model):
