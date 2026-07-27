@@ -447,6 +447,9 @@
     </div>
 </div>
 
+<link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+
 <style>
     .progress { background-color: #e9ecef; border-radius: 10px; }
     .bg-success-subtle { background-color: rgba(25, 135, 84, 0.1) !important; }
@@ -476,6 +479,28 @@
 </style>
 
 <script>
+function mostrarNotificacaoToast(msg, isSuccess = true) {
+    if (typeof Toastify === 'function') {
+        Toastify({
+            text: msg,
+            duration: 5000,
+            close: true,
+            gravity: "top",
+            position: "right",
+            backgroundColor: isSuccess ? "#198754" : "#dc3545",
+        }).showToast();
+    } else if (typeof Swal === 'function') {
+        Swal.fire({
+            icon: isSuccess ? 'success' : 'error',
+            title: isSuccess ? 'Sucesso' : 'Aviso',
+            text: msg,
+            timer: 4000
+        });
+    } else {
+        alert(msg);
+    }
+}
+
 // Máscara de CPF
 document.querySelectorAll('.cpf-mask').forEach(input => {
     input.addEventListener('input', e => {
@@ -622,14 +647,7 @@ function enviarAvisoMassa() {
         const filialId = document.getElementById('avisoFilialId').value;
 
         if (!mensagem.trim()) {
-            Toastify({
-                text: "A mensagem não pode estar vazia.",
-                duration: 3000,
-                close: true,
-                gravity: "top",
-                position: "right",
-                backgroundColor: "#dc3545",
-            }).showToast();
+            mostrarNotificacaoToast("A mensagem não pode estar vazia.", false);
             return;
         }
 
@@ -658,39 +676,19 @@ function enviarAvisoMassa() {
                 bootstrap.Modal.getInstance(document.getElementById('modalAvisoMassa')).hide();
                 document.getElementById('avisoMensagem').value = '';
                 
-                Toastify({
-                    text: data.message,
-                    duration: 5000,
-                    close: true,
-                    gravity: "top",
-                    position: "right",
-                    backgroundColor: "#198754",
-                }).showToast();
+                mostrarNotificacaoToast(data.message, true);
             } else {
-                Toastify({
-                    text: data.message || "Erro ao processar envio.",
-                    duration: 5000,
-                    close: true,
-                    gravity: "top",
-                    position: "right",
-                    backgroundColor: "#dc3545",
-                }).showToast();
+                mostrarNotificacaoToast(data.message || "Erro ao processar envio.", false);
             }
         })
         .catch(error => {
             btn.innerHTML = txtOriginal;
             btn.disabled = false;
             console.error('Erro:', error);
-            Toastify({
-                text: "Erro de comunicação com o servidor.",
-                duration: 5000,
-                close: true,
-                gravity: "top",
-                position: "right",
-                backgroundColor: "#dc3545",
-            }).showToast();
+            mostrarNotificacaoToast("Erro de comunicação com o servidor.", false);
         });
     }
+
 
     // Função auxiliar para CSRF
     function getCookie(name) {
