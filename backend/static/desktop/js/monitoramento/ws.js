@@ -6,6 +6,7 @@ let socket;
 let mapaRastreamento = null;
 let marcadorMotorista = null;
 let monitorandoManifestoId = null;
+let motoristaNomeAtual = '';
 
 function conectarWebSocket() {
     console.log("🔌 Tentando conectar WebSocket em:", ws_url);
@@ -61,11 +62,10 @@ function conectarWebSocket() {
                         } else if (mapaRastreamento) {
                             mapaRastreamento.panTo([lat, lng]);
                         }
-                        // Atualiza popup do marcador
-                        marcadorMotorista.setPopupContent(
-                            `<b>📡 Posição Atual</b><br>🔋 Bateria: ${status.battery || '--'}% ${status.is_charging ? '⚡' : ''}<br>📶 Rede: ${status.network || '--'}<br>🕐 Último Sinal: ${status.last_seen ? new Date(status.last_seen).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--'}`
-                        );
                     }
+                    // Atualiza Tooltip e Popup do marcador no mapa
+                    atualizarTooltipEPopupMarcador(motoristaNomeAtual, status.last_seen, status.battery, status.network, status.is_charging);
+
                     // Atualiza overlay de status do modal (se existir)
                     const batEl = document.getElementById('mapa-status-bat');
                     const redeEl = document.getElementById('mapa-status-rede');
@@ -470,8 +470,61 @@ function atualizarUltimoSinalTorre() {
 
 // --- FUNÇÕES DO MAPA REAL-TIME ---
 
+function atualizarTooltipEPopupMarcador(motoristaNome, lastSeen, battery, network, isCharging) {
+    if (!marcadorMotorista) return;
+
+    let timeStr = '--';
+    if (lastSeen) {
+        try {
+            timeStr = (typeof lastSeen === 'string' && lastSeen.includes(':') && lastSeen.length <= 5) 
+                ? lastSeen 
+                : new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            if (timeStr === 'Invalid Date') timeStr = lastSeen;
+        } catch (e) {
+            timeStr = lastSeen;
+        }
+    }
+
+    const nome = motoristaNome || motoristaNomeAtual || 'Motorista';
+
+    const contentHover = `<div style="text-align: center; padding: 2px 4px; font-family: system-ui, -apple-system, sans-serif;">
+        <strong style="color: #212529; font-size: 13px;">${nome}</strong>
+        <div style="color: #0d6efd; font-size: 12px; font-weight: bold; margin-top: 2px;">
+            <i class="fas fa-clock"></i> Último Sinal: ${timeStr}
+        </div>
+    </div>`;
+
+    const contentClick = `<div style="text-align: center; padding: 4px 6px; min-width: 170px; font-family: system-ui, -apple-system, sans-serif;">
+        <div style="font-weight: bold; font-size: 14px; color: #212529; margin-bottom: 6px;">
+            🚚 ${nome}
+        </div>
+        <div style="font-size: 13px; line-height: 1.6; color: #495057; text-align: left; border-top: 1px solid #eee; padding-top: 6px; margin-top: 4px;">
+            <div><i class="fas fa-clock text-primary me-1"></i> <strong>Último Sinal:</strong> <span class="badge bg-primary" style="font-size: 11px;">${timeStr}</span></div>
+            ${battery !== null && battery !== undefined ? `<div style="margin-top:2px;"><i class="fas fa-battery-half text-success me-1"></i> <strong>Bateria:</strong> ${battery}% ${isCharging ? '⚡' : ''}</div>` : ''}
+            ${network ? `<div style="margin-top:2px;"><i class="fas fa-signal text-info me-1"></i> <strong>Sinal:</strong> ${network}</div>` : ''}
+        </div>
+    </div>`;
+
+    if (marcadorMotorista.getTooltip()) {
+        marcadorMotorista.setTooltipContent(contentHover);
+    } else {
+        marcadorMotorista.bindTooltip(contentHover, {
+            direction: 'top',
+            offset: [0, -20],
+            opacity: 0.95
+        });
+    }
+
+    if (marcadorMotorista.getPopup()) {
+        marcadorMotorista.setPopupContent(contentClick);
+    } else {
+        marcadorMotorista.bindPopup(contentClick);
+    }
+}
+
 function abrirRastreamentoRealTime(manifestoId, motoristaNome, initialLat, initialLng) {
     monitorandoManifestoId = manifestoId.toString();
+    motoristaNomeAtual = motoristaNome || '';
     document.getElementById('rastreamento-titulo').innerText = `Rastreando: ${motoristaNome}`;
     document.getElementById('rastreamento-mft').innerText = manifestoId;
 
@@ -489,6 +542,7 @@ function abrirRastreamentoRealTime(manifestoId, motoristaNome, initialLat, initi
                 let battery = null;
                 let network = '';
                 let lastSeen = null;
+                let isCharging = false;
 
                 // Se a API retornou posição atual do GPS nativo, usa ela
                 if (data.posicao_atual) {
@@ -497,6 +551,7 @@ function abrirRastreamentoRealTime(manifestoId, motoristaNome, initialLat, initi
                     battery = data.posicao_atual.battery;
                     network = data.posicao_atual.network;
                     lastSeen = data.posicao_atual.last_seen;
+                    isCharging = data.posicao_atual.is_charging || false;
                 }
 
                 // Fallback: tenta ler dos atributos data-* da tabela (se existir)
@@ -511,22 +566,25 @@ function abrirRastreamentoRealTime(manifestoId, motoristaNome, initialLat, initi
 
                 initMapaRastreamento(lat, lng);
 
+                let timeStr = '--';
+                if (lastSeen) {
+                    try {
+                        timeStr = (typeof lastSeen === 'string' && lastSeen.includes(':') && lastSeen.length <= 5) 
+                            ? lastSeen 
+                            : new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        if (timeStr === 'Invalid Date') timeStr = lastSeen;
+                    } catch (e) {
+                        timeStr = lastSeen;
+                    }
+                }
+
                 // Preenche o overlay de status
                 document.getElementById('mapa-status-bat').innerText = battery ? battery + '%' : '--%';
                 document.getElementById('mapa-status-rede').innerText = network || '--';
-                if (lastSeen) {
-                    try {
-                        // lastSeen pode ser "HH:MM" ou ISO string
-                        const timeStr = lastSeen.includes(':') && lastSeen.length <= 5 
-                            ? lastSeen 
-                            : new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                        document.getElementById('mapa-status-visto').innerText = timeStr;
-                    } catch (e) {
-                        document.getElementById('mapa-status-visto').innerText = lastSeen || '--';
-                    }
-                } else {
-                    document.getElementById('mapa-status-visto').innerText = '--';
-                }
+                document.getElementById('mapa-status-visto').innerText = timeStr;
+
+                // Atualiza Tooltip (hover) e Popup (click) do ícone do caminhão
+                atualizarTooltipEPopupMarcador(motoristaNome, lastSeen, battery, network, isCharging);
             })
             .catch(err => {
                 console.error('Erro ao buscar posição atual:', err);
@@ -535,12 +593,14 @@ function abrirRastreamentoRealTime(manifestoId, motoristaNome, initialLat, initi
                 document.getElementById('mapa-status-bat').innerText = '--%';
                 document.getElementById('mapa-status-rede').innerText = '--';
                 document.getElementById('mapa-status-visto').innerText = '--';
+                atualizarTooltipEPopupMarcador(motoristaNome, null, null, null, false);
             });
     }, { once: true });
 
     // Limpeza ao fechar
     document.getElementById('modalRastreamento').addEventListener('hidden.bs.modal', function () {
         monitorandoManifestoId = null;
+        motoristaNomeAtual = '';
         if (mapaRastreamento) {
             mapaRastreamento.remove();
             mapaRastreamento = null;
@@ -578,6 +638,7 @@ function initMapaRastreamento(lat, lng) {
     
     if (isNaN(parsedLat) || isNaN(parsedLng)) {
         marcadorMotorista.bindPopup("<b>Aguardando primeiro sinal de GPS...</b>").openPopup();
+        marcadorMotorista.bindTooltip("Aguardando sinal de GPS...", { direction: 'top', offset: [0, -20] });
     }
 }
 
@@ -592,10 +653,17 @@ function atualizarPosicaoMapa(dados) {
     document.getElementById('mapa-status-bat').innerText = dados.battery ? dados.battery + '%' : '--%';
     document.getElementById('mapa-status-rede').innerText = dados.network || '--';
     
+    let timeStr = '--';
     if (dados.last_seen) {
-        const timeStr = new Date(dados.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        document.getElementById('mapa-status-visto').innerText = timeStr;
+        try {
+            timeStr = new Date(dados.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } catch (e) {
+            timeStr = dados.last_seen;
+        }
     }
+    document.getElementById('mapa-status-visto').innerText = timeStr;
+
+    atualizarTooltipEPopupMarcador(motoristaNomeAtual, dados.last_seen, dados.battery, dados.network, dados.is_charging);
 }
 
 conectarWebSocket();

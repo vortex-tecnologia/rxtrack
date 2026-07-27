@@ -3,7 +3,7 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from usuarios.views_login.auth_views import CustomTokenObtainPairView, LoginSessionView, MeSessionView, LogoutSessionView
-from .views import PerfilMotoristaView, CustomTokenRefreshView
+from .views import PerfilMotoristaView, CustomTokenRefreshView, AtualizarFcmTokenView
 
 urlpatterns = [
     # 1. Rota de Login Clássica (JWT)
@@ -19,4 +19,7 @@ urlpatterns = [
     
     # 3. Rota de Validação/Perfil
     path('perfil/', PerfilMotoristaView.as_view(), name='motorista_perfil'),
+
+    # 4. Rota para atualização de Token Firebase Push (APK Android)
+    path('fcm-token/', AtualizarFcmTokenView.as_view(), name='atualizar_fcm_token'),
 ]

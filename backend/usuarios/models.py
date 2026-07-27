@@ -107,6 +107,10 @@ class Motorista(models.Model):
     modelo_aparelho = models.CharField(max_length=100, null=True, blank=True, verbose_name="Modelo do Aparelho")
     memoria_ram = models.CharField(max_length=20, null=True, blank=True, verbose_name="Memória RAM")
 
+    # NOVO: Token para envio de Notificações Push via Firebase (FCM) - Exclusivo APK
+    fcm_token = models.TextField(null=True, blank=True, verbose_name="Token Firebase FCM")
+    fcm_token_atualizado_em = models.DateTimeField(null=True, blank=True, verbose_name="Última Atualização FCM")
+
     def __str__(self):
         return self.nome_completo
 
@@ -349,3 +353,44 @@ class DeviceToken(models.Model):
 
     def __str__(self):
         return f"Device {self.user.username} - {self.token[:8]}..."
+
+
+# =====================================================
+# Log de Notificações Push enviadas via Firebase FCM
+# =====================================================
+class NotificacaoPushLog(models.Model):
+    """
+    Registra o histórico de notificações push enviadas aos motoristas no APK.
+    """
+    TIPO_CHOICES = [
+        ('SISTEMA', 'Aviso do Sistema'),
+        ('LEMBRETE', 'Lembrete de Routine / GPS'),
+        ('MANIFESTO', 'Atualização de Manifesto'),
+        ('ALERTA', 'Alerta Operacional'),
+        ('MANUAL', 'Disparo Manual Admin'),
+    ]
+
+    motorista = models.ForeignKey(
+        Motorista,
+        on_delete=models.CASCADE,
+        related_name='logs_notificacoes_push',
+        verbose_name="Motorista"
+    )
+    titulo = models.CharField(max_length=255, verbose_name="Título")
+    mensagem = models.TextField(verbose_name="Mensagem")
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default='SISTEMA', verbose_name="Tipo")
+    dados_payload = models.JSONField(blank=True, null=True, verbose_name="Dados Extras (JSON)")
+    
+    sucesso = models.BooleanField(default=False, verbose_name="Enviado com Sucesso")
+    response_message_id = models.CharField(max_length=255, blank=True, null=True, verbose_name="ID Resposta Firebase")
+    erro_detalhes = models.TextField(blank=True, null=True, verbose_name="Detalhes de Erro")
+    
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name="Criado / Enviado em")
+
+    class Meta:
+        verbose_name = "Log de Notificação Push"
+        verbose_name_plural = "Logs de Notificações Push"
+        ordering = ['-criado_em']
+
+    def __str__(self):
+        return f"[{self.tipo}] {self.motorista.nome_completo} - {self.titulo} ({'✅' if self.sucesso else '❌'})"

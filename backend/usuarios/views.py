@@ -24,6 +24,39 @@ class PerfilMotoristaView(generics.RetrieveAPIView):
     
 from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.views import TokenRefreshView
+from django.utils import timezone
+from rest_framework.views import APIView
+
 class CustomTokenRefreshView(TokenRefreshView):
     permission_classes = [AllowAny]
     authentication_classes = [] # Impede que o Django exija CSRF Token se os cookies do WebView forem perdidos
+
+
+class AtualizarFcmTokenView(APIView):
+    """
+    Endpoint chamado pelo APK Android para salvar/atualizar o Token FCM (Firebase).
+    Aceita requisição autenticada por JWT ou Session.
+    POST /auth/fcm-token/
+    Payload: { "fcm_token": "..." }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        fcm_token = request.data.get('fcm_token')
+        if not fcm_token:
+            return Response({'erro': 'O campo fcm_token é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            motorista = request.user.motorista_perfil
+        except AttributeError:
+            return Response({'erro': 'Perfil de motorista não encontrado para o usuário logado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        motorista.fcm_token = fcm_token.strip()
+        motorista.fcm_token_atualizado_em = timezone.now()
+        motorista.save(update_fields=['fcm_token', 'fcm_token_atualizado_em'])
+
+        return Response({
+            'sucesso': True,
+            'mensagem': 'Token FCM atualizado com sucesso no backend!',
+            'fcm_token_atualizado_em': motorista.fcm_token_atualizado_em
+        }, status=status.HTTP_200_OK)
