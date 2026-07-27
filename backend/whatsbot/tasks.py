@@ -560,11 +560,33 @@ def enviar_mensagem_massa_motoristas_task(self, filial_id, mensagem):
 
     total_enviados = 0
     total_erros = 0
+    total_push_enviados = 0
 
     for filial in filiais:
+        # 1. Envio de Notificação Push FCM (Exclusivo APK) para motoristas da filial
+        try:
+            from common.fcm_service import enviar_notificacao_massa
+            motoristas_apk = Motorista.objects.filter(
+                filial=filial,
+                fcm_token__isnull=False
+            ).exclude(fcm_token='')
+
+            if motoristas_apk.exists():
+                res_push = enviar_notificacao_massa(
+                    motoristas_qs_ou_lista=motoristas_apk,
+                    titulo="📢 Aviso Importante RXTrack",
+                    mensagem=mensagem,
+                    tipo="MANUAL"
+                )
+                total_push_enviados += res_push.get('sucessos', 0)
+                logger.info(f"📲 Push FCM enviado para {res_push.get('sucessos', 0)} motorista(s) APK da filial {filial.nome}")
+        except Exception as fcm_err:
+            logger.error(f"Erro ao disparar FCM Push em massa para a filial {filial.nome}: {fcm_err}")
+
+        # 2. Envio via WhatsApp (caso o adapter esteja configurado para a filial)
         adapter = get_whatsapp_adapter(filial)
         if not adapter:
-            logger.warning(f"Filial {filial.nome} não possui WhatsApp ativo configurado. Pulando...")
+            logger.warning(f"Filial {filial.nome} não possui WhatsApp ativo configurado. Pulando WhatsApp...")
             continue
 
         motoristas = Motorista.objects.filter(filial=filial, tipo_usuario='MOTORISTA').exclude(telefone__isnull=True).exclude(telefone__exact='')
@@ -576,11 +598,12 @@ def enviar_mensagem_massa_motoristas_task(self, filial_id, mensagem):
                     adapter.enviar_texto(telefone, mensagem)
                     total_enviados += 1
                 except Exception as e:
-                    logger.error(f"Erro ao enviar aviso em massa para {motorista.nome_completo}: {e}")
+                    logger.error(f"Erro ao enviar aviso em massa WhatsApp para {motorista.nome_completo}: {e}")
                     total_erros += 1
-                    
-    logger.info(f"✅ Disparo em massa concluído! Enviados: {total_enviados} | Erros: {total_erros}")
-    return f"Enviados: {total_enviados}, Erros: {total_erros}"
+
+    logger.info(f"✅ Disparo em massa concluído! Push APK: {total_push_enviados} | WhatsApp Enviados: {total_enviados} | Erros: {total_erros}")
+    return f"Push APK: {total_push_enviados}, WhatsApp: {total_enviados}, Erros: {total_erros}"
+
 
 
 # =====================================================================

@@ -278,13 +278,14 @@
     <div class="modal-dialog">
         <div class="modal-content border-0 shadow">
             <div class="modal-header bg-success text-white">
-                <h5 class="modal-title fw-bold" id="modalAvisoMassaLabel"><i class="bi bi-whatsapp me-2"></i>Avisar Todos os Motoristas</h5>
+                <h5 class="modal-title fw-bold" id="modalAvisoMassaLabel"><i class="bi bi-bell-fill me-1"></i><i class="bi bi-whatsapp me-2"></i>Avisar Todos os Motoristas</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
                 <p class="small text-muted mb-3">
-                    Envie uma mensagem no WhatsApp de todos os motoristas registrados na filial selecionada.
+                    Envie um aviso instantâneo via <strong>Notificação Push (Aplicativo APK)</strong> e <strong>WhatsApp</strong> para todos os motoristas pertencentes à filial selecionada.
                 </p>
+
                 <form id="formAvisoMassa">
                     <input type="hidden" id="avisoFilialId" value="{{ filial_selecionada }}">
                     <div class="mb-3">
