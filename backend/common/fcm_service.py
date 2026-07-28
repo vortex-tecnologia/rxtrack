@@ -154,10 +154,35 @@ def enviar_notificacao_push(motorista, titulo, mensagem, tipo='SISTEMA', dados_p
         )
         return True, str(response_id)
 
+    except messaging.UnregisteredError as unreg_err:
+        msg_caducou = f"Token FCM do motorista {motorista.nome_completo} caducou/expirou (app foi reinstalado). Removendo token antigo do banco."
+        logger.warning(f"⚠️ {msg_caducou}")
+
+        # Limpa o token antigo expirado para aguardar novo login do motorista no APK
+        motorista.fcm_token = None
+        motorista.save(update_fields=['fcm_token'])
+
+        NotificacaoPushLog.objects.create(
+            motorista=motorista,
+            titulo=titulo,
+            mensagem=mensagem,
+            tipo=tipo,
+            dados_payload=payload_clean,
+            sucesso=False,
+            erro_detalhes=f"NotRegistered - Token removido do banco: {unreg_err}"
+        )
+        return False, "NotRegistered - Token removido do banco (Aguardando novo login no app)"
+
     except Exception as e:
         erro_msg = str(e)
         logger.error(f"❌ Erro ao enviar FCM Push para {motorista.nome_completo}: {erro_msg}")
         
+        # Se o token estiver expirado ou inválido no Firebase, limpa o token do motorista
+        if 'Unregistered' in erro_msg or 'invalid-registration-token' in erro_msg.lower() or 'notregistered' in erro_msg.lower():
+            logger.warning(f"Token FCM do motorista {motorista.nome_completo} é inválido/expirado ({erro_msg}). Removendo do banco.")
+            motorista.fcm_token = None
+            motorista.save(update_fields=['fcm_token'])
+
         # Grava log de erro no banco de dados
         NotificacaoPushLog.objects.create(
             motorista=motorista,
@@ -169,13 +194,8 @@ def enviar_notificacao_push(motorista, titulo, mensagem, tipo='SISTEMA', dados_p
             erro_detalhes=erro_msg
         )
 
-        # Se o token estiver expirado ou inválido no Firebase, limpa o token do motorista
-        if 'Unregistered' in erro_msg or 'invalid-registration-token' in erro_msg.lower():
-            logger.warning(f"Token FCM do motorista {motorista.nome_completo} é inválido/expirado. Removendo.")
-            motorista.fcm_token = None
-            motorista.save(update_fields=['fcm_token'])
-
         return False, erro_msg
+
 
 
 def enviar_notificacao_massa(motoristas_qs_ou_lista, titulo, mensagem, tipo='SISTEMA', dados_payload=None):
