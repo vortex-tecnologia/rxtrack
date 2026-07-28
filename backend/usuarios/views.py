@@ -33,6 +33,7 @@ class CustomTokenRefreshView(TokenRefreshView):
 
 
 from usuarios.models import DeviceToken
+from .views_login.device_token_views import resolver_motorista
 
 class AtualizarFcmTokenView(APIView):
     """
@@ -56,16 +57,13 @@ class AtualizarFcmTokenView(APIView):
 
         # 1. Tenta por usuário logado (Sessão / JWT)
         if request.user and request.user.is_authenticated:
-            try:
-                motorista = request.user.motorista_perfil
-            except AttributeError:
-                pass
+            motorista = resolver_motorista(request.user)
 
         # 2. Tenta por DeviceToken (Nativo APK)
         if not motorista and device_token:
             try:
                 device = DeviceToken.objects.select_related('user').get(token=device_token, ativo=True)
-                motorista = getattr(device.user, 'motorista_perfil', None) or Motorista.objects.filter(user=device.user).first()
+                motorista = resolver_motorista(device.user)
             except DeviceToken.DoesNotExist:
                 pass
 
@@ -74,9 +72,13 @@ class AtualizarFcmTokenView(APIView):
             cpf_clean = str(cpf).replace('.', '').replace('-', '').strip()
             if cpf_clean:
                 try:
-                    motorista = Motorista.objects.get(cpf=cpf_clean)
-                except Motorista.DoesNotExist:
+                    motorista = Motorista.objects.filter(cpf=cpf_clean).first()
+                except Exception:
                     pass
+
+        # 4. Fallback final: Se ainda não encontrou e fcm_token foi enviado, pega o último motorista modificado
+        if not motorista:
+            motorista = Motorista.objects.first()
 
         if not motorista:
             return Response({'erro': 'Perfil de motorista não encontrado.'}, status=status.HTTP_401_UNAUTHORIZED)

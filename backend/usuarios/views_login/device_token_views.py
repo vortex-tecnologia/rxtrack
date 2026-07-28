@@ -12,9 +12,41 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
-from usuarios.models import DeviceToken
+from usuarios.models import DeviceToken, Motorista
 
 logger = logging.getLogger(__name__)
+
+
+def resolver_motorista(user):
+    """
+    Localiza o objeto Motorista associado a um User por todas as vias possíveis:
+    1. OneToOne relation (user.motorista_perfil)
+    2. ForeignKey (Motorista.objects.filter(user=user))
+    3. Match por CPF (Motorista.objects.filter(cpf=user.username))
+    """
+    if not user:
+        return None
+    try:
+        m = getattr(user, 'motorista_perfil', None)
+        if m:
+            return m
+    except Exception:
+        pass
+    m = Motorista.objects.filter(user=user).first()
+    if m:
+        return m
+    cpf_clean = str(user.username).replace('.', '').replace('-', '').strip()
+    if cpf_clean:
+        m = Motorista.objects.filter(cpf=cpf_clean).first()
+        if m:
+            if not m.user:
+                try:
+                    m.user = user
+                    m.save(update_fields=['user'])
+                except Exception:
+                    pass
+            return m
+    return None
 
 
 @api_view(['GET'])
@@ -34,7 +66,7 @@ def auto_login_device(request):
         return redirect('/login/')
     
     try:
-        device = DeviceToken.objects.select_related('user__motorista_perfil').get(token=dt, ativo=True)
+        device = DeviceToken.objects.select_related('user').get(token=dt, ativo=True)
     except DeviceToken.DoesNotExist:
         logger.warning(f"[Auto-Login] Device token inválido ou desativado: {dt[:8]}...")
         return redirect('/login/')
@@ -44,13 +76,16 @@ def auto_login_device(request):
     device.save(update_fields=['ultimo_uso'])
     
     # Se o FCM Token foi passado na URL do auto-login, atualiza o motorista imediatamente
-    if fcm_token and hasattr(device.user, 'motorista_perfil'):
+    if fcm_token:
         try:
-            motorista = device.user.motorista_perfil
-            motorista.fcm_token = fcm_token.strip()
-            motorista.fcm_token_atualizado_em = timezone.now()
-            motorista.save(update_fields=['fcm_token', 'fcm_token_atualizado_em'])
-            logger.info(f"[Auto-Login] FCM Token atualizado para {motorista.nome_completo} via auto-login.")
+            motorista = resolver_motorista(device.user)
+            if motorista:
+                motorista.fcm_token = fcm_token.strip()
+                motorista.fcm_token_atualizado_em = timezone.now()
+                motorista.save(update_fields=['fcm_token', 'fcm_token_atualizado_em'])
+                logger.info(f"[Auto-Login] FCM Token atualizado para {motorista.nome_completo} ({motorista.cpf}) via auto-login.")
+            else:
+                logger.warning(f"[Auto-Login] Não foi possível resolver motorista para user: {device.user.username}")
         except Exception as e:
             logger.error(f"[Auto-Login] Erro ao salvar FCM Token para motorista: {e}")
 
