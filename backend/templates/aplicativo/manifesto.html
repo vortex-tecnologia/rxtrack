@@ -4,7 +4,30 @@
 <html lang="pt-BR">
 
 <head>
+    <script>
+        // Trava PWA Guard: Se o usuário logado for OPERACIONAL/SAC/ADMIN, redireciona IMEDIATAMENTE para o Dashboard
+        (async function verificarPerfilNoApp() {
+            try {
+                const token = localStorage.getItem('accessToken');
+                const res = await fetch('/api/auth/me/', {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    const tipo = data.tipo || '';
+                    const cargo = data.cargo || '';
+                    if (tipo === 'OPERACIONAL' || (tipo === 'SAC' && !data.is_sac_mobile) || ['ADMINISTRADOR', 'GESTOR', 'GERENTE'].includes(cargo)) {
+                        console.log('[PWA Guard] Usuário Operacional/Admin detectado no PWA. Redirecionando para /dashboard/...');
+                        window.location.href = '/dashboard/';
+                    }
+                }
+            } catch (e) {
+                console.warn('[PWA Guard] Erro na verificação de perfil:', e);
+            }
+        })();
+    </script>
     <script src="/capacitor.js"></script>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     {% progressive_web_app_meta %}

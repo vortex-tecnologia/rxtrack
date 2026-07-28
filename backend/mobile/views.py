@@ -15,9 +15,24 @@ from configuracao.models import ConfiguracaoSistema
 # Rota para a tela de Login (Acesso público)
 @never_cache
 def login_view(request):
-    """Serve a página de login para o PWA."""
-    # O caminho do template é relativo à sua pasta 'templates'
+    """Serve a página de login para o PWA (ou redireciona se já estiver logado)."""
+    if request.user.is_authenticated:
+        motorista = getattr(request.user, 'motorista_perfil', None)
+        if motorista:
+            tipo = getattr(motorista, 'tipo_usuario', 'MOTORISTA')
+            if tipo == 'SAC' and getattr(motorista, 'is_sac_mobile', False):
+                return redirect('/app-sac/')
+            elif tipo in ['OPERACIONAL', 'SAC'] or request.user.is_staff or request.user.is_superuser:
+                return redirect('/dashboard/')
+            else:
+                return redirect('/app/')
+        elif request.user.is_staff or request.user.is_superuser:
+            return redirect('/dashboard/')
+        else:
+            return redirect('/app/')
+
     return render(request, 'aplicativo/login_motorista/login.html')
+
 
 
 # Rota para a tela principal do PWA (Requer autenticação)

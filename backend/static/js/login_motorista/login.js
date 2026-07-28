@@ -60,30 +60,46 @@ async function salvarDeviceTokenCapacitor(accessToken) {
     await new Promise(resolve => setTimeout(resolve, 4000));
 }
 
+async function redirecionarPorPerfil(token) {
+    try {
+        const res = await fetch(API_BASE + 'me/', {
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        if (res.ok) {
+            const data = await res.json();
+            const tipo = data.tipo || 'MOTORISTA';
+            const cargo = data.cargo || '';
+            if (tipo === 'SAC' && data.is_sac_mobile) {
+                window.location.href = '/app-sac/';
+                return;
+            } else if (tipo === 'OPERACIONAL' || (tipo === 'SAC' && !data.is_sac_mobile) || ['ADMINISTRADOR', 'GESTOR', 'GERENTE'].includes(cargo)) {
+                window.location.href = '/dashboard/';
+                return;
+            }
+        }
+    } catch (e) {
+        console.warn('Erro ao checar perfil no login.js:', e);
+    }
+    window.location.href = '/app/';
+}
+
 // =====================================================
 // AUTO-LOGIN (Redireciona se já estiver logado via NativeStorage/Cookies)
 // =====================================================
 document.addEventListener("DOMContentLoaded", async () => {
     if (typeof window.initAuth === 'function') {
         try {
-            let temNative = window.NativeStorage ? true : false;
-            let tokenStr = temNative ? window.NativeStorage.get('refreshToken') : null;
-            let tokenExiste = (tokenStr && tokenStr !== "null" && tokenStr !== "undefined");
-            
-            alert(`[Debug Auto-Login]\nNativeStorage: ${temNative}\nToken Existe: ${tokenExiste}\nTamanho: ${tokenStr ? tokenStr.length : 0}`);
-            
             const autenticado = await window.initAuth();
             if (autenticado) {
-                alert("Autenticado com sucesso! Redirecionando...");
-                window.location.href = '/app/';
-            } else {
-                alert("Falha na autenticação (initAuth retornou false).");
+                const token = localStorage.getItem('accessToken');
+                await redirecionarPorPerfil(token);
             }
         } catch (e) {
-            alert("Erro no auto-login: " + e.message);
+            console.warn("Erro no auto-login:", e.message);
         }
     }
 });
+
 
 // =====================================================
 // ELEMENTOS DO DOM
@@ -209,9 +225,8 @@ form.addEventListener('submit', async (e) => {
             }
 
             // 📱 APK: Salva device token no SharedPreferences nativo (Capacitor)
-            await salvarDeviceTokenCapacitor(data.access);
+            await redirecionarPorPerfil(data.access);
 
-            window.location.href = '/app/';
         }
 
         // ETAPA 3 — PRIMEIRO ACESSO (CRIAÇÃO DE SENHA)
