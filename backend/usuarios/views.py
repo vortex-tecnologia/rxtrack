@@ -64,8 +64,8 @@ class AtualizarFcmTokenView(APIView):
         # 2. Tenta por DeviceToken (Nativo APK)
         if not motorista and device_token:
             try:
-                device = DeviceToken.objects.select_related('user__motorista_perfil').get(token=device_token, ativo=True)
-                motorista = getattr(device.user, 'motorista_perfil', None)
+                device = DeviceToken.objects.select_related('user').get(token=device_token, ativo=True)
+                motorista = getattr(device.user, 'motorista_perfil', None) or Motorista.objects.filter(user=device.user).first()
             except DeviceToken.DoesNotExist:
                 pass
 
