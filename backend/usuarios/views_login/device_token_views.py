@@ -90,11 +90,23 @@ def auto_login_device(request):
             logger.error(f"[Auto-Login] Erro ao salvar FCM Token para motorista: {e}")
 
     # Cria sessão Django para o usuário (seta cookie sessionid)
-    login(request, device.user)
-    logger.info(f"[Auto-Login] Sessão criada para {device.user.username} via device token.")
-    
-    # Redireciona para o app do motorista
-    return redirect('/app/')
+    # Redireciona de acordo com o perfil/função do usuário
+    user = device.user
+    motorista = resolver_motorista(user)
+
+    if motorista:
+        tipo = getattr(motorista, 'tipo_usuario', 'MOTORISTA')
+        if tipo == 'SAC' and getattr(motorista, 'is_sac_mobile', False):
+            return redirect('/app-sac/')
+        elif tipo in ['OPERACIONAL', 'SAC'] or user.is_staff or user.is_superuser:
+            return redirect('/dashboard/')
+        else:
+            return redirect('/app/')
+    elif user.is_staff or user.is_superuser:
+        return redirect('/dashboard/')
+    else:
+        return redirect('/app/')
+
 
 
 @api_view(['POST'])

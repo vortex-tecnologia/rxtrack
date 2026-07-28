@@ -21,9 +21,20 @@ def login_view(request):
 
 
 # Rota para a tela principal do PWA (Requer autenticação)
-#@login_required 
 def app_view(request):
+    if request.user.is_authenticated:
+        motorista = getattr(request.user, 'motorista_perfil', None)
+        if motorista:
+            tipo = getattr(motorista, 'tipo_usuario', 'MOTORISTA')
+            if tipo == 'SAC' and getattr(motorista, 'is_sac_mobile', False):
+                return redirect('/app-sac/')
+            elif tipo in ['OPERACIONAL', 'SAC'] or request.user.is_staff or request.user.is_superuser:
+                return redirect('/dashboard/')
+        elif request.user.is_staff or request.user.is_superuser:
+            return redirect('/dashboard/')
+
     # Ocorrências de sucesso (Entrega)
+
     sucesso = Ocorrencia.objects.filter(codigo_tms__in=['1', '2']).order_by('codigo_tms')
     
     # Ocorrências de problema (Não Entrega) - Excluímos a 1 e 2 e filtramos por is_entrega=True
