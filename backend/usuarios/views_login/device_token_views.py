@@ -23,19 +23,18 @@ logger = logging.getLogger(__name__)
 def auto_login_device(request):
     """
     Rota chamada pelo index.html do APK ao abrir o app.
-    Recebe o device_token como query param, valida e cria sessão Django.
+    Recebe o device_token (e opcionalmente o fcm_token) como query param, valida e cria sessão Django.
     O initAuth() do authFetch.js cuida do resto (gera JWT a partir da sessão).
-    
-    Fluxo: APK abre → lê device_token do SharedPreferences → redireciona para cá
     """
     dt = request.GET.get('dt')
+    fcm_token = request.GET.get('fcm') or request.GET.get('fcm_token')
     
     if not dt:
         logger.warning("[Auto-Login] Chamado sem device token.")
         return redirect('/login/')
     
     try:
-        device = DeviceToken.objects.select_related('user').get(token=dt, ativo=True)
+        device = DeviceToken.objects.select_related('user__motorista_perfil').get(token=dt, ativo=True)
     except DeviceToken.DoesNotExist:
         logger.warning(f"[Auto-Login] Device token inválido ou desativado: {dt[:8]}...")
         return redirect('/login/')
@@ -44,6 +43,17 @@ def auto_login_device(request):
     device.ultimo_uso = timezone.now()
     device.save(update_fields=['ultimo_uso'])
     
+    # Se o FCM Token foi passado na URL do auto-login, atualiza o motorista imediatamente
+    if fcm_token and hasattr(device.user, 'motorista_perfil'):
+        try:
+            motorista = device.user.motorista_perfil
+            motorista.fcm_token = fcm_token.strip()
+            motorista.fcm_token_atualizado_em = timezone.now()
+            motorista.save(update_fields=['fcm_token', 'fcm_token_atualizado_em'])
+            logger.info(f"[Auto-Login] FCM Token atualizado para {motorista.nome_completo} via auto-login.")
+        except Exception as e:
+            logger.error(f"[Auto-Login] Erro ao salvar FCM Token para motorista: {e}")
+
     # Cria sessão Django para o usuário (seta cookie sessionid)
     login(request, device.user)
     logger.info(f"[Auto-Login] Sessão criada para {device.user.username} via device token.")
