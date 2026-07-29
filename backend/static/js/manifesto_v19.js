@@ -1024,6 +1024,9 @@ async function salvarRegistro() {
 
     // 4. Preparação dos Dados (FormData)
     const formData = new FormData();
+    const inputTipo = document.getElementById('hidden-tipo-operacao');
+    const tipoOp = inputTipo ? inputTipo.value : '';
+
     formData.append('ocorrencia_codigo', cod);
     formData.append('chave_acesso', chaveNF);
     formData.append('numero_nota', numeroNF);
@@ -1031,6 +1034,10 @@ async function salvarRegistro() {
     formData.append('recebedor', inputRecebedor.value || '');
     formData.append('nota_retida', isRetida);
     formData.append('observacao_retida', inputObs);
+    if (tipoOp) {
+        formData.append('tipo_operacao', tipoOp);
+    }
+
 
     // 5. Captura de Coordenadas GPS
     try {
@@ -1511,7 +1518,17 @@ function abrirModalBaixa(numeroNota, chaveAcesso, tipo) {
     inputChave.value = (chaveAcesso && chaveAcesso !== 'null') ? chaveAcesso : '';
     if (inputNumero) inputNumero.value = numeroNota || '';
 
+    let inputTipo = document.getElementById('hidden-tipo-operacao');
+    if (!inputTipo) {
+        inputTipo = document.createElement('input');
+        inputTipo.type = 'hidden';
+        inputTipo.id = 'hidden-tipo-operacao';
+        document.body.appendChild(inputTipo);
+    }
+    inputTipo.value = (tipo || '').toUpperCase();
+
     document.getElementById('placeholder-camera').style.display = 'block';
+
 
     // Reset dos campos de Nota Retida
     if (checkRetida) {

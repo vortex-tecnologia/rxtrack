@@ -150,6 +150,14 @@ class RegistrarBaixaView(APIView):
                         id_err = nota_id or chave_acesso or numero_nota or nota_id_tms
                         raise NotaFiscal.DoesNotExist(f"Documento {id_err} não localizado.")
 
+                # Atualiza tipo_operacao na nota se informado pelo App
+                if tipo_operacao and str(tipo_operacao).strip().upper() in ['DESPACHO', 'TRANSFERENCIA', 'COLETA', 'ENTREGA']:
+                    tipo_upper = str(tipo_operacao).strip().upper()
+                    if nf.tipo_operacao != tipo_upper:
+                        nf.tipo_operacao = tipo_upper
+                        nf.save(update_fields=['tipo_operacao'])
+
+
 
 
                 # 1. Tenta buscar primeiro pelo mapeamento de referência do App
