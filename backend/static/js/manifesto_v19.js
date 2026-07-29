@@ -1525,9 +1525,46 @@ function abrirModalBaixa(numeroNota, chaveAcesso, tipo) {
         inputTipo.id = 'hidden-tipo-operacao';
         document.body.appendChild(inputTipo);
     }
-    inputTipo.value = (tipo || '').toUpperCase();
+    const tipoUpper = (tipo || '').toUpperCase();
+    inputTipo.value = tipoUpper;
+
+    // --- FILTRO INTELIGENTE DE OCORRÊNCIAS (DESPACHO vs ENTREGA) ---
+    const isDespachoType = tipoUpper.includes('DESPACHO');
+    if (selectOc) {
+        Array.from(selectOc.options).forEach(opt => {
+            const val = opt.value;
+            if (isDespachoType) {
+                // Em Despacho, NUNCA permite ocorrências 001 ou 002 (Entrega Final)
+                if (val === '1' || val === '01' || val === '001' || val === '2' || val === '02' || val === '002') {
+                    opt.style.display = 'none';
+                    opt.disabled = true;
+                } else {
+                    opt.style.display = '';
+                    opt.disabled = false;
+                }
+            } else {
+                opt.style.display = '';
+                opt.disabled = false;
+            }
+        });
+
+        // Para Despacho, pré-seleciona a ocorrência 050 (Carga Despachada)
+        if (isDespachoType) {
+            const opt50 = Array.from(selectOc.options).find(o => (o.value === '50' || o.value === '050') && !o.disabled);
+            if (opt50) {
+                selectOc.value = opt50.value;
+            } else {
+                const firstValid = Array.from(selectOc.options).find(o => !o.disabled);
+                if (firstValid) selectOc.value = firstValid.value;
+            }
+        } else {
+            const firstValid = Array.from(selectOc.options).find(o => !o.disabled);
+            if (firstValid) selectOc.value = firstValid.value;
+        }
+    }
 
     document.getElementById('placeholder-camera').style.display = 'block';
+
 
 
     // Reset dos campos de Nota Retida
