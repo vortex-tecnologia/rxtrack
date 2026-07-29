@@ -234,17 +234,20 @@ async function sincronizarBaixasPendentes() {
                 if (response.ok) {
                     const delTrans = db.transaction('baixas_pendentes', 'readwrite');
                     await delTrans.objectStore('baixas_pendentes').delete(item.id);
-                    console.log(`✅ Nota ${item.numeroNF} sincronizada!`);
+                    console.log(`✅ Nota ${item.numeroNF || item.chaveNF} sincronizada com sucesso!`);
                     await atualizarIconeNuvem();
                 }
-                else if (response.status === 400) {
-                    console.error(`❌ Erro 400 na nota ${item.numeroNF}: Dados rejeitados pelo servidor.`);
+                else if (response.status === 400 || response.status === 404) {
+                    const dataErr = await response.json().catch(() => ({}));
+                    console.error(`❌ Erro ${response.status} na nota ${item.numeroNF || item.chaveNF}: ${dataErr.erro || 'Documento rejeitado ou não localizado'}. Removendo da fila offline.`);
                     const delTrans = db.transaction('baixas_pendentes', 'readwrite');
                     await delTrans.objectStore('baixas_pendentes').delete(item.id);
+                    await atualizarIconeNuvem();
                 }
                 else {
-                    console.warn(`⚠️ Servidor respondeu ${response.status} para nota ${item.numeroNF}. Mantendo na fila.`);
+                    console.warn(`⚠️ Servidor respondeu ${response.status} para nota ${item.numeroNF || item.chaveNF}. Mantendo na fila.`);
                 }
+
             } catch (err) {
                 console.warn("📡 Falha de rede durante a sincronização. Parando ciclo.");
                 break;

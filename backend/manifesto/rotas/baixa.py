@@ -55,9 +55,23 @@ class RegistrarBaixaView(APIView):
         tipo_operacao = request.data.get('tipo_operacao')
         nota_id_tms = request.data.get('nota_id_tms')
 
+        # Saneamento de entradas nulas / "None" / "null"
+        def limpar_param(val):
+            if not val:
+                return None
+            val_str = str(val).strip()
+            if val_str.lower() in ["null", "none", "undefined", ""]:
+                return None
+            return val_str
+
+        chave_acesso = limpar_param(chave_acesso)
+        numero_nota = limpar_param(numero_nota)
+        numero_mft = limpar_param(numero_mft)
+        nota_id_tms = limpar_param(nota_id_tms)
+
         # LOG DE DEBUG NO BACKEND
         print(f"--- REGISTRAR BAIXA ---")
-        print(f"Tipo: {tipo_operacao}, Nota/Coleta: {numero_nota or nota_id_tms}, Mft: {numero_mft}")
+        print(f"Tipo: {tipo_operacao}, Chave: {chave_acesso}, Nota/Coleta: {numero_nota or nota_id_tms}, Mft: {numero_mft}")
         
         # --- DADOS PADRÃO ---
         is_retida = request.data.get('nota_retida') == 'true'
@@ -73,10 +87,12 @@ class RegistrarBaixaView(APIView):
                     filtros['id'] = nota_id
                 elif nota_id_tms:
                     filtros['freight_id_tms'] = nota_id_tms
-                elif chave_acesso and chave_acesso != "null" and chave_acesso != "":
+                elif chave_acesso:
                     filtros['chave_acesso'] = chave_acesso
-                else:
-                    filtros['numero_nota'] = numero_nota
+                elif numero_nota:
+                    num_clean = numero_nota.lstrip('0')
+                    num_opcoes = [numero_nota, num_clean] if num_clean else [numero_nota]
+                    filtros['numero_nota__in'] = num_opcoes
 
                 # Vincula ao manifesto correto (Só aplica filtros de segurança se NÃO for via ID direto)
                 if not nota_id:
@@ -93,16 +109,48 @@ class RegistrarBaixaView(APIView):
                     print(f"Buscando Coleta: {id_coleta} no manifesto {numero_mft}")
                     
                     query_coleta = (Q(numero_coleta=id_coleta) | Q(numero_nota=id_coleta) | Q(freight_id_tms=id_coleta))
-                    nf = NotaFiscal.objects.filter(
-                        query_coleta,
-                        tipo_operacao='COLETA',
-                        manifesto__numero_manifesto=str(numero_mft)
-                    ).first()
+                    if numero_mft:
+                        nf = NotaFiscal.objects.filter(
+                            query_coleta,
+                            tipo_operacao='COLETA',
+                            manifesto__numero_manifesto=str(numero_mft)
+                        ).first()
+                    else:
+                        nf = NotaFiscal.objects.filter(
+                            query_coleta,
+                            tipo_operacao='COLETA',
+                            manifesto__motorista__user=request.user
+                        ).first()
                     
                     if not nf:
                         raise NotaFiscal.DoesNotExist(f"Coleta {id_coleta} não encontrada.")
                 else:
-                    nf = NotaFiscal.objects.get(**filtros)
+                    nf = NotaFiscal.objects.filter(**filtros).first()
+
+                    # Fallback flexível: Se não achou com filtro estrito, busca por chave, número limpo ou ID TMS
+                    if not nf:
+                        query_flex = Q()
+                        if chave_acesso:
+                            query_flex |= Q(chave_acesso=chave_acesso)
+                        if numero_nota:
+                            num_clean = numero_nota.lstrip('0')
+                            query_flex |= Q(numero_nota=numero_nota) | Q(numero_nota=num_clean) | Q(numero_coleta=numero_nota)
+                        if nota_id_tms:
+                            query_flex |= Q(freight_id_tms=nota_id_tms)
+                        
+                        if query_flex:
+                            if numero_mft:
+                                nf = NotaFiscal.objects.filter(query_flex, manifesto__numero_manifesto=str(numero_mft)).first()
+                            if not nf:
+                                nf = NotaFiscal.objects.filter(query_flex, manifesto__motorista__user=request.user).first()
+                            if not nf:
+                                nf = NotaFiscal.objects.filter(query_flex).first()
+
+                    if not nf:
+                        id_err = nota_id or chave_acesso or numero_nota or nota_id_tms
+                        raise NotaFiscal.DoesNotExist(f"Documento {id_err} não localizado.")
+
+
 
                 # 1. Tenta buscar primeiro pelo mapeamento de referência do App
                 ocorrencia = Ocorrencia.objects.filter(codigo_referencia=codigo_tms).first()
