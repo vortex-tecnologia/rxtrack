@@ -703,16 +703,21 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
             nf = baixa.nota_fiscal
             
-            # --- SE FOR DESPACHO OU MODAL AÉREO, USA ENDPOINT DE FRETE (/api/v1/freights/{id}/invoice_occurrences) ---
+            # --- SE O TIPO DE OPERAÇÃO DA NF-E FOR DESPACHO, USA BAIXA PELO FRETE ---
+            tipo_op = str(nf.tipo_operacao or '').strip().upper()
+            if 'DESPACHO' in tipo_op or tipo_op == 'DESPACHO':
+                logger.info(f"🚀 NF {nf.numero_nota} tem tipo_operacao='{nf.tipo_operacao}'. Redirecionando para enviar_baixa_minuta (Frete ESL V1)")
+                return self.enviar_baixa_minuta(baixa_id, task=task)
+            
+            # Também verifica se o manifesto ou frete é Despacho/Aéreo
             is_despacho_ou_aereo = (
-                (nf.tipo_operacao and str(nf.tipo_operacao).upper() == 'DESPACHO') or
                 (nf.manifesto and (getattr(nf.manifesto, 'tipo_manifesto', '') == 'DESPACHO' or (getattr(nf.manifesto, 'qtd_despacho', 0) and nf.manifesto.qtd_despacho > 0))) or
                 (nf.frete and (getattr(nf.frete, 'tipo_manifesto', '') == 'DESPACHO' or (nf.frete.modal and str(nf.frete.modal).lower() in ['air', 'aereo', 'aéreo', 'aérea', 'aerea'])))
             )
-
             if is_despacho_ou_aereo:
-                logger.info(f"Redirecionando baixa {baixa_id} (Tipo: {nf.tipo_operacao}, Manifesto Qtd Despacho: {getattr(nf.manifesto, 'qtd_despacho', 0)}) para enviar_baixa_minuta (Endpoint de Frete ESL)")
+                logger.info(f"🚀 Manifesto/Frete é Despacho/Aéreo. Redirecionando para enviar_baixa_minuta (Frete ESL V1)")
                 return self.enviar_baixa_minuta(baixa_id, task=task)
+
 
 
 
