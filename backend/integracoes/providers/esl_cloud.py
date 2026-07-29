@@ -703,14 +703,16 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
             nf = baixa.nota_fiscal
             
-            # --- SE FOR MODAL AÉREO, REDIRECIONA PARA BAIXA POR FRETE/MINUTA ---
-            is_aereo = False
-            if nf.frete and nf.frete.modal:
-                is_aereo = nf.frete.modal.lower() in ['air', 'aereo', 'aéreo', 'aérea', 'aerea']
-                
-            if is_aereo:
-                logger.info(f"Redirecionando baixa {baixa_id} (Aéreo) para enviar_baixa_minuta")
+            # --- SE FOR DESPACHO, TRANSFERÊNCIA OU MODAL AÉREO, USA ENDPOINT DE FRETE (/api/v1/freights/{id}/invoice_occurrences) ---
+            is_despacho_ou_aereo = (
+                (nf.tipo_operacao and str(nf.tipo_operacao).upper() in ['DESPACHO', 'TRANSFERENCIA']) or
+                (nf.frete and (getattr(nf.frete, 'tipo_manifesto', '') == 'DESPACHO' or (nf.frete.modal and str(nf.frete.modal).lower() in ['air', 'aereo', 'aéreo', 'aérea', 'aerea'])))
+            )
+
+            if is_despacho_ou_aereo:
+                logger.info(f"Redirecionando baixa {baixa_id} (Tipo: {nf.tipo_operacao}) para enviar_baixa_minuta (Endpoint de Frete ESL)")
                 return self.enviar_baixa_minuta(baixa_id, task=task)
+
 
             if not nf.chave_acesso:
                 # Coletas usam endpoint próprio (/api/v1/picks/) e não precisam de freight_id
