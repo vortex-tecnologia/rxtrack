@@ -917,14 +917,16 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 logger.error(f"Erro auto-resolucao: {e}")
                 
             try:
-                if nf.frete and nf.frete.modal in ['air', 'road']:
+                # Só executa fechamento automático de CT-e se for ENTREGA FINAL (1 ou 2) e NÃO for Despacho
+                if codigo_ocorrencia in [1, 2] and not is_despacho_ou_aereo and nf.frete and nf.frete.modal in ['air', 'road']:
                     notas_pendentes = nf.frete.notas.filter(
                         manifesto=manifesto, 
                         status__in=['PENDENTE', 'AGUARDANDO']
                     ).exclude(id=nf.id).count()
                     
                     if notas_pendentes == 0:
-                        logger.info(f"Todas as NF-es do Frete {nf.frete.freight_id_tms} no Manifesto {manifesto.numero_manifesto} foram baixadas. Fechando o CT-e.")
+                        logger.info(f"Todas as NF-es do Frete {nf.frete.freight_id_tms} no Manifesto {manifesto.numero_manifesto} foram entregues. Fechando o CT-e.")
+
                         url_frete = f"https://{self.config.dominio_esl}/api/v1/freights/{nf.frete.freight_id_tms}/invoice_occurrences"
                         payload_frete = {
                             "invoice_occurrence": {
