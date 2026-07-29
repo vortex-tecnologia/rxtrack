@@ -253,7 +253,11 @@ class RegistrarBaixaView(APIView):
                 else:
                     # Demais ocorrências: Fluxo direto para o TMS (se ativo)
                     if config.enviar_tms:
-                        if nf.chave_acesso:
+                        # DESPACHO sempre usa endpoint de Frete, mesmo com chave de acesso
+                        if nf.tipo_operacao and str(nf.tipo_operacao).upper() == 'DESPACHO':
+                            enviar_baixa_minuta_task.delay(baixa.id)
+                            msg_log = "Despacho agendado para TMS (Frete Endpoint)."
+                        elif nf.chave_acesso:
                             enviar_baixa_esl_task.delay(baixa.id)
                             msg_log = "NF-e agendada para TMS."
                         else:
@@ -369,7 +373,9 @@ class RegistrarBaixaOperacionalView(APIView):
                     # 4. FILA COM DELAY (Countdown para não sobrecarregar o TMS)
                     # O segredo: contador * 2 segundos entre cada nota
                     delay = contador * 2
-                    if nf.chave_acesso:
+                    if nf.tipo_operacao and str(nf.tipo_operacao).upper() == 'DESPACHO':
+                        enviar_baixa_minuta_task.apply_async(args=[baixa.id], countdown=delay)
+                    elif nf.chave_acesso:
                         enviar_baixa_esl_task.apply_async(args=[baixa.id], countdown=delay)
                     else:
                         enviar_baixa_minuta_task.apply_async(args=[baixa.id], countdown=delay)

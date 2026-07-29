@@ -161,6 +161,8 @@ def sincronizar_nota_tms_view(request, nota_id):
         if nota.tipo_operacao == 'COLETA':
             from manifesto.tasks import enviar_coleta_esl_task
             enviar_coleta_esl_task.delay(baixa.id)
+        elif nota.tipo_operacao and str(nota.tipo_operacao).upper() == 'DESPACHO':
+            enviar_baixa_minuta_task.delay(baixa.id)
         elif nota.chave_acesso:
             enviar_baixa_esl_task.delay(baixa.id)
         else:

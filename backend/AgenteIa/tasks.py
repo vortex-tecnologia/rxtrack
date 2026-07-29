@@ -165,9 +165,13 @@ def finalizar_fluxo_tms(baixa):
         print(f"TMS: Envio DESLIGADO nas configurações. Baixa {baixa.id} salva apenas localmente.")
         return
     
-    if baixa.nota_fiscal and baixa.nota_fiscal.chave_acesso:
-        enviar_baixa_esl_task.apply_async(args=[baixa.id], countdown=2)
-        print(f"TMS: Fluxo de baixa de NF-e {baixa.nota_fiscal.chave_acesso} despachado.")
-    elif baixa.nota_fiscal:
+    nf = baixa.nota_fiscal
+    if nf and nf.tipo_operacao and str(nf.tipo_operacao).upper() == 'DESPACHO':
         enviar_baixa_minuta_task.apply_async(args=[baixa.id], countdown=2)
-        print(f"TMS: Fluxo de baixa de Minuta {baixa.nota_fiscal.numero_nota} despachado.")
+        print(f"TMS: Despacho {nf.numero_nota} despachado para Frete Endpoint.")
+    elif nf and nf.chave_acesso:
+        enviar_baixa_esl_task.apply_async(args=[baixa.id], countdown=2)
+        print(f"TMS: Fluxo de baixa de NF-e {nf.chave_acesso} despachado.")
+    elif nf:
+        enviar_baixa_minuta_task.apply_async(args=[baixa.id], countdown=2)
+        print(f"TMS: Fluxo de baixa de Minuta {nf.numero_nota} despachado.")

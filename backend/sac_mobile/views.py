@@ -627,7 +627,9 @@ def api_registrar_baixa_auditoria_sac(request):
             from configuracao.utils import get_config
             config = get_config()
             if config.enviar_tms:
-                if nf.chave_acesso:
+                if nf.tipo_operacao and str(nf.tipo_operacao).upper() == 'DESPACHO':
+                    enviar_baixa_minuta_task.delay(baixa.id)
+                elif nf.chave_acesso:
                     enviar_baixa_esl_task.delay(baixa.id)
                 else:
                     enviar_baixa_minuta_task.delay(baixa.id)
