@@ -733,19 +733,21 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
             nf = baixa.nota_fiscal
             
-            # --- SE O TIPO DE OPERAÇÃO DA NF-E FOR DESPACHO, USA BAIXA PELO FRETE ---
+            # --- DESPACHO SEM CHAVE: Usa endpoint de Frete (Minuta) ---
+            # REGRA: Se tem chave_acesso, SEMPRE usa o endpoint de NF-e (normal).
+            # O endpoint de Frete/Minuta só é usado quando NÃO há chave de acesso.
             tipo_op = str(nf.tipo_operacao or '').strip().upper()
-            if 'DESPACHO' in tipo_op or tipo_op == 'DESPACHO':
-                logger.info(f"🚀 NF {nf.numero_nota} tem tipo_operacao='{nf.tipo_operacao}'. Redirecionando para enviar_baixa_minuta (Frete ESL V1)")
+            if ('DESPACHO' in tipo_op or tipo_op == 'DESPACHO') and not nf.chave_acesso:
+                logger.info(f"🚀 NF {nf.numero_nota} é DESPACHO sem chave. Redirecionando para enviar_baixa_minuta (Frete ESL V1)")
                 return self.enviar_baixa_minuta(baixa_id, task=task)
             
-            # Também verifica se o manifesto ou frete é Despacho/Aéreo
+            # Também verifica se o manifesto ou frete é Despacho/Aéreo (só redireciona se SEM chave)
             is_despacho_ou_aereo = (
                 (nf.manifesto and (getattr(nf.manifesto, 'tipo_manifesto', '') == 'DESPACHO' or (getattr(nf.manifesto, 'qtd_despacho', 0) and nf.manifesto.qtd_despacho > 0))) or
                 (nf.frete and (getattr(nf.frete, 'tipo_manifesto', '') == 'DESPACHO' or (nf.frete.modal and str(nf.frete.modal).lower() in ['air', 'aereo', 'aéreo', 'aérea', 'aerea'])))
             )
-            if is_despacho_ou_aereo:
-                logger.info(f"🚀 Manifesto/Frete é Despacho/Aéreo. Redirecionando para enviar_baixa_minuta (Frete ESL V1)")
+            if is_despacho_ou_aereo and not nf.chave_acesso:
+                logger.info(f"🚀 Manifesto/Frete é Despacho/Aéreo sem chave. Redirecionando para enviar_baixa_minuta (Frete ESL V1)")
                 return self.enviar_baixa_minuta(baixa_id, task=task)
 
 

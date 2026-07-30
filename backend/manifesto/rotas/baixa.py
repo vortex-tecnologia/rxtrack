@@ -270,16 +270,14 @@ class RegistrarBaixaView(APIView):
                 else:
                     # Demais ocorrências: Fluxo direto para o TMS (se ativo)
                     if config.enviar_tms:
-                        # DESPACHO sempre usa endpoint de Frete, mesmo com chave de acesso
-                        if nf.tipo_operacao and str(nf.tipo_operacao).upper() == 'DESPACHO':
-                            enviar_baixa_minuta_task.delay(baixa.id)
-                            msg_log = "Despacho agendado para TMS (Frete Endpoint)."
-                        elif nf.chave_acesso:
+                        # REGRA: Se tem chave_acesso → endpoint NF-e, senão → endpoint Frete/Minuta
+                        # DESPACHO com chave vai pelo endpoint NF-e normal (cada nota individualmente)
+                        if nf.chave_acesso:
                             enviar_baixa_esl_task.delay(baixa.id)
                             msg_log = "NF-e agendada para TMS."
                         else:
                             enviar_baixa_minuta_task.delay(baixa.id)
-                            msg_log = "Minuta agendada para TMS."
+                            msg_log = "Minuta agendada para TMS (Frete Endpoint)."
                     else:
                         msg_log = "Baixa salva localmente (TMS desligado nas configurações)."
                 
@@ -390,9 +388,8 @@ class RegistrarBaixaOperacionalView(APIView):
                     # 4. FILA COM DELAY (Countdown para não sobrecarregar o TMS)
                     # O segredo: contador * 2 segundos entre cada nota
                     delay = contador * 2
-                    if nf.tipo_operacao and str(nf.tipo_operacao).upper() == 'DESPACHO':
-                        enviar_baixa_minuta_task.apply_async(args=[baixa.id], countdown=delay)
-                    elif nf.chave_acesso:
+                    # REGRA: Se tem chave_acesso → endpoint NF-e, senão → endpoint Frete/Minuta
+                    if nf.chave_acesso:
                         enviar_baixa_esl_task.apply_async(args=[baixa.id], countdown=delay)
                     else:
                         enviar_baixa_minuta_task.apply_async(args=[baixa.id], countdown=delay)
