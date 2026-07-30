@@ -38,15 +38,31 @@ def limpar_codigo_ocorrencia(codigo):
 # Códigos que FECHAM notas na ESL (Entrega/Coleta com sucesso)
 CODIGOS_ENTREGA_FINAL = [1, 2]
 
-def obter_codigo_ocorrencia_seguro(codigo_tms_val, tipo_operacao):
+def obter_codigo_ocorrencia_seguro(codigo_tms_val, tipo_operacao=None, nota_fiscal=None):
     """
-    Retorna o código de ocorrência correto baseado no tipo de operação.
+    Retorna o código de ocorrência correto baseado no tipo de operação e contexto da nota/manifesto/frete.
     Para DESPACHO: NUNCA retorna 1 ou 2 (que fecham a nota). Default é 50.
     Para outros tipos: Comportamento normal com default 1.
     """
     tipo_op = str(tipo_operacao or '').strip().upper()
-    is_despacho = 'DESPACHO' in tipo_op
+    if not tipo_op and nota_fiscal:
+        tipo_op = str(nota_fiscal.tipo_operacao or '').strip().upper()
     
+    is_despacho = 'DESPACHO' in tipo_op
+
+    # Checa contexto de despacho no manifesto ou frete
+    if not is_despacho and nota_fiscal:
+        mft = getattr(nota_fiscal, 'manifesto', None)
+        if mft:
+            is_despacho = (getattr(mft, 'tipo_manifesto', '') == 'DESPACHO' or 
+                          (getattr(mft, 'qtd_despacho', 0) and mft.qtd_despacho > 0))
+        
+        if not is_despacho:
+            frt = getattr(nota_fiscal, 'frete', None)
+            if frt:
+                is_despacho = (getattr(frt, 'tipo_manifesto', '') == 'DESPACHO' or 
+                              (frt.modal and str(frt.modal).lower() in ['air', 'aereo', 'aéreo', 'aérea', 'aerea']))
+
     if codigo_tms_val:
         codigo = limpar_codigo_ocorrencia(codigo_tms_val)
     else:
@@ -57,7 +73,7 @@ def obter_codigo_ocorrencia_seguro(codigo_tms_val, tipo_operacao):
     if is_despacho and codigo in CODIGOS_ENTREGA_FINAL:
         logger.error(
             f"🚨 BLOQUEADO: Tentativa de enviar código {codigo} (Entrega Final) "
-            f"para nota com tipo_operacao='{tipo_operacao}'. "
+            f"para nota em contexto de DESPACHO (NF: {getattr(nota_fiscal, 'numero_nota', 'N/A')}). "
             f"Código original do TMS: '{codigo_tms_val}'. Usando 50 (Carga Despachada) como proteção."
         )
         codigo = 50
@@ -429,7 +445,17 @@ class ESLCloudAdapter(BaseTMSAdapter):
             start_cursor = None
             notas_unicas_dict = {} 
             
-            GATILHOS = {'122': 'TRANSFERENCIA', '119': 'DESPACHO', '120': 'ENTREGA', '121': 'RETIRADA'}
+            GATILHOS = {
+                '122': 'TRANSFERENCIA', 
+                '119': 'DESPACHO', 
+                '114': 'DESPACHO', 
+                '50': 'DESPACHO', 
+                '050': 'DESPACHO', 
+                '55': 'DESPACHO', 
+                '055': 'DESPACHO', 
+                '120': 'ENTREGA', 
+                '121': 'RETIRADA'
+            }
 
             while True:
                 if start_cursor: params_notas["start"] = start_cursor
@@ -767,7 +793,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             url_foto = baixa.comprovante_foto_url or ""
             
             codigo_tms_val = (baixa.ocorrencia.codigo_tms or baixa.ocorrencia.codigo_referencia) if baixa.ocorrencia else None
-            codigo_ocorrencia = obter_codigo_ocorrencia_seguro(codigo_tms_val, nf.tipo_operacao)
+            codigo_ocorrencia = obter_codigo_ocorrencia_seguro(codigo_tms_val, tipo_operacao=nf.tipo_operacao, nota_fiscal=nf)
 
             tms_manifest_id = manifesto.numero_manifesto 
             
@@ -1130,7 +1156,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             
             codigo_tms_val = (baixa.ocorrencia.codigo_tms or baixa.ocorrencia.codigo_referencia) if baixa.ocorrencia else None
             tipo_op_nf = str(nf.tipo_operacao or '').strip().upper()
-            codigo_ocorrencia = obter_codigo_ocorrencia_seguro(codigo_tms_val, nf.tipo_operacao)
+            codigo_ocorrencia = obter_codigo_ocorrencia_seguro(codigo_tms_val, tipo_operacao=nf.tipo_operacao, nota_fiscal=nf)
             
             logger.info(f"Minuta {nf.numero_nota}: tipo_operacao='{tipo_op_nf}', codigo_tms_val='{codigo_tms_val}', codigo_final={codigo_ocorrencia}")
             

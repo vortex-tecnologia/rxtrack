@@ -150,12 +150,18 @@ class RegistrarBaixaView(APIView):
                         id_err = nota_id or chave_acesso or numero_nota or nota_id_tms
                         raise NotaFiscal.DoesNotExist(f"Documento {id_err} não localizado.")
 
-                # Atualiza tipo_operacao na nota se informado pelo App
+                # Atualiza tipo_operacao na nota se informado pelo App ou pelo contexto de Despacho/Aéreo
+                is_mft_despacho = (nf.manifesto and (getattr(nf.manifesto, 'tipo_manifesto', '') == 'DESPACHO' or (getattr(nf.manifesto, 'qtd_despacho', 0) and nf.manifesto.qtd_despacho > 0)))
+                is_frt_despacho = (nf.frete and (getattr(nf.frete, 'tipo_manifesto', '') == 'DESPACHO' or (nf.frete.modal and str(nf.frete.modal).lower() in ['air', 'aereo', 'aéreo', 'aérea', 'aerea'])))
+                
                 if tipo_operacao and str(tipo_operacao).strip().upper() in ['DESPACHO', 'TRANSFERENCIA', 'COLETA', 'ENTREGA']:
                     tipo_upper = str(tipo_operacao).strip().upper()
                     if nf.tipo_operacao != tipo_upper:
                         nf.tipo_operacao = tipo_upper
                         nf.save(update_fields=['tipo_operacao'])
+                elif (is_mft_despacho or is_frt_despacho) and nf.tipo_operacao != 'DESPACHO':
+                    nf.tipo_operacao = 'DESPACHO'
+                    nf.save(update_fields=['tipo_operacao'])
 
 
 
