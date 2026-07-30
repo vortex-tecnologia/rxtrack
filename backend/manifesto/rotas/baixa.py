@@ -181,6 +181,23 @@ class RegistrarBaixaView(APIView):
                         else:
                             raise
 
+                # --- PROTEÇÃO CRÍTICA: DESPACHO NUNCA PODE TER CÓDIGO 01 ou 02 ---
+                tipo_op_atual = str(nf.tipo_operacao or '').strip().upper()
+                if 'DESPACHO' in tipo_op_atual:
+                    cod_ref = str(ocorrencia.codigo_tms or ocorrencia.codigo_referencia or '').strip()
+                    cod_int = None
+                    try:
+                        cod_int = int(cod_ref)
+                    except (ValueError, TypeError):
+                        pass
+                    
+                    if cod_int in [1, 2]:
+                        print(f"🚨 BLOQUEADO: Tentativa de registrar código {cod_ref} (Entrega) em nota DESPACHO {nf.numero_nota}")
+                        return Response({
+                            'erro': f'Código de ocorrência {cod_ref} (Entrega/Coleta) não é permitido para notas do tipo DESPACHO. '
+                                    f'Selecione uma ocorrência válida para despacho (ex: 050, 055).'
+                        }, status=400)
+
                 # --- LÓGICA DE UPLOAD (SÓ SE NÃO FOR NOTA RETIDA) ---
                 url_final_foto = None
                 if not is_retida and foto_arquivo:

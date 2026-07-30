@@ -35,6 +35,36 @@ def limpar_codigo_ocorrencia(codigo):
             return 1
 
 
+# Códigos que FECHAM notas na ESL (Entrega/Coleta com sucesso)
+CODIGOS_ENTREGA_FINAL = [1, 2]
+
+def obter_codigo_ocorrencia_seguro(codigo_tms_val, tipo_operacao):
+    """
+    Retorna o código de ocorrência correto baseado no tipo de operação.
+    Para DESPACHO: NUNCA retorna 1 ou 2 (que fecham a nota). Default é 50.
+    Para outros tipos: Comportamento normal com default 1.
+    """
+    tipo_op = str(tipo_operacao or '').strip().upper()
+    is_despacho = 'DESPACHO' in tipo_op
+    
+    if codigo_tms_val:
+        codigo = limpar_codigo_ocorrencia(codigo_tms_val)
+    else:
+        # Default baseado no tipo de operação
+        codigo = 50 if is_despacho else 1
+    
+    # PROTEÇÃO CRÍTICA: Nunca permite código de entrega final para DESPACHO
+    if is_despacho and codigo in CODIGOS_ENTREGA_FINAL:
+        logger.error(
+            f"🚨 BLOQUEADO: Tentativa de enviar código {codigo} (Entrega Final) "
+            f"para nota com tipo_operacao='{tipo_operacao}'. "
+            f"Código original do TMS: '{codigo_tms_val}'. Usando 50 (Carga Despachada) como proteção."
+        )
+        codigo = 50
+    
+    return codigo
+
+
 
 class ESLCloudAdapter(BaseTMSAdapter):
     """Implementação para o TMS ESL Cloud."""
@@ -735,7 +765,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             url_foto = baixa.comprovante_foto_url or ""
             
             codigo_tms_val = (baixa.ocorrencia.codigo_tms or baixa.ocorrencia.codigo_referencia) if baixa.ocorrencia else None
-            codigo_ocorrencia = limpar_codigo_ocorrencia(codigo_tms_val) if codigo_tms_val else 1
+            codigo_ocorrencia = obter_codigo_ocorrencia_seguro(codigo_tms_val, nf.tipo_operacao)
 
             tms_manifest_id = manifesto.numero_manifesto 
             
@@ -1097,7 +1127,10 @@ class ESLCloudAdapter(BaseTMSAdapter):
             manifesto = nf.manifesto
             
             codigo_tms_val = (baixa.ocorrencia.codigo_tms or baixa.ocorrencia.codigo_referencia) if baixa.ocorrencia else None
-            codigo_ocorrencia = limpar_codigo_ocorrencia(codigo_tms_val) if codigo_tms_val else 1
+            tipo_op_nf = str(nf.tipo_operacao or '').strip().upper()
+            codigo_ocorrencia = obter_codigo_ocorrencia_seguro(codigo_tms_val, nf.tipo_operacao)
+            
+            logger.info(f"Minuta {nf.numero_nota}: tipo_operacao='{tipo_op_nf}', codigo_tms_val='{codigo_tms_val}', codigo_final={codigo_ocorrencia}")
             
             fuso_br = pytz.timezone('America/Sao_Paulo')
             data_ocorrencia_str = baixa.data_baixa.astimezone(fuso_br).strftime('%Y-%m-%dT%H:%M:%S.000-03:00')
@@ -1187,7 +1220,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
             response = requests.post(URL_ESL_FRETE, json=payload, headers=headers, timeout=30)
             
             # Se falhar com 422 (Unprocessable Entity), verifica se o erro é de ocorrência inválida/em branco
-            # e tenta novamente com o código padrão 1 (sucesso de entrega)
+            # REGRA CRÍTICA: Para notas DESPACHO, NUNCA faz fallback para código 1 (Entrega Final).
+            # O sistema deve FALHAR e registrar erro ao invés de trocar silenciosamente o código.
             if response.status_code == 422 and codigo_ocorrencia != 1:
                 try:
                     error_data = response.json()
@@ -1206,13 +1240,25 @@ class ESLCloudAdapter(BaseTMSAdapter):
                             is_occurrence_error = True
                             
                     if is_occurrence_error:
-                        logger.warning(
-                            f"Ocorrência {codigo_ocorrencia} rejeitada pela ESL para a Minuta {nf.numero_nota}. "
-                            "Tentando novamente com o código padrão 1 (sucesso)."
-                        )
-                        payload["invoice_occurrence"]["occurrence"]["code"] = 1
-                        logger.info(f"Payload de Fallback: {json.dumps(payload)}")
-                        response = requests.post(URL_ESL_FRETE, json=payload, headers=headers, timeout=30)
+                        is_despacho = 'DESPACHO' in tipo_op_nf
+                        
+                        if is_despacho:
+                            # DESPACHO: NUNCA faz fallback para código 1. Registra o erro e falha.
+                            logger.error(
+                                f"🚨 Ocorrência {codigo_ocorrencia} rejeitada pela ESL para Despacho {nf.numero_nota}. "
+                                f"NÃO será feito fallback para código 1. Erro ESL: {errors}"
+                            )
+                            # Não altera o código - deixa o raise_for_status() tratar o erro
+                        else:
+                            # Para OUTROS tipos (não despacho), mantém o fallback para código 1
+                            logger.warning(
+                                f"Ocorrência {codigo_ocorrencia} rejeitada pela ESL para a Minuta {nf.numero_nota}. "
+                                "Tentando novamente com o código padrão 1 (sucesso)."
+                            )
+                            payload["invoice_occurrence"]["occurrence"]["code"] = 1
+                            baixa.payload_enviado = payload
+                            logger.info(f"Payload de Fallback: {json.dumps(payload)}")
+                            response = requests.post(URL_ESL_FRETE, json=payload, headers=headers, timeout=30)
                 except Exception as ex_fallback:
                     logger.error(f"Erro ao processar fallback de ocorrência na Minuta {nf.numero_nota}: {ex_fallback}")
             

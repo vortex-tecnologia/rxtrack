@@ -1001,6 +1001,14 @@ async function salvarRegistro() {
     const temFoto = (canvas.dataset.temFoto === "true");
     const mID = manifestoAtual || localStorage.getItem('manifesto_ativo');
 
+    // --- PROTEÇÃO CRÍTICA: DESPACHO nunca pode enviar código 01 ou 02 ---
+    const inputTipoCheck = document.getElementById('hidden-tipo-operacao');
+    const tipoOpCheck = inputTipoCheck ? inputTipoCheck.value.toUpperCase() : '';
+    if (tipoOpCheck.includes('DESPACHO') && ['1', '01', '001', '2', '02', '002'].includes(cod)) {
+        alert("⚠️ ERRO: Código de Entrega (01/02) não é permitido para notas de DESPACHO. Selecione a ocorrência correta de despacho.");
+        return;
+    }
+
     // --- NOVA LÓGICA DE VALIDAÇÃO ---
     if (isRetida) {
         if (!inputObs || inputObs.trim().length < 3) {
