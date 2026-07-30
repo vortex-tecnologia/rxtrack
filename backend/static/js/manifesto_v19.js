@@ -1601,12 +1601,23 @@ function abrirModalBaixa(numeroNota, chaveAcesso, tipo) {
         cameraSection.style.display = 'none';
         cameraLabel.style.display = 'none';
         btnNovaFoto.style.display = 'none';
-        if (TEMA_OPERACAO[tipo]) selectOc.value = TEMA_OPERACAO[tipo].code;
+        if (TEMA_OPERACAO[tipo]) {
+            const targetCode = TEMA_OPERACAO[tipo].code;
+            const matchingOpt = Array.from(selectOc.options).find(o => 
+                (o.value === targetCode || o.value === targetCode.padStart(2, '0') || o.value === targetCode.padStart(3, '0')) && !o.disabled
+            );
+            if (matchingOpt) {
+                selectOc.value = matchingOpt.value;
+            }
+        }
     } else {
         cameraSection.style.display = 'block';
         cameraLabel.style.display = 'block';
-        selectOc.value = '1';
+        const opt1 = Array.from(selectOc.options).find(o => o.value === '1' || o.value === '01' || o.value === '001');
+        if (opt1) selectOc.value = opt1.value;
     }
+
+    console.log(`[APP LOG abrirModalBaixa] Tipo: "${tipo}", NF: "${numeroNota}", Ocorrência Selecionada no Modal: "${selectOc.value}"`);
 
     new bootstrap.Modal(document.getElementById('modalBaixa')).show();
 }

@@ -946,6 +946,12 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
             baixa.payload_enviado = payload
 
+            logger.info(f"🚀 [ESL TRANSMISSÃO NF-e] NF: {nf.numero_nota} | Chave: {nf.chave_acesso}")
+            logger.info(f"   -> NF.tipo_operacao: '{nf.tipo_operacao}'")
+            logger.info(f"   -> Baixa Ocorrência DB: ID={getattr(baixa.ocorrencia, 'id', 'None')}, TMS='{getattr(baixa.ocorrencia, 'codigo_tms', 'None')}', Ref='{getattr(baixa.ocorrencia, 'codigo_referencia', 'None')}', Desc='{getattr(baixa.ocorrencia, 'descricao', 'None')}'")
+            logger.info(f"   -> Código Final Enviado: {codigo_ocorrencia}")
+            logger.info(f"   -> PAYLOAD INTEGRAL ENVIADO PARA ESL:\n{json.dumps(payload, indent=2)}")
+
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {TOKEN}"
@@ -1174,7 +1180,13 @@ class ESLCloudAdapter(BaseTMSAdapter):
             # Lógica de enviar foto comentada/removida para evitar Erro 400.
             
             baixa.payload_enviado = payload
-            
+
+            logger.info(f"🚀 [ESL TRANSMISSÃO MINUTA/FRETE V1] Minuta NF: {nf.numero_nota} | Freight ID: {freight_id}")
+            logger.info(f"   -> NF.tipo_operacao: '{nf.tipo_operacao}'")
+            logger.info(f"   -> Baixa Ocorrência DB: ID={getattr(baixa.ocorrencia, 'id', 'None')}, TMS='{getattr(baixa.ocorrencia, 'codigo_tms', 'None')}', Ref='{getattr(baixa.ocorrencia, 'codigo_referencia', 'None')}', Desc='{getattr(baixa.ocorrencia, 'descricao', 'None')}'")
+            logger.info(f"   -> Código Final Enviado: {codigo_ocorrencia}")
+            logger.info(f"   -> PAYLOAD INTEGRAL ENVIADO PARA ESL:\n{json.dumps(payload, indent=2)}")
+
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {TOKEN}"

@@ -187,6 +187,8 @@ class RegistrarBaixaView(APIView):
                         else:
                             raise
 
+                print(f"📌 [BAIXA API] Ocorrência App Recebida: '{codigo_tms}' | Ocorrência Resolvida no DB: ID={ocorrencia.id}, TMS='{ocorrencia.codigo_tms}', Ref='{ocorrencia.codigo_referencia}', Desc='{ocorrencia.descricao}' | NF Tipo: '{nf.tipo_operacao}'")
+
                 # --- PROTEÇÃO CRÍTICA: DESPACHO NUNCA PODE TER CÓDIGO 01 ou 02 ---
                 tipo_op_atual = str(nf.tipo_operacao or '').strip().upper()
                 if 'DESPACHO' in tipo_op_atual:
@@ -349,6 +351,7 @@ class RegistrarBaixaOperacionalView(APIView):
 
         try:
             ocorrencia_obj = Ocorrencia.objects.get(codigo_tms=codigo_tms)
+            print(f"📌 [BAIXA OPERACIONAL API] Tipo Ação: '{tipo_acao}' (Completo: {is_completo}) | Código Mapeado: '{codigo_tms}' | Ocorrência DB: ID={ocorrencia_obj.id}, TMS='{ocorrencia_obj.codigo_tms}', Desc='{ocorrencia_obj.descricao}'")
         except Ocorrencia.DoesNotExist:
             print(f"ERRO: Código TMS {codigo_tms} não encontrado no banco de dados.")
             return Response({
