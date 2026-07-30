@@ -1196,49 +1196,6 @@ class ESLCloudAdapter(BaseTMSAdapter):
             logger.info(f"Payload: {json.dumps(payload)}")
             response = requests.post(URL_ESL_FRETE, json=payload, headers=headers, timeout=30)
             
-            # Se falhar com 422 (Unprocessable Entity), verifica se o erro é de ocorrência inválida/em branco
-            # REGRA CRÍTICA: Para notas DESPACHO, NUNCA faz fallback para código 1 (Entrega Final).
-            # O sistema deve FALHAR e registrar erro ao invés de trocar silenciosamente o código.
-            if response.status_code == 422 and codigo_ocorrencia != 1:
-                try:
-                    error_data = response.json()
-                    errors = error_data.get("errors", {})
-                    is_occurrence_error = False
-                    
-                    if isinstance(errors, dict):
-                        for key, val in errors.items():
-                            val_str = str(val).lower()
-                            if "ocorrência" in val_str or "occurrence" in val_str or "branco" in val_str or "blank" in val_str:
-                                is_occurrence_error = True
-                                break
-                    elif isinstance(errors, str):
-                        errors_lower = errors.lower()
-                        if "ocorrência" in errors_lower or "occurrence" in errors_lower or "branco" in errors_lower or "blank" in errors_lower:
-                            is_occurrence_error = True
-                            
-                    if is_occurrence_error:
-                        is_despacho = 'DESPACHO' in tipo_op_nf
-                        
-                        if is_despacho:
-                            # DESPACHO: NUNCA faz fallback para código 1. Registra o erro e falha.
-                            logger.error(
-                                f"🚨 Ocorrência {codigo_ocorrencia} rejeitada pela ESL para Despacho {nf.numero_nota}. "
-                                f"NÃO será feito fallback para código 1. Erro ESL: {errors}"
-                            )
-                            # Não altera o código - deixa o raise_for_status() tratar o erro
-                        else:
-                            # Para OUTROS tipos (não despacho), mantém o fallback para código 1
-                            logger.warning(
-                                f"Ocorrência {codigo_ocorrencia} rejeitada pela ESL para a Minuta {nf.numero_nota}. "
-                                "Tentando novamente com o código padrão 1 (sucesso)."
-                            )
-                            payload["invoice_occurrence"]["occurrence"]["code"] = 1
-                            baixa.payload_enviado = payload
-                            logger.info(f"Payload de Fallback: {json.dumps(payload)}")
-                            response = requests.post(URL_ESL_FRETE, json=payload, headers=headers, timeout=30)
-                except Exception as ex_fallback:
-                    logger.error(f"Erro ao processar fallback de ocorrência na Minuta {nf.numero_nota}: {ex_fallback}")
-            
             response.raise_for_status()
 
             baixa.processado_tms = True
