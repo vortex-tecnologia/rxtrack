@@ -973,40 +973,6 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 resolver_erros_automaticamente(manifesto.numero_manifesto, nf.numero_nota, manifesto.filial)
             except Exception as e:
                 logger.error(f"Erro auto-resolucao: {e}")
-                
-            try:
-                # Só executa fechamento automático de CT-e se for ENTREGA FINAL (1 ou 2) e NÃO for Despacho
-                if codigo_ocorrencia in [1, 2] and not is_despacho_ou_aereo and nf.frete and nf.frete.modal in ['air', 'road']:
-                    notas_pendentes = nf.frete.notas.filter(
-                        manifesto=manifesto, 
-                        status__in=['PENDENTE', 'AGUARDANDO']
-                    ).exclude(id=nf.id).count()
-                    
-                    if notas_pendentes == 0:
-                        logger.info(f"Todas as NF-es do Frete {nf.frete.freight_id_tms} no Manifesto {manifesto.numero_manifesto} foram entregues. Fechando o CT-e.")
-
-                        url_frete = f"https://{self.config.dominio_esl}/api/v1/freights/{nf.frete.freight_id_tms}/invoice_occurrences"
-                        payload_frete = {
-                            "invoice_occurrence": {
-                                "occurrence_at": data_ocorrencia_str,
-                                "occurrence": {
-                                    "code": codigo_ocorrencia
-                                },
-                                "comments": f"Fechamento automático do CT-e - {comentario_final}"
-                            }
-                        }
-                        if url_foto:
-                            payload_frete["invoice_occurrence"]["delivery_receipt_url"] = url_foto
-                            
-                        res_frete = requests.post(url_frete, json=payload_frete, headers=headers, timeout=30)
-                        if res_frete.status_code in [200, 201]:
-                            logger.info(f"CT-e (Frete {nf.frete.freight_id_tms}) baixado com sucesso.")
-                            baixa.log_erro_tms += " | CT-e Fechado com Sucesso"
-                            baixa.save(update_fields=['log_erro_tms'])
-                        else:
-                            logger.warning(f"Falha ao baixar CT-e (Frete {nf.frete.freight_id_tms}): {res_frete.text}")
-            except Exception as e:
-                logger.error(f"Erro na baixa inteligente do Frete: {e}")
 
             return f"Baixa {baixa_id} integrada com sucesso."
 
@@ -1183,36 +1149,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     f"Não é possível enviar baixa sem freight_id (endpoint geral exige chave NF-e)."
                 )
 
-            # --- AUTO-BYPASS PARA FRETES JÁ INTEGRADOS ---
-            # Se outra nota do mesmo frete já foi integrada com sucesso com a mesma ocorrência
-            if nf.frete:
-                ja_integrado_no_frete = BaixaNF.objects.filter(
-                    nota_fiscal__frete=nf.frete,
-                    integrado_tms=True,
-                    ocorrencia=baixa.ocorrencia
-                ).exclude(id=baixa_id).exists()
-                
-                if ja_integrado_no_frete:
-                    logger.info(f"Bypass inteligente Minuta/Aéreo: Frete {nf.frete.freight_id_tms} já possui ocorrência {codigo_ocorrencia} integrada.")
-                    baixa.log_erro_tms = f"Sucesso (Bypass): Ocorrência já registrada no Frete {nf.frete.freight_id_tms}."
-                    baixa.processado_tms = True
-                    baixa.integrado_tms = True
-                    baixa.data_integracao = timezone.now()
-                    baixa.payload_enviado = {"bypass": True, "motivo": "Frete já possui essa ocorrência integrada"}
-                    baixa.save()
-                    
-                    status_destino = 'OCORRENCIA' if codigo_ocorrencia not in [1, 2] else 'BAIXADA'
-                    if nf.status != status_destino:
-                        nf.status = status_destino
-                        nf.save(update_fields=['status'])
-                    
-                    try:
-                        from operacional.services import resolver_erros_automaticamente
-                        resolver_erros_automaticamente(manifesto.numero_manifesto, nf.numero_nota, manifesto.filial)
-                    except Exception as e:
-                        logger.error(f"Erro auto-resolucao bypass: {e}")
-                    
-                    return f"Baixa {baixa_id} integrada (Bypass - Frete já atualizado)."
+
 
             # Envia via endpoint V1 de freight (único que funciona para minutas)
             URL_ESL_FRETE = f"https://{self.config.dominio_esl}/api/v1/freights/{freight_id}/invoice_occurrences"
