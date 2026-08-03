@@ -43,42 +43,95 @@ def obter_codigo_ocorrencia_seguro(codigo_tms_val, tipo_operacao=None, nota_fisc
     Retorna o código de ocorrência correto baseado no tipo de operação e contexto da nota/manifesto/frete.
     Para DESPACHO: NUNCA retorna 1 ou 2 (que fecham a nota). Default é 50.
     Para outros tipos: Comportamento normal com default 1.
+    
+    Retorna: tuple (codigo_int, trace_list) onde trace_list é a lista de decisões tomadas.
     """
+    trace = []  # Acumula cada decisão para debug
+    
+    nf_num = getattr(nota_fiscal, 'numero_nota', 'N/A') if nota_fiscal else 'N/A'
+    trace.append(f"[INICIO] codigo_tms_val='{codigo_tms_val}', tipo_operacao_param='{tipo_operacao}', NF='{nf_num}'")
+    
     tipo_op = str(tipo_operacao or '').strip().upper()
     if not tipo_op and nota_fiscal:
         tipo_op = str(nota_fiscal.tipo_operacao or '').strip().upper()
+        trace.append(f"[TIPO_OP] Sem tipo_operacao no param, usando da NF: '{tipo_op}'")
+    else:
+        trace.append(f"[TIPO_OP] tipo_operacao do param: '{tipo_op}'")
     
     is_despacho = 'DESPACHO' in tipo_op
+    despacho_origem = 'tipo_operacao' if is_despacho else None
+    trace.append(f"[CHECK_1] is_despacho por tipo_operacao='{tipo_op}': {is_despacho}")
 
     # Checa contexto de despacho no manifesto ou frete
     if not is_despacho and nota_fiscal:
         mft = getattr(nota_fiscal, 'manifesto', None)
         if mft:
-            is_despacho = (getattr(mft, 'tipo_manifesto', '') == 'DESPACHO' or 
-                          (getattr(mft, 'qtd_despacho', 0) and mft.qtd_despacho > 0))
+            mft_tipo = getattr(mft, 'tipo_manifesto', '')
+            mft_qtd_despacho = getattr(mft, 'qtd_despacho', 0)
+            mft_num = getattr(mft, 'numero_manifesto', 'N/A')
+            
+            by_tipo_mft = (mft_tipo == 'DESPACHO')
+            by_qtd = (mft_qtd_despacho and mft_qtd_despacho > 0)
+            
+            trace.append(f"[CHECK_2] Manifesto #{mft_num}: tipo_manifesto='{mft_tipo}' (match={by_tipo_mft}), qtd_despacho={mft_qtd_despacho} (match={by_qtd})")
+            
+            if by_tipo_mft or by_qtd:
+                is_despacho = True
+                despacho_origem = f"manifesto(tipo_manifesto={mft_tipo}, qtd_despacho={mft_qtd_despacho})"
+                trace.append(f"[CHECK_2] ⚠️ MARCADO COMO DESPACHO pelo manifesto! Origem: {despacho_origem}")
+        else:
+            trace.append(f"[CHECK_2] NF sem manifesto vinculado")
         
         if not is_despacho:
             frt = getattr(nota_fiscal, 'frete', None)
             if frt:
-                is_despacho = (getattr(frt, 'tipo_manifesto', '') == 'DESPACHO' or 
-                              (frt.modal and str(frt.modal).lower() in ['air', 'aereo', 'aéreo', 'aérea', 'aerea']))
+                frt_tipo = getattr(frt, 'tipo_manifesto', '')
+                frt_modal = getattr(frt, 'modal', None)
+                frt_id = getattr(frt, 'freight_id_tms', 'N/A')
+                
+                by_tipo_frt = (frt_tipo == 'DESPACHO')
+                by_modal = (frt_modal and str(frt_modal).lower() in ['air', 'aereo', 'aéreo', 'aérea', 'aerea'])
+                
+                trace.append(f"[CHECK_3] Frete {frt_id}: tipo_manifesto='{frt_tipo}' (match={by_tipo_frt}), modal='{frt_modal}' (match={by_modal})")
+                
+                if by_tipo_frt or by_modal:
+                    is_despacho = True
+                    despacho_origem = f"frete(tipo_manifesto={frt_tipo}, modal={frt_modal})"
+                    trace.append(f"[CHECK_3] ⚠️ MARCADO COMO DESPACHO pelo frete! Origem: {despacho_origem}")
+            else:
+                trace.append(f"[CHECK_3] NF sem frete vinculado")
+    elif is_despacho:
+        trace.append(f"[CHECK_2] Pulado (já é despacho por tipo_operacao)")
+        trace.append(f"[CHECK_3] Pulado (já é despacho por tipo_operacao)")
 
     if codigo_tms_val:
         codigo = limpar_codigo_ocorrencia(codigo_tms_val)
+        trace.append(f"[CODIGO] limpar_codigo_ocorrencia('{codigo_tms_val}') = {codigo}")
     else:
         # Default baseado no tipo de operação
         codigo = 50 if is_despacho else 1
+        trace.append(f"[CODIGO] Sem codigo_tms_val, usando default: {codigo} (is_despacho={is_despacho})")
+    
+    codigo_original = codigo
     
     # PROTEÇÃO CRÍTICA: Nunca permite código de entrega final para DESPACHO
     if is_despacho and codigo in CODIGOS_ENTREGA_FINAL:
+        trace.append(f"[OVERRIDE] 🚨 CÓDIGO ALTERADO! is_despacho=True (origem: {despacho_origem}), código {codigo} está em CODIGOS_ENTREGA_FINAL={CODIGOS_ENTREGA_FINAL} → FORÇANDO para 50")
         logger.error(
             f"🚨 BLOQUEADO: Tentativa de enviar código {codigo} (Entrega Final) "
-            f"para nota em contexto de DESPACHO (NF: {getattr(nota_fiscal, 'numero_nota', 'N/A')}). "
-            f"Código original do TMS: '{codigo_tms_val}'. Usando 50 (Carga Despachada) como proteção."
+            f"para nota em contexto de DESPACHO (NF: {nf_num}). "
+            f"Código original do TMS: '{codigo_tms_val}'. Despacho detectado por: {despacho_origem}. "
+            f"Usando 50 (Carga Despachada) como proteção."
         )
         codigo = 50
+    else:
+        trace.append(f"[RESULTADO] Código final: {codigo} (sem alteração, is_despacho={is_despacho})")
     
-    return codigo
+    # Log completo do trace
+    trace_str = " | ".join(trace)
+    logger.info(f"🔍 [TRACE OCORRENCIA] NF={nf_num} | {trace_str}")
+    
+    return codigo, trace
 
 
 
@@ -793,7 +846,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             url_foto = baixa.comprovante_foto_url or ""
             
             codigo_tms_val = (baixa.ocorrencia.codigo_tms or baixa.ocorrencia.codigo_referencia) if baixa.ocorrencia else None
-            codigo_ocorrencia = obter_codigo_ocorrencia_seguro(codigo_tms_val, tipo_operacao=nf.tipo_operacao, nota_fiscal=nf)
+            codigo_ocorrencia, trace_ocorrencia = obter_codigo_ocorrencia_seguro(codigo_tms_val, tipo_operacao=nf.tipo_operacao, nota_fiscal=nf)
 
             tms_manifest_id = manifesto.numero_manifesto 
             
@@ -944,7 +997,18 @@ class ESLCloudAdapter(BaseTMSAdapter):
             if freight_data:
                 payload["invoice_occurrence"]["freight"] = freight_data
 
-            baixa.payload_enviado = payload
+            baixa.payload_enviado = {
+                **payload,
+                "_debug_trace": {
+                    "codigo_tms_val_original": codigo_tms_val,
+                    "codigo_final_enviado": codigo_ocorrencia,
+                    "nf_tipo_operacao": nf.tipo_operacao,
+                    "ocorrencia_db_id": getattr(baixa.ocorrencia, 'id', None),
+                    "ocorrencia_db_tms": getattr(baixa.ocorrencia, 'codigo_tms', None),
+                    "ocorrencia_db_ref": getattr(baixa.ocorrencia, 'codigo_referencia', None),
+                    "trace": trace_ocorrencia
+                }
+            }
 
             logger.info(f"🚀 [ESL TRANSMISSÃO NF-e] NF: {nf.numero_nota} | Chave: {nf.chave_acesso}")
             logger.info(f"   -> NF.tipo_operacao: '{nf.tipo_operacao}'")
@@ -1128,7 +1192,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             
             codigo_tms_val = (baixa.ocorrencia.codigo_tms or baixa.ocorrencia.codigo_referencia) if baixa.ocorrencia else None
             tipo_op_nf = str(nf.tipo_operacao or '').strip().upper()
-            codigo_ocorrencia = obter_codigo_ocorrencia_seguro(codigo_tms_val, tipo_operacao=nf.tipo_operacao, nota_fiscal=nf)
+            codigo_ocorrencia, trace_ocorrencia = obter_codigo_ocorrencia_seguro(codigo_tms_val, tipo_operacao=nf.tipo_operacao, nota_fiscal=nf)
             
             logger.info(f"Minuta {nf.numero_nota}: tipo_operacao='{tipo_op_nf}', codigo_tms_val='{codigo_tms_val}', codigo_final={codigo_ocorrencia}")
             
@@ -1179,7 +1243,18 @@ class ESLCloudAdapter(BaseTMSAdapter):
             # ESL Cloud não aceita 'delivery_receipt_url' no endpoint de Frete.
             # Lógica de enviar foto comentada/removida para evitar Erro 400.
             
-            baixa.payload_enviado = payload
+            baixa.payload_enviado = {
+                **payload,
+                "_debug_trace": {
+                    "codigo_tms_val_original": codigo_tms_val,
+                    "codigo_final_enviado": codigo_ocorrencia,
+                    "nf_tipo_operacao": nf.tipo_operacao,
+                    "ocorrencia_db_id": getattr(baixa.ocorrencia, 'id', None),
+                    "ocorrencia_db_tms": getattr(baixa.ocorrencia, 'codigo_tms', None),
+                    "ocorrencia_db_ref": getattr(baixa.ocorrencia, 'codigo_referencia', None),
+                    "trace": trace_ocorrencia
+                }
+            }
 
             logger.info(f"🚀 [ESL TRANSMISSÃO MINUTA/FRETE V1] Minuta NF: {nf.numero_nota} | Freight ID: {freight_id}")
             logger.info(f"   -> NF.tipo_operacao: '{nf.tipo_operacao}'")

@@ -150,18 +150,37 @@ class RegistrarBaixaView(APIView):
                         id_err = nota_id or chave_acesso or numero_nota or nota_id_tms
                         raise NotaFiscal.DoesNotExist(f"Documento {id_err} não localizado.")
 
+                # ======= TRACE LOG: PIPELINE DE BAIXA =======
+                import logging
+                _trace_logger = logging.getLogger('baixa_trace')
+                _trace = []
+                _trace.append(f"[VIEW_INICIO] NF={nf.numero_nota}, MFT={numero_mft}, tipo_operacao_front='{tipo_operacao}', ocorrencia_codigo_front='{codigo_tms}'")
+                _trace.append(f"[NF_ANTES] tipo_operacao='{nf.tipo_operacao}', chave_acesso='{nf.chave_acesso}', freight_id_tms='{nf.freight_id_tms}'")
+                
                 # Atualiza tipo_operacao na nota se informado pelo App ou pelo contexto de Despacho/Aéreo
                 is_mft_despacho = (nf.manifesto and (getattr(nf.manifesto, 'tipo_manifesto', '') == 'DESPACHO' or (getattr(nf.manifesto, 'qtd_despacho', 0) and nf.manifesto.qtd_despacho > 0)))
                 is_frt_despacho = (nf.frete and (getattr(nf.frete, 'tipo_manifesto', '') == 'DESPACHO' or (nf.frete.modal and str(nf.frete.modal).lower() in ['air', 'aereo', 'aéreo', 'aérea', 'aerea'])))
                 
+                _mft_info = f"tipo_manifesto='{getattr(nf.manifesto, 'tipo_manifesto', 'N/A')}', qtd_despacho={getattr(nf.manifesto, 'qtd_despacho', 'N/A')}" if nf.manifesto else "SEM_MANIFESTO"
+                _frt_info = f"tipo_manifesto='{getattr(nf.frete, 'tipo_manifesto', 'N/A')}', modal='{getattr(nf.frete, 'modal', 'N/A')}'" if nf.frete else "SEM_FRETE"
+                _trace.append(f"[CONTEXTO] Manifesto: {_mft_info} → is_mft_despacho={is_mft_despacho}")
+                _trace.append(f"[CONTEXTO] Frete: {_frt_info} → is_frt_despacho={is_frt_despacho}")
+                
+                tipo_op_original = nf.tipo_operacao
                 if tipo_operacao and str(tipo_operacao).strip().upper() in ['DESPACHO', 'TRANSFERENCIA', 'COLETA', 'ENTREGA']:
                     tipo_upper = str(tipo_operacao).strip().upper()
                     if nf.tipo_operacao != tipo_upper:
+                        _trace.append(f"[TIPO_OP_CHANGE] Front mandou '{tipo_upper}', NF tinha '{nf.tipo_operacao}' → ATUALIZANDO para '{tipo_upper}'")
                         nf.tipo_operacao = tipo_upper
                         nf.save(update_fields=['tipo_operacao'])
+                    else:
+                        _trace.append(f"[TIPO_OP] Front mandou '{tipo_upper}', NF já tinha '{nf.tipo_operacao}' → sem mudança")
                 elif (is_mft_despacho or is_frt_despacho) and nf.tipo_operacao != 'DESPACHO':
+                    _trace.append(f"[TIPO_OP_OVERRIDE] ⚠️ Front NÃO mandou tipo_operacao, mas contexto detectou despacho (mft={is_mft_despacho}, frt={is_frt_despacho}) → FORÇANDO '{nf.tipo_operacao}' para 'DESPACHO'")
                     nf.tipo_operacao = 'DESPACHO'
                     nf.save(update_fields=['tipo_operacao'])
+                else:
+                    _trace.append(f"[TIPO_OP] Sem mudança. Front tipo_operacao='{tipo_operacao}', NF tipo_operacao='{nf.tipo_operacao}'")
 
 
 
@@ -187,6 +206,7 @@ class RegistrarBaixaView(APIView):
                         else:
                             raise
 
+                _trace.append(f"[OCORRENCIA_RESOLVIDA] Front mandou='{codigo_tms}' → Resolvido: ID={ocorrencia.id}, TMS='{ocorrencia.codigo_tms}', Ref='{ocorrencia.codigo_referencia}', Tipo='{ocorrencia.tipo}', Desc='{ocorrencia.descricao}'")
                 print(f"📌 [BAIXA API] Ocorrência App Recebida: '{codigo_tms}' | Ocorrência Resolvida no DB: ID={ocorrencia.id}, TMS='{ocorrencia.codigo_tms}', Ref='{ocorrencia.codigo_referencia}', Desc='{ocorrencia.descricao}' | NF Tipo: '{nf.tipo_operacao}'")
 
                 # --- PROTEÇÃO CRÍTICA: DESPACHO NUNCA PODE TER CÓDIGO 01 ou 02 ---
@@ -200,6 +220,9 @@ class RegistrarBaixaView(APIView):
                         pass
                     
                     if cod_int in [1, 2]:
+                        _trace.append(f"[BLOQUEADO] 🚨 tipo_op_atual='{tipo_op_atual}', cod_int={cod_int} → BLOQUEADO NA VIEW (400)")
+                        _trace_str = " | ".join(_trace)
+                        _trace_logger.warning(f"🔍 [TRACE BAIXA VIEW] {_trace_str}")
                         print(f"🚨 BLOQUEADO: Tentativa de registrar código {cod_ref} (Entrega) em nota DESPACHO {nf.numero_nota}")
                         return Response({
                             'erro': f'Código de ocorrência {cod_ref} (Entrega/Coleta) não é permitido para notas do tipo DESPACHO. '
@@ -251,6 +274,8 @@ class RegistrarBaixaView(APIView):
                     }
                 )
                 
+                _trace.append(f"[BAIXA_SALVA] ID={baixa.id}, created={created}, tipo='{baixa.tipo}', ocorrencia_tms='{ocorrencia.codigo_tms}'")
+                
                 # Se foi UPDATE (motorista refez a baixa), restaura o backup original 
                 # para não perder a foto verdadeiramente original 
                 if not created and backup_original_existente and config_backup.armazenar_foto_backup:
@@ -289,6 +314,10 @@ class RegistrarBaixaView(APIView):
                     else:
                         msg_log = "Baixa salva localmente (TMS desligado nas configurações)."
                 
+                _trace.append(f"[DISPATCH] {msg_log} | NF status='{nf.status}', chave_acesso={'SIM' if nf.chave_acesso else 'NAO'}")
+                _trace_str = " | ".join(_trace)
+                _trace_logger.info(f"🔍 [TRACE BAIXA VIEW] {_trace_str}")
+                print(f"🔍 [TRACE COMPLETO] {_trace_str}")
                 print(f"BAIXA REGISTRADA: {msg_log} (Retida: {is_retida})")
 
             return Response({'status': 'sucesso', 'mensagem': 'Baixa registrada e integração iniciada!'})
