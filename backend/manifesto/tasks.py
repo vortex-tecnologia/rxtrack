@@ -228,7 +228,7 @@ def processar_webhook_manifesto_task(self, event_id):
                         }
                     )
 
-                nota_obj, _ = NotaFiscal.objects.update_or_create(
+                nota_obj, created_nota = NotaFiscal.objects.update_or_create(
                     **filtros_busca,
                     defaults={
                         'destinatario': str(dest.get('nome', 'NÃO INFORMADO')).upper(),
@@ -246,6 +246,14 @@ def processar_webhook_manifesto_task(self, event_id):
                 ids_processadas.append(nota_obj.id)
                 count_notas += 1
 
+                # 📲 Notifica motorista se nova nota/coleta foi adicionada a um manifesto existente
+                if created_nota and motorista_obj and motorista_obj.fcm_token and status_novo == 'EM_TRANSPORTE':
+                    try:
+                        from common.tasks_notificacoes import notificar_item_adicionado_manifesto
+                        notificar_item_adicionado_manifesto(motorista_obj, num_mani, numero_item, tipo_item=tipo_item)
+                    except Exception as push_err:
+                        logger.error(f"Erro ao notificar adicao de nota webhook #{numero_item}: {push_err}")
+
             # === REMOÇÃO DE NOTAS ÓRFÃS NO WEBHOOK ===
             try:
                 if ids_processadas:
@@ -257,6 +265,15 @@ def processar_webhook_manifesto_task(self, event_id):
                     qtd_removidas = notas_removidas.count()
                     if qtd_removidas > 0:
                         logger.info(f"🗑️ Removendo {qtd_removidas} notas órfãs do manifesto {num_mani} que foram excluídas no TMS via Webhook.")
+                        # 📲 Notifica motorista sobre cada nota removida
+                        if motorista_obj and motorista_obj.fcm_token:
+                            from common.tasks_notificacoes import notificar_item_removido_manifesto
+                            for n_rem in notas_removidas:
+                                try:
+                                    notificar_item_removido_manifesto(motorista_obj, num_mani, n_rem.numero_nota, tipo_item=n_rem.tipo_operacao or 'NOTA')
+                                except Exception as push_err:
+                                    logger.error(f"Erro ao notificar remocao de nota webhook #{n_rem.numero_nota}: {push_err}")
+
                         notas_removidas.delete()
             except Exception as e:
                 logger.error(f"Erro ao tentar remover notas órfãs no webhook: {e}")

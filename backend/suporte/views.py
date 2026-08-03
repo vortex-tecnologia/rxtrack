@@ -371,7 +371,7 @@ class MensagemSuporteViewSet(viewsets.ModelViewSet):
             ticket.updated_at = timezone.now()
             ticket.save(update_fields=['status', 'atendente', 'updated_at'])
             
-            # Notifica motorista
+            # Notifica motorista via WebSocket
             try:
                 channel_layer = get_channel_layer()
                 if channel_layer:
@@ -392,6 +392,15 @@ class MensagemSuporteViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).warning(f"Erro ao notificar WebSocket de nova resposta do SAC: {e}")
+
+            # Notifica motorista via Push FCM (para o celular Android / APK)
+            try:
+                from common.tasks_notificacoes import notificar_mensagem_sac
+                atendente_nome = user.get_full_name() or user.username
+                notificar_mensagem_sac(ticket, atendente_nome=atendente_nome)
+            except Exception as push_err:
+                import logging
+                logging.getLogger(__name__).error(f"Erro ao disparar FCM Push para SAC: {push_err}")
 
         elif is_dono_ticket:
             # Lógica para o motorista dono do chamado enviando mensagem

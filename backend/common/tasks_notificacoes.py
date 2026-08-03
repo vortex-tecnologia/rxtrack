@@ -102,3 +102,107 @@ def varrer_e_notificar_manifestos_ativos():
     logger.info(f"🔎 Varredura de manifestos ativos: {count} motorista(s) notificado(s) via Push FCM.")
     return count
 
+
+def notificar_mensagem_sac(ticket, atendente_nome=None):
+    """
+    Notifica o motorista quando um agente do SAC responde ou envia mensagem no chamado.
+    Verifica quantas mensagens NÃO LIDAS do SAC existem no ticket para formatar o texto.
+    """
+    motorista = getattr(ticket, 'motorista', None)
+    if not motorista or not motorista.fcm_token:
+        return False, "Motorista sem FCM token"
+
+    # Conta mensagens não lidas enviadas pelo SAC
+    nao_lidas = ticket.mensagens.filter(enviado_por_motorista=False, lida=False).count()
+    
+    nome_atendente = atendente_nome or "SAC"
+    if nao_lidas > 1:
+        mensagem = f"Você tem {nao_lidas} mensagens para ler de {nome_atendente}."
+    else:
+        mensagem = f"Você tem uma nova mensagem de {nome_atendente}."
+
+    titulo = "💬 Nova Mensagem do SAC"
+
+    return enviar_notificacao_push(
+        motorista=motorista,
+        titulo=titulo,
+        mensagem=mensagem,
+        tipo='CHAT_SAC',
+        dados_payload={
+            'ticket_id': str(ticket.id),
+            'acao': 'ABRIR_CHAT',
+            'nao_lidas': str(nao_lidas)
+        }
+    )
+
+
+def notificar_item_adicionado_manifesto(motorista, manifesto_num, item_num, tipo_item='NOTA'):
+    """
+    Notifica o motorista quando um novo item (nota ou coleta) for adicionado ao seu manifesto.
+    """
+    if not motorista or not motorista.fcm_token:
+        return False, "Motorista sem FCM token"
+
+    tipo_str = "Coleta" if tipo_item == 'COLETA' else "Nota Fiscal"
+    titulo = f"➕ Item Adicionado (MFT #{manifesto_num})"
+    mensagem = f"A {tipo_str} nº {item_num} foi adicionada ao seu manifesto #{manifesto_num}. Acesse o aplicativo para visualizar a lista atualizada."
+
+    return enviar_notificacao_push(
+        motorista=motorista,
+        titulo=titulo,
+        mensagem=mensagem,
+        tipo='MANIFESTO_UPDATE',
+        dados_payload={
+            'manifesto': str(manifesto_num),
+            'item_numero': str(item_num),
+            'acao': 'RECARREGAR_ITENS'
+        }
+    )
+
+
+def notificar_item_removido_manifesto(motorista, manifesto_num, item_num, tipo_item='NOTA'):
+    """
+    Notifica o motorista quando um item (nota ou coleta) for removido do seu manifesto.
+    """
+    if not motorista or not motorista.fcm_token:
+        return False, "Motorista sem FCM token"
+
+    tipo_str = "Coleta" if tipo_item == 'COLETA' else "Nota Fiscal"
+    titulo = f"➖ Item Removido (MFT #{manifesto_num})"
+    mensagem = f"A {tipo_str} nº {item_num} foi removida do seu manifesto #{manifesto_num}. Acesse o aplicativo para visualizar a lista atualizada."
+
+    return enviar_notificacao_push(
+        motorista=motorista,
+        titulo=titulo,
+        mensagem=mensagem,
+        tipo='MANIFESTO_UPDATE',
+        dados_payload={
+            'manifesto': str(manifesto_num),
+            'item_numero': str(item_num),
+            'acao': 'RECARREGAR_ITENS'
+        }
+    )
+
+
+def notificar_manifesto_removido(motorista, manifesto_num):
+    """
+    Notifica o motorista quando o seu manifesto inteiro for cancelado ou deletado.
+    """
+    if not motorista or not motorista.fcm_token:
+        return False, "Motorista sem FCM token"
+
+    titulo = f"🚨 Manifesto Removido (#{manifesto_num})"
+    mensagem = f"Seu manifesto #{manifesto_num} foi cancelado/removido pela operação."
+
+    return enviar_notificacao_push(
+        motorista=motorista,
+        titulo=titulo,
+        mensagem=mensagem,
+        tipo='MANIFESTO_CANCELADO',
+        dados_payload={
+            'manifesto': str(manifesto_num),
+            'acao': 'MANIFESTO_REMOVIDO'
+        }
+    )
+
+

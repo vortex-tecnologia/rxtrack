@@ -620,10 +620,21 @@ def deletar_manifesto_operacional_view(request, manifesto_id):
     
     try:
         nome_mft = manifesto.numero_manifesto
+        motorista_alvo = manifesto.motorista
+        
         # Django apaga as NFs em cascata devido a on_delete=models.CASCADE 
         # nas ForeignKey's referentes
         manifesto.delete()
         
+        # 📲 Notifica o motorista (APK) que o manifesto foi cancelado/removido
+        if motorista_alvo and motorista_alvo.fcm_token:
+            try:
+                from common.tasks_notificacoes import notificar_manifesto_removido
+                notificar_manifesto_removido(motorista_alvo, nome_mft)
+            except Exception as push_err:
+                import logging
+                logging.getLogger(__name__).error(f"Erro ao notificar remocao de manifesto #{nome_mft}: {push_err}")
+
         return JsonResponse({
             'success': True,
             'message': f'Manifesto #{nome_mft} deletado permanentemente.'
@@ -655,8 +666,20 @@ def deletar_nota_fiscal_view(request, nota_id):
         
         numero = nota.numero_nota
         manifesto_num = nota.manifesto.numero_manifesto
+        motorista_alvo = nota.manifesto.motorista if nota.manifesto else None
+        tipo_op = nota.tipo_operacao or 'ENTREGA'
+        
         nota.delete()
         
+        # 📲 Notifica o motorista (APK) que a nota/coleta foi removida do seu manifesto
+        if motorista_alvo and motorista_alvo.fcm_token:
+            try:
+                from common.tasks_notificacoes import notificar_item_removido_manifesto
+                notificar_item_removido_manifesto(motorista_alvo, manifesto_num, numero, tipo_item=tipo_op)
+            except Exception as push_err:
+                import logging
+                logging.getLogger(__name__).error(f"Erro ao notificar remocao de nota #{numero}: {push_err}")
+
         return JsonResponse({
             'success': True,
             'message': f'Nota Fiscal {numero} (Manifesto #{manifesto_num}) deletada com sucesso.'

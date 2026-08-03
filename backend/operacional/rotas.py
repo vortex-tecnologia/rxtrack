@@ -108,6 +108,15 @@ def buscar_e_importar_nfe(request):
                 endereco_entrega=data.get('endereco').upper() if data.get('endereco') else None,
                 status='PENDENTE'
             )
+            # 📲 Notifica motorista (Push FCM) sobre adicao manual da nota
+            if manifesto.motorista and manifesto.motorista.fcm_token:
+                try:
+                    from common.tasks_notificacoes import notificar_item_adicionado_manifesto
+                    notificar_item_adicionado_manifesto(manifesto.motorista, manifesto.numero_manifesto, nova_nota.numero_nota, tipo_item=nova_nota.tipo_operacao or 'NOTA')
+                except Exception as push_err:
+                    import logging
+                    logging.getLogger(__name__).error(f"Erro ao notificar adicao manual de nota: {push_err}")
+
             return JsonResponse({"sucesso": True, "mensagem": "Nota vinculada ao manifesto com sucesso!"})
 
     except Exception as e:
