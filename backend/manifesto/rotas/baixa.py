@@ -173,12 +173,6 @@ class RegistrarBaixaView(APIView):
                         _trace.append(f"[TIPO_OP_CHANGE] Front mandou '{tipo_upper}', NF tinha '{nf.tipo_operacao}' → ATUALIZANDO para '{tipo_upper}'")
                         nf.tipo_operacao = tipo_upper
                         nf.save(update_fields=['tipo_operacao'])
-                    else:
-                        _trace.append(f"[TIPO_OP] Front mandou '{tipo_upper}', NF já tinha '{nf.tipo_operacao}' → sem mudança")
-                elif (is_mft_despacho or is_frt_despacho) and nf.tipo_operacao != 'DESPACHO':
-                    _trace.append(f"[TIPO_OP_OVERRIDE] ⚠️ Front NÃO mandou tipo_operacao, mas contexto detectou despacho (mft={is_mft_despacho}, frt={is_frt_despacho}) → FORÇANDO '{nf.tipo_operacao}' para 'DESPACHO'")
-                    nf.tipo_operacao = 'DESPACHO'
-                    nf.save(update_fields=['tipo_operacao'])
                 else:
                     _trace.append(f"[TIPO_OP] Sem mudança. Front tipo_operacao='{tipo_operacao}', NF tipo_operacao='{nf.tipo_operacao}'")
 

@@ -62,47 +62,9 @@ def obter_codigo_ocorrencia_seguro(codigo_tms_val, tipo_operacao=None, nota_fisc
     despacho_origem = 'tipo_operacao' if is_despacho else None
     trace.append(f"[CHECK_1] is_despacho por tipo_operacao='{tipo_op}': {is_despacho}")
 
-    # Checa contexto de despacho no manifesto ou frete
-    if not is_despacho and nota_fiscal:
-        mft = getattr(nota_fiscal, 'manifesto', None)
-        if mft:
-            mft_tipo = getattr(mft, 'tipo_manifesto', '')
-            mft_qtd_despacho = getattr(mft, 'qtd_despacho', 0)
-            mft_num = getattr(mft, 'numero_manifesto', 'N/A')
-            
-            by_tipo_mft = (mft_tipo == 'DESPACHO')
-            by_qtd = (mft_qtd_despacho and mft_qtd_despacho > 0)
-            
-            trace.append(f"[CHECK_2] Manifesto #{mft_num}: tipo_manifesto='{mft_tipo}' (match={by_tipo_mft}), qtd_despacho={mft_qtd_despacho} (match={by_qtd})")
-            
-            if by_tipo_mft or by_qtd:
-                is_despacho = True
-                despacho_origem = f"manifesto(tipo_manifesto={mft_tipo}, qtd_despacho={mft_qtd_despacho})"
-                trace.append(f"[CHECK_2] ⚠️ MARCADO COMO DESPACHO pelo manifesto! Origem: {despacho_origem}")
-        else:
-            trace.append(f"[CHECK_2] NF sem manifesto vinculado")
-        
-        if not is_despacho:
-            frt = getattr(nota_fiscal, 'frete', None)
-            if frt:
-                frt_tipo = getattr(frt, 'tipo_manifesto', '')
-                frt_modal = getattr(frt, 'modal', None)
-                frt_id = getattr(frt, 'freight_id_tms', 'N/A')
-                
-                by_tipo_frt = (frt_tipo == 'DESPACHO')
-                by_modal = (frt_modal and str(frt_modal).lower() in ['air', 'aereo', 'aéreo', 'aérea', 'aerea'])
-                
-                trace.append(f"[CHECK_3] Frete {frt_id}: tipo_manifesto='{frt_tipo}' (match={by_tipo_frt}), modal='{frt_modal}' (match={by_modal})")
-                
-                if by_tipo_frt or by_modal:
-                    is_despacho = True
-                    despacho_origem = f"frete(tipo_manifesto={frt_tipo}, modal={frt_modal})"
-                    trace.append(f"[CHECK_3] ⚠️ MARCADO COMO DESPACHO pelo frete! Origem: {despacho_origem}")
-            else:
-                trace.append(f"[CHECK_3] NF sem frete vinculado")
-    elif is_despacho:
-        trace.append(f"[CHECK_2] Pulado (já é despacho por tipo_operacao)")
-        trace.append(f"[CHECK_3] Pulado (já é despacho por tipo_operacao)")
+    # IMPORTANTE: A verificação de despacho DEVE se basear APENAS no tipo_operacao explícito da nota,
+    # e NUNCA no modal do frete (ex: 'air') ou no manifesto. Cargas aéreas/fretes podem ter entregas normais!
+    trace.append(f"[CHECK_CONTEXT] Respeitando tipo_operacao='{tipo_op}'. Nenhuma inferência externa por modal/manifesto.")
 
     if codigo_tms_val:
         codigo = limpar_codigo_ocorrencia(codigo_tms_val)
@@ -820,14 +782,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 logger.info(f"🚀 NF {nf.numero_nota} é DESPACHO sem chave. Redirecionando para enviar_baixa_minuta (Frete ESL V1)")
                 return self.enviar_baixa_minuta(baixa_id, task=task)
             
-            # Também verifica se o manifesto ou frete é Despacho/Aéreo (só redireciona se SEM chave)
-            is_despacho_ou_aereo = (
-                (nf.manifesto and (getattr(nf.manifesto, 'tipo_manifesto', '') == 'DESPACHO' or (getattr(nf.manifesto, 'qtd_despacho', 0) and nf.manifesto.qtd_despacho > 0))) or
-                (nf.frete and (getattr(nf.frete, 'tipo_manifesto', '') == 'DESPACHO' or (nf.frete.modal and str(nf.frete.modal).lower() in ['air', 'aereo', 'aéreo', 'aérea', 'aerea'])))
-            )
-            if is_despacho_ou_aereo and not nf.chave_acesso:
-                logger.info(f"🚀 Manifesto/Frete é Despacho/Aéreo sem chave. Redirecionando para enviar_baixa_minuta (Frete ESL V1)")
-                return self.enviar_baixa_minuta(baixa_id, task=task)
+            # NOTA: O endpoint de Frete/Minuta só é usado quando a NF NÃO possui chave de acesso.
 
 
 
