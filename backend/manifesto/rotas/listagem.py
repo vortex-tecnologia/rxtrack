@@ -61,6 +61,13 @@ class ListarNotasManifestoView(APIView):
             # O .last() resolve o problema da lista e pega o evento mais recente
             baixa = nf.baixa_info.all().last() 
             
+            autor_nome = None
+            if baixa:
+                if baixa.autor_baixa:
+                    autor_nome = baixa.autor_baixa.nome_completo
+                elif nf.manifesto and nf.manifesto.motorista:
+                    autor_nome = nf.manifesto.motorista.nome_completo
+
             data.append({
                 'id': nf.id,
                 'numero_nota': nf.numero_nota,
@@ -78,6 +85,7 @@ class ListarNotasManifestoView(APIView):
                     # Verificação extra para evitar erro se a ocorrência for nula
                     'ocorrencia': baixa.ocorrencia.descricao if baixa.ocorrencia else "Não informada",
                     'recebedor': baixa.recebedor,
+                    'autor': autor_nome,
                     # Formatando a data com o fuso de Brasília (localtime)
                     'data': localtime(baixa.data_baixa).strftime('%d/%m/%Y %H:%M') if baixa.data_baixa else None,
                     'foto_url': baixa.comprovante_foto_url if baixa.comprovante_foto_url else None,

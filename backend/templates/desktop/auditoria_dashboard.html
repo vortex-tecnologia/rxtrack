@@ -323,8 +323,8 @@
                     ` : `
                         <div class="d-flex flex-column align-items-end">
                             <span class="text-muted small"><i class="bi bi-info-circle"></i> Já processado</span>
-                            ${nota.dados_baixa && nota.dados_baixa.motivo_baixa ? `
-                                <small class="text-primary fw-bold" style="font-size: 0.7rem;">Por: ${nota.dados_baixa.recebedor}</small>
+                            ${nota.dados_baixa && (nota.dados_baixa.autor || nota.dados_baixa.recebedor) ? `
+                                <small class="text-primary fw-bold" style="font-size: 0.7rem;">Por: ${nota.dados_baixa.autor || nota.dados_baixa.recebedor}</small>
                             ` : ''}
                         </div>
                     `}
