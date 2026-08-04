@@ -7,6 +7,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('manifesto', '0041_merge_20260721_1522'),
+        ('manifesto', '0040_merge_0039_logbaixanfe_0039_merge_20260619_1029'),
     ]
 
     operations = [
