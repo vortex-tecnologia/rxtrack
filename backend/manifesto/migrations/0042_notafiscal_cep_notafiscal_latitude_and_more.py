@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('manifesto', '0040_frete_notafiscal_frete'),
+        ('manifesto', '0041_merge_20260721_1522'),
     ]
 
     operations = [
