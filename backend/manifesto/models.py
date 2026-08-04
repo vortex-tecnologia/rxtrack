@@ -259,6 +259,9 @@ class NotaFiscal(models.Model):
     
     destinatario = models.CharField(max_length=255, verbose_name="Destinatário")
     endereco_entrega = models.CharField(max_length=255, verbose_name="Endereço de Entrega")
+    cep = models.CharField(max_length=10, null=True, blank=True, verbose_name="CEP de Entrega")
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True, verbose_name="Latitude do Destino")
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True, verbose_name="Longitude do Destino")
     tipo_operacao = models.CharField(
         max_length=20, 
         choices=TIPO_OPERACAO_CHOICES, 

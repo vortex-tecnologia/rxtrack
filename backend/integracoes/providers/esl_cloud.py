@@ -517,6 +517,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     destinatario = "DADOS NÃO REPASSADOS PELA ESL"
                     endereco = "CONSULTE O DOCUMENTO FÍSICO"
 
+                    cep_nota = None
                     if chave:
                         time.sleep(2.1)
                         detalhes = self.buscar_detalhes_esl_interno(chave, numero, token_geral)
@@ -529,6 +530,10 @@ class ESLCloudAdapter(BaseTMSAdapter):
                             num = detalhes.get('ioe_rpt_mds_number', '')
                             if rua:
                                 endereco = f"{rua} {num}".strip().upper()
+
+                            cep_val = detalhes.get('ioe_rpt_zip_code') or detalhes.get('ioe_rpt_mds_zip_code') or detalhes.get('zip_code') or detalhes.get('cep')
+                            if cep_val:
+                                cep_nota = str(cep_val).strip()[:10]
 
                     time.sleep(1.5)
                     dados_frete = self.buscar_dados_frete_report_7693(chave, numero, token_geral)
@@ -573,6 +578,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                             defaults={
                                 'destinatario': destinatario,
                                 'endereco_entrega': endereco,
+                                'cep': cep_nota,
                                 'tipo_operacao': tipo_operacao,
                                 'status': status_final,
                                 'freight_id_tms': str(freight_id) if freight_id else None,
@@ -596,6 +602,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                             defaults={
                                 'destinatario': destinatario,
                                 'endereco_entrega': endereco,
+                                'cep': cep_nota,
                                 'tipo_operacao': tipo_operacao,
                                 'status': status_final,
                                 'freight_id_tms': str(freight_id) if freight_id else None,
