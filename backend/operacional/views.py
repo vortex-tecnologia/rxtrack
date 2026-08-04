@@ -305,6 +305,8 @@ class NotasFiscaisListView(ListView):
         
         # Log de Baixas NF-e (últimos 5 para exibição rápida)
         from manifesto.models import LogBaixaNfe
+        from configuracao.models import ConfiguracaoSistema
+        context['configuracao'] = ConfiguracaoSistema.load()
         logs_qs = LogBaixaNfe.objects.all()
         if usuario_filial:
             logs_qs = logs_qs.filter(Q(filial=usuario_filial) | Q(filial__isnull=True))
@@ -1301,6 +1303,7 @@ def salvar_configuracao_view(request):
         config.emails_notificacao = data.get('emails_notificacao', config.emails_notificacao)
         config.armazenar_foto_backup = data.get('armazenar_foto_backup', config.armazenar_foto_backup)
         config.modulo_torre_erros = data.get('modulo_torre_erros', config.modulo_torre_erros)
+        config.modulo_cargas_fretes = data.get('modulo_cargas_fretes', config.modulo_cargas_fretes)
         
         # IA
         config.codigos_ocorrencia_yolo = data.get('codigos_ocorrencia_yolo', config.codigos_ocorrencia_yolo)
@@ -1812,4 +1815,203 @@ def api_tutorial_resetar(request, pagina):
     TutorialUsuario.objects.filter(usuario=request.user, pagina=pagina).update(
         concluido=False, data_conclusao=None
     )
+    return JsonResponse({'status': 'sucesso'})
+
+
+# ==========================================
+# MÓDULO CARGAS & FRETES (SAC AVANÇADO)
+# ==========================================
+@login_required(login_url='/login/')
+@apenas_operacional
+def api_cargas_fretes_resumo(request):
+    config = ConfiguracaoSistema.load()
+    if not config.modulo_cargas_fretes:
+        return JsonResponse({'status': 'erro', 'message': 'Módulo Cargas & Fretes desativado.'}, status=403)
+
+    usuario_filial = None
+    if request.user.is_authenticated:
+        try:
+            perfil = Motorista.objects.get(user=request.user)
+            usuario_filial = perfil.filial
+        except Motorista.DoesNotExist:
+            pass
+
+    filial_param = request.GET.get('filial')
+    q = request.GET.get('q', '').strip()
+    data_param = request.GET.get('data')
+
+    if data_param:
+        try:
+            data_busca = datetime.strptime(data_param, '%Y-%m-%d').date()
+        except ValueError:
+            data_busca = timezone.now().date()
+    else:
+        data_busca = timezone.now().date()
+
+    notas_qs = NotaFiscal.objects.select_related(
+        'manifesto', 'manifesto__motorista', 'manifesto__filial', 'frete'
+    ).filter(manifesto__isnull=False)
+
+    notas_qs = notas_qs.filter(manifesto__data_criacao__date=data_busca)
+
+    if filial_param and filial_param != 'todas':
+        notas_qs = notas_qs.filter(manifesto__filial_id=filial_param)
+    elif usuario_filial:
+        notas_qs = notas_qs.filter(manifesto__filial=usuario_filial)
+
+    if q:
+        notas_qs = notas_qs.filter(
+            Q(numero_nota__icontains=q) |
+            Q(chave_acesso__icontains=q) |
+            Q(numero_cte__icontains=q) |
+            Q(freight_id_tms__icontains=q) |
+            Q(frete__freight_id_tms__icontains=q) |
+            Q(frete__remetente__icontains=q) |
+            Q(frete__pagador_nome__icontains=q) |
+            Q(destinatario__icontains=q)
+        )
+
+    agrupado = {}
+    for n in notas_qs:
+        remetente_nome = None
+        if n.frete:
+            remetente_nome = n.frete.remetente or n.frete.pagador_nome
+        if not remetente_nome:
+            remetente_nome = n.destinatario or "Remetente Não Informado"
+        
+        remetente_nome = remetente_nome.strip()
+
+        if remetente_nome not in agrupado:
+            agrupado[remetente_nome] = {
+                'remetente': remetente_nome,
+                'qtd_manifestos': set(),
+                'qtd_motoristas': set(),
+                'total_notas': 0,
+                'entregues': 0,
+                'pendentes': 0,
+                'ocorrencias': 0
+            }
+        
+        item = agrupado[remetente_nome]
+        if n.manifesto:
+            item['qtd_manifestos'].add(n.manifesto.id)
+            if n.manifesto.motorista:
+                item['qtd_motoristas'].add(n.manifesto.motorista.id)
+
+        item['total_notas'] += 1
+        st = n.status.upper() if n.status else 'PENDENTE'
+        if st in ['BAIXADA', 'ENTREGUE', 'COLETADO']:
+            item['entregues'] += 1
+        elif st in ['OCORRENCIA']:
+            item['ocorrencias'] += 1
+        else:
+            item['pendentes'] += 1
+
+    resultado = []
+    for nome, info in agrupado.items():
+        resultado.append({
+            'remetente': info['remetente'],
+            'total_manifestos': len(info['qtd_manifestos']),
+            'total_motoristas': len(info['qtd_motoristas']),
+            'total_notas': info['total_notas'],
+            'entregues': info['entregues'],
+            'pendentes': info['pendentes'],
+            'ocorrencias': info['ocorrencias']
+        })
+
+    resultado.sort(key=lambda x: (-x['total_notas'], x['remetente']))
+
+    return JsonResponse({'status': 'sucesso', 'remetentes': resultado, 'data_busca': data_busca.strftime('%d/%m/%Y')})
+
+
+@login_required(login_url='/login/')
+@apenas_operacional
+def api_cargas_fretes_detalhes(request):
+    config = ConfiguracaoSistema.load()
+    if not config.modulo_cargas_fretes:
+        return JsonResponse({'status': 'erro', 'message': 'Módulo Cargas & Fretes desativado.'}, status=403)
+
+    usuario_filial = None
+    if request.user.is_authenticated:
+        try:
+            perfil = Motorista.objects.get(user=request.user)
+            usuario_filial = perfil.filial
+        except Motorista.DoesNotExist:
+            pass
+
+    filial_param = request.GET.get('filial')
+    remetente_alvo = request.GET.get('remetente', '').strip()
+    q = request.GET.get('q', '').strip()
+    data_param = request.GET.get('data')
+
+    if data_param:
+        try:
+            data_busca = datetime.strptime(data_param, '%Y-%m-%d').date()
+        except ValueError:
+            data_busca = timezone.now().date()
+    else:
+        data_busca = timezone.now().date()
+
+    notas_qs = NotaFiscal.objects.select_related(
+        'manifesto', 'manifesto__motorista', 'manifesto__filial', 'frete'
+    ).filter(manifesto__isnull=False, manifesto__data_criacao__date=data_busca)
+
+    if filial_param and filial_param != 'todas':
+        notas_qs = notas_qs.filter(manifesto__filial_id=filial_param)
+    elif usuario_filial:
+        notas_qs = notas_qs.filter(manifesto__filial=usuario_filial)
+
+    if q:
+        notas_qs = notas_qs.filter(
+            Q(numero_nota__icontains=q) |
+            Q(chave_acesso__icontains=q) |
+            Q(numero_cte__icontains=q) |
+            Q(freight_id_tms__icontains=q) |
+            Q(frete__freight_id_tms__icontains=q) |
+            Q(frete__remetente__icontains=q) |
+            Q(frete__pagador_nome__icontains=q) |
+            Q(destinatario__icontains=q)
+        )
+
+    manifestos_dict = {}
+    for n in notas_qs:
+        rem_nome = None
+        if n.frete:
+            rem_nome = n.frete.remetente or n.frete.pagador_nome
+        if not rem_nome:
+            rem_nome = n.destinatario or "Remetente Não Informado"
+        rem_nome = rem_nome.strip()
+
+        if remetente_alvo and rem_nome.lower() != remetente_alvo.lower():
+            continue
+
+        mf = n.manifesto
+        if not mf:
+            continue
+
+        if mf.id not in manifestos_dict:
+            data_local = timezone.localtime(mf.data_criacao) if mf.data_criacao else None
+            manifestos_dict[mf.id] = {
+                'manifesto_id': mf.id,
+                'numero_manifesto': mf.numero_manifesto,
+                'motorista_nome': mf.motorista.nome_completo if mf.motorista else 'Sem Motorista',
+                'criado_em': data_local.strftime('%d/%m/%Y %H:%M') if data_local else '',
+                'notas': []
+            }
+
+        st = n.status.upper() if n.status else 'PENDENTE'
+        manifestos_dict[mf.id]['notas'].append({
+            'id': n.id,
+            'numero_nota': n.numero_nota,
+            'chave_acesso': n.chave_acesso or '',
+            'destinatario': n.destinatario or '',
+            'status': st,
+            'tipo_operacao': n.tipo_operacao or 'ENTREGA',
+            'remetente': rem_nome
+        })
+
+    manifestos_lista = list(manifestos_dict.values())
+    manifestos_lista.sort(key=lambda x: x['numero_manifesto'], reverse=True)
+
+    return JsonResponse({'status': 'sucesso', 'manifestos': manifestos_lista})
     return JsonResponse({'status': 'sucesso'})

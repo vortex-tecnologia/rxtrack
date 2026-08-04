@@ -102,6 +102,13 @@ class ConfiguracaoSistema(models.Model):
         help_text="Se desativado, a Torre de Erros não aparece no menu e nenhum log é gerado."
     )
 
+    # ===== MÓDULO: CARGAS E FRETES (SAC) =====
+    modulo_cargas_fretes = models.BooleanField(
+        default=True,
+        verbose_name="📦 Módulo Cargas & Fretes (SAC)",
+        help_text="Se desativado, o painel de Cargas / Fretes por Remetente e Motorista é ocultado."
+    )
+
     # ===== PROVEDOR TMS =====
     TMS_CHOICES = [
         ('esl_cloud', 'ESL Cloud'),

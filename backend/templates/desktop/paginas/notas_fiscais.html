@@ -78,6 +78,13 @@
                 <i class="bi bi-truck me-2"></i>Fretes / CT-e
             </button>
         </li>
+        {% if configuracao.modulo_cargas_fretes %}
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold text-primary" id="tab-cargas-fretes" data-bs-toggle="tab" data-bs-target="#panel-cargas-fretes" type="button" role="tab" aria-controls="panel-cargas-fretes" aria-selected="false" onclick="carregarCargasFretesResumo()">
+                <i class="bi bi-box-seam me-2"></i>Cargas / Fretes (SAC)
+            </button>
+        </li>
+        {% endif %}
     </ul>
 
     <div class="tab-content" id="nfeTabsContent">
@@ -361,6 +368,61 @@
             </div>
 
         </div> <!-- /PAINEL FRETES -->
+
+        {% if configuracao.modulo_cargas_fretes %}
+        <!-- PAINEL CARGAS / FRETES (SAC) -->
+        <div class="tab-pane fade" id="panel-cargas-fretes" role="tabpanel" aria-labelledby="tab-cargas-fretes">
+            
+            <div class="row g-3 mb-4">
+                <!-- COLUNA ESQUERDA: LISTA DE REMETENTES / PAGADORES DO DIA -->
+                <div class="col-md-5 col-lg-4">
+                    <div class="card border-0 shadow-sm" style="min-height: 600px;">
+                        <div class="card-header bg-white border-bottom py-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="fw-bold mb-0 text-dark">
+                                    <i class="bi bi-building me-2 text-primary"></i>Remetente / Pagador
+                                </h6>
+                                <span class="badge bg-primary rounded-pill" id="badgeTotalRemetentes">0 Clientes</span>
+                            </div>
+                            <!-- Campo de Busca em Tempo Real -->
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
+                                <input type="text" id="buscaRemetenteFrete" class="form-control border-start-0" placeholder="Buscar Frete, NF-e, Cliente..." onkeyup="filtrarCargasFretes()">
+                            </div>
+                        </div>
+                        <div class="card-body p-2" style="max-height: 65vh; overflow-y: auto;" id="listaRemetentesContainer">
+                            <div class="text-center py-5 text-muted">
+                                <div class="spinner-border spinner-border-sm text-primary me-2"></div>Carregando clientes do dia...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COLUNA DIREITA: MANIFESTOS E MOTORISTAS DO CLIENTE SELECIONADO -->
+                <div class="col-md-7 col-lg-8">
+                    <div class="card border-0 shadow-sm" style="min-height: 600px;">
+                        <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="fw-bold mb-0 text-primary" id="tituloClienteSelecionado">
+                                    <i class="bi bi-truck me-2"></i>Selecione um Remetente / Pagador
+                                </h6>
+                                <small class="text-muted" id="subtituloClienteSelecionado">Clique no card à esquerda para visualizar os motoristas e entregas do dia.</small>
+                            </div>
+                            <span class="badge bg-secondary rounded-pill" id="badgeTotalManifestosDireita">0 Manifestos</span>
+                        </div>
+                        <div class="card-body p-3" style="max-height: 65vh; overflow-y: auto;" id="containerManifestosDireita">
+                            <div class="text-center py-5 text-muted">
+                                <i class="bi bi-arrow-left-circle fs-1 text-primary opacity-25 d-block mb-3"></i>
+                                <p class="mb-0 fw-bold">Nenhum cliente selecionado</p>
+                                <small>Selecione um Remetente/Pagador no menu ao lado para listar as entregas do dia.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div> <!-- /PAINEL CARGAS / FRETES -->
+        {% endif %}
     </div> <!-- /tab-content -->
 </div>
 
@@ -1257,6 +1319,205 @@ function executarDeletarOcorrencia(notaId) {
                 console.error(err);
                 loading.classList.add('d-none');
                 tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">Erro ao carregar notas.</td></tr>';
+            });
+    }
+    // --- LÓGICA DO MÓDULO CARGAS & FRETES (SAC) --- //
+    let clienteSelecionadoAtual = null;
+    let timeoutBuscaCargas = null;
+
+    function filtrarCargasFretes() {
+        clearTimeout(timeoutBuscaCargas);
+        timeoutBuscaCargas = setTimeout(() => {
+            carregarCargasFretesResumo();
+        }, 300);
+    }
+
+    function carregarCargasFretesResumo() {
+        const container = document.getElementById('listaRemetentesContainer');
+        const badgeTotal = document.getElementById('badgeTotalRemetentes');
+        const q = document.getElementById('buscaRemetenteFrete') ? document.getElementById('buscaRemetenteFrete').value.trim() : '';
+        const filialParam = '{{ filial_selecionada }}';
+
+        if (!container) return;
+
+        let url = `/api/cargas-fretes/resumo/?filial=${encodeURIComponent(filialParam)}`;
+        if (q) url += `&q=${encodeURIComponent(q)}`;
+
+        container.innerHTML = `
+            <div class="text-center py-5 text-muted">
+                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                <span>Carregando clientes do dia...</span>
+            </div>
+        `;
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                if (data.status !== 'sucesso' || !data.remetentes || data.remetentes.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox fs-2 opacity-50 d-block mb-2"></i>
+                            <p class="mb-0 fw-bold">Nenhum cliente com carga hoje</p>
+                            <small class="text-muted">Não há manifestos registrados para a filial selecionada hoje.</small>
+                        </div>
+                    `;
+                    badgeTotal.innerText = "0 Clientes";
+                    document.getElementById('containerManifestosDireita').innerHTML = `
+                        <div class="text-center py-5 text-muted">
+                            <i class="bi bi-search fs-1 text-primary opacity-25 d-block mb-3"></i>
+                            <p class="mb-0 fw-bold">Nenhuma carga encontrada</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                badgeTotal.innerText = `${data.remetentes.length} Cliente(s)`;
+                container.innerHTML = '';
+
+                data.remetentes.forEach((cli, idx) => {
+                    const activeClass = (clienteSelecionadoAtual === cli.remetente || (idx === 0 && !clienteSelecionadoAtual)) ? 'border-primary bg-primary bg-opacity-10 shadow-sm' : 'border-light-subtle';
+                    
+                    let badgeStatusHtml = '';
+                    if (cli.entregues > 0) badgeStatusHtml += `<span class="badge bg-success me-1" title="${cli.entregues} entregues"><i class="bi bi-check-circle me-1"></i>${cli.entregues}</span>`;
+                    if (cli.pendentes > 0) badgeStatusHtml += `<span class="badge bg-warning text-dark me-1" title="${cli.pendentes} pendentes"><i class="bi bi-clock me-1"></i>${cli.pendentes}</span>`;
+                    if (cli.ocorrencias > 0) badgeStatusHtml += `<span class="badge bg-danger me-1" title="${cli.ocorrencias} ocorrências"><i class="bi bi-exclamation-circle me-1"></i>${cli.ocorrencias}</span>`;
+
+                    const cardHtml = `
+                        <div class="card mb-2 ${activeClass} card-cliente-item" style="cursor: pointer; transition: all 0.2s;" onclick="selecionarRemetente('${cli.remetente.replace(/'/g, "\\'")}', this)">
+                            <div class="card-body p-3">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="fw-bold text-dark mb-0 text-truncate" style="max-width: 220px;" title="${cli.remetente}">${cli.remetente}</h6>
+                                    <span class="badge bg-primary-subtle text-primary rounded-pill small">${cli.total_notas} NF(s)</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <div>${badgeStatusHtml}</div>
+                                    <small class="text-muted" style="font-size: 0.75rem;">
+                                        <i class="bi bi-truck me-1"></i>${cli.total_manifestos} Manifesto(s)
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', cardHtml);
+                });
+
+                if (data.remetentes.length > 0) {
+                    const alvo = (clienteSelecionadoAtual && data.remetentes.some(r => r.remetente === clienteSelecionadoAtual)) ? clienteSelecionadoAtual : data.remetentes[0].remetente;
+                    selecionarRemetente(alvo);
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                container.innerHTML = '<div class="alert alert-danger small m-2">Erro ao carregar clientes do dia.</div>';
+            });
+    }
+
+    function selecionarRemetente(remetenteNome, elCard = null) {
+        clienteSelecionadoAtual = remetenteNome;
+
+        if (elCard) {
+            document.querySelectorAll('.card-cliente-item').forEach(c => {
+                c.classList.remove('border-primary', 'bg-primary', 'bg-opacity-10', 'shadow-sm');
+                c.classList.add('border-light-subtle');
+            });
+            elCard.classList.remove('border-light-subtle');
+            elCard.classList.add('border-primary', 'bg-primary', 'bg-opacity-10', 'shadow-sm');
+        }
+
+        const tituloEl = document.getElementById('tituloClienteSelecionado');
+        const subtituloEl = document.getElementById('subtituloClienteSelecionado');
+        const containerDireita = document.getElementById('containerManifestosDireita');
+        const badgeManifestos = document.getElementById('badgeTotalManifestosDireita');
+        const q = document.getElementById('buscaRemetenteFrete') ? document.getElementById('buscaRemetenteFrete').value.trim() : '';
+        const filialParam = '{{ filial_selecionada }}';
+
+        if (tituloEl) tituloEl.innerHTML = `<i class="bi bi-building me-2 text-primary"></i> ${remetenteNome}`;
+        if (subtituloEl) subtituloEl.innerText = `Cargas e manifestos ativos na rua hoje`;
+
+        containerDireita.innerHTML = `
+            <div class="text-center py-5 text-muted">
+                <div class="spinner-border text-primary me-2" role="status"></div>
+                <p class="mt-2 fw-bold mb-0">Buscando motoristas do cliente...</p>
+            </div>
+        `;
+
+        let url = `/api/cargas-fretes/detalhes/?remetente=${encodeURIComponent(remetenteNome)}&filial=${encodeURIComponent(filialParam)}`;
+        if (q) url += `&q=${encodeURIComponent(q)}`;
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                if (data.status !== 'sucesso' || !data.manifestos || data.manifestos.length === 0) {
+                    containerDireita.innerHTML = `
+                        <div class="text-center py-5 text-muted">
+                            <i class="bi bi-truck fs-1 text-muted opacity-25 d-block mb-3"></i>
+                            <p class="mb-0 fw-bold">Nenhum manifesto encontrado para este cliente hoje</p>
+                        </div>
+                    `;
+                    if (badgeManifestos) badgeManifestos.innerText = "0 Manifestos";
+                    return;
+                }
+
+                if (badgeManifestos) badgeManifestos.innerText = `${data.manifestos.length} Manifesto(s)`;
+                containerDireita.innerHTML = '';
+
+                data.manifestos.forEach(mf => {
+                    let notasCardsHtml = '';
+                    mf.notas.forEach(n => {
+                        let stBadge = '';
+                        if (n.status === 'BAIXADA' || n.status === 'ENTREGUE' || n.status === 'COLETADO') {
+                            stBadge = '<span class="badge bg-success-subtle text-success border border-success"><i class="bi bi-check-circle-fill me-1"></i>ENTREGUE</span>';
+                        } else if (n.status === 'OCORRENCIA') {
+                            stBadge = '<span class="badge bg-danger-subtle text-danger border border-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>OCORRÊNCIA</span>';
+                        } else {
+                            stBadge = '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning"><i class="bi bi-clock-fill me-1"></i>PENDENTE</span>';
+                        }
+
+                        notasCardsHtml += `
+                            <div class="col-md-6 col-lg-4">
+                                <div class="card border shadow-sm h-100 hover-shadow" style="cursor: pointer; transition: transform 0.15s;" onclick="abrirDetalhes(${n.id})" title="Clique para abrir detalhes completos da NF-e">
+                                    <div class="card-body p-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="fw-bold text-primary fs-6">NF: ${n.numero_nota}</span>
+                                            ${stBadge}
+                                        </div>
+                                        <small class="text-muted d-block text-truncate mb-1" title="${n.destinatario}">
+                                            <i class="bi bi-person me-1"></i>${n.destinatario || 'Destinatário'}
+                                        </small>
+                                        <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
+                                            <small class="text-muted" style="font-size: 0.7rem;">Operação: ${n.tipo_operacao}</small>
+                                            <span class="text-primary small fw-bold"><i class="bi bi-eye me-1"></i>Ver Detalhes</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    const manifestoCardHtml = `
+                        <div class="card border-0 shadow-sm mb-3 rounded-3 overflow-hidden">
+                            <div class="card-header bg-light border-bottom py-3 d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="badge bg-primary fs-6 me-2">Manifesto #${mf.numero_manifesto}</span>
+                                    <strong class="text-dark fs-6 me-3"><i class="bi bi-person-badge me-1 text-primary"></i>${mf.motorista_nome}</strong>
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted"><i class="bi bi-clock me-1"></i>Criado em: <strong>${mf.criado_em}</strong></small>
+                                </div>
+                            </div>
+                            <div class="card-body p-3 bg-white">
+                                <div class="row g-2">
+                                    ${notasCardsHtml}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    containerDireita.insertAdjacentHTML('beforeend', manifestoCardHtml);
+                });
+            })
+            .catch(err => {
+                console.error(err);
+                containerDireita.innerHTML = '<div class="alert alert-danger small m-2">Erro ao carregar detalhes dos manifestos.</div>';
             });
     }
 </script>

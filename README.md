@@ -3,6 +3,27 @@
   <img src="backend/static/images/logo_app.png" alt="Quick Track Logo" width="150" />
 </div>
 
+# Atualizações Aplicadas (04/08/2026)
+
+**Hora:** 15:15
+
+## Módulo Comercial Independente 'Cargas & Fretes (SAC)'
+- **Módulo Comercial (Feature Flag):**
+  - Adicionado o campo `modulo_cargas_fretes` no modelo `ConfiguracaoSistema` e criada a chave de ativação ("liga/desliga") no painel de **Configurações do Sistema**.
+  - Permite liberar ou ocultar a funcionalidade comercialmente por cliente/tenant.
+- **Agrupamento Automático e Dinâmico do Dia:**
+  - Nova aba **Cargas / Fretes (SAC)** na tela de **Monitoramento de NF-e** (`notas_fiscais.html`).
+  - **Coluna Esquerda (Clientes):** Agrupa dinamicamente todos os Remetentes / Pagadores com cargas ativas ou manifestos criados no dia de hoje. Ao dar entrada um manifesto novo, o card do cliente é gerado e exibido automaticamente.
+  - **Coluna Direita (Manifestos e Motoristas):** Exibe os cards retangulares dos manifestos e motoristas que estão transportando cargas daquele cliente hoje, com resumo de horário, motorista e badges de status por nota fiscal (`ENTREGUE`, `PENDENTE`, `OCORRÊNCIA`).
+- **Busca em Tempo Real de Frete / NF-e:**
+  - O campo de pesquisa filtra instantaneamente o cliente à esquerda e exibe o card do motorista e da NF-e à direita.
+- **Isolamento por Filial (Multi-Filial):**
+  - As APIs (`/api/cargas-fretes/resumo/` e `/api/cargas-fretes/detalhes/`) filtram estritamente os dados pela Filial do usuário ou pelo filtro ativo no topo, garantindo privacidade entre filiais.
+- **Integração com Modal Existente:**
+  - Clicar em qualquer card de NF-e aciona o modal detalhado (`abrirDetalhes(notaId)`), exibindo a chave de acesso, linha do tempo, ocorrências e comprovante/canhoto de entrega.
+
+---
+
 # Atualizações Aplicadas (01/07/2026)
 
 **Hora:** 16:30

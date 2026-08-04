@@ -122,6 +122,13 @@
                         </div>
                     </div>
                     <div class="col-md-6">
+                        <div class="form-check form-switch p-3 border rounded border-primary bg-primary bg-opacity-10">
+                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="modulo_cargas_fretes" {% if config.modulo_cargas_fretes %}checked{% endif %} {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                            <label class="form-check-label fw-bold small text-primary">📦 Módulo Cargas & Fretes (SAC)</label>
+                            <div class="text-muted" style="font-size: 0.75rem;">Visão split por cliente x motorista do dia</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
                         <div class="form-check form-switch p-3 border rounded">
                             <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="armazenar_foto_backup" {% if config.armazenar_foto_backup %}checked{% endif %} {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
                             <label class="form-check-label fw-bold small">💾 Foto de Backup</label>
@@ -268,6 +275,7 @@
             emails_notificacao: document.getElementById('emails_notificacao').value,
             armazenar_foto_backup: document.getElementById('armazenar_foto_backup').checked,
             modulo_torre_erros: document.getElementById('modulo_torre_erros').checked,
+            modulo_cargas_fretes: document.getElementById('modulo_cargas_fretes').checked,
             codigos_ocorrencia_yolo: document.getElementById('codigos_ocorrencia_yolo').value,
             grupos_relatorio_whatsapp: document.getElementById('grupos_relatorio_whatsapp').value,
         };
