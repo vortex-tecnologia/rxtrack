@@ -2,12 +2,31 @@
 <div class="p-4 bg-primary text-white mb-0">
     <div class="row align-items-center">
         <div class="col-md-8">
-            <small class="text-white-50 d-block text-uppercase fw-bold mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">Chave de Acesso</small>
-            <h6 class="fw-bold mb-0" style="word-break: break-all; font-family: monospace;">{{ nota_principal.chave_acesso }}</h6>
+            {% if nota_principal.chave_acesso %}
+                <small class="text-white-50 d-block text-uppercase fw-bold mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">Chave de Acesso NF-e</small>
+                <h6 class="fw-bold mb-0" style="word-break: break-all; font-family: monospace;">{{ nota_principal.chave_acesso }}</h6>
+            {% else %}
+                <small class="text-white-50 d-block text-uppercase fw-bold mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">Identificador da Operação</small>
+                {% if nota_principal.tipo_operacao == 'COLETA' %}
+                    <h6 class="fw-bold mb-0 text-white"><i class="bi bi-box-seam me-2"></i>Ordem de Coleta (Sem Chave de Acesso)</h6>
+                {% elif nota_principal.tipo_operacao == 'DESPACHO' %}
+                    <h6 class="fw-bold mb-0 text-white"><i class="bi bi-airplane me-2"></i>Despacho / Embarque (Sem Chave)</h6>
+                {% elif nota_principal.tipo_operacao == 'TRANSFERENCIA' %}
+                    <h6 class="fw-bold mb-0 text-white"><i class="bi bi-arrow-left-right me-2"></i>Transferência Operacional (Sem Chave)</h6>
+                {% else %}
+                    <h6 class="fw-bold mb-0 text-white"><i class="bi bi-file-earmark-text me-2"></i>Minuta / CT-e (Sem Chave de Acesso)</h6>
+                {% endif %}
+            {% endif %}
         </div>
         <div class="col-md-4 text-md-end mt-3 mt-md-0">
             <div class="bg-white bg-opacity-25 rounded p-2 text-center">
-                <small class="d-block text-white-50 fw-bold" style="font-size: 0.6rem;">NF-E Nº</small>
+                {% if nota_principal.tipo_operacao == 'COLETA' %}
+                    <small class="d-block text-white-50 fw-bold" style="font-size: 0.6rem;">COLETA Nº</small>
+                {% elif nota_principal.tipo_operacao == 'DESPACHO' %}
+                    <small class="d-block text-white-50 fw-bold" style="font-size: 0.6rem;">EMBARQUE Nº</small>
+                {% else %}
+                    <small class="d-block text-white-50 fw-bold" style="font-size: 0.6rem;">DOC Nº</small>
+                {% endif %}
                 <span class="fs-4 fw-bold">{{ nota_principal.numero_nota }}</span>
             </div>
         </div>

@@ -1464,21 +1464,41 @@ function executarDeletarOcorrencia(notaId) {
                 data.manifestos.forEach(mf => {
                     let notasCardsHtml = '';
                     mf.notas.forEach(n => {
+                        let tipoUpper = (n.tipo_operacao || '').toUpperCase();
+                        let prefixoDoc = 'NF:';
+                        let iconeDoc = 'bi-receipt';
+
+                        if (tipoUpper === 'COLETA') {
+                            prefixoDoc = 'Coleta:';
+                            iconeDoc = 'bi-box-seam';
+                        } else if (tipoUpper === 'DESPACHO' || tipoUpper === 'AEREO' || tipoUpper === 'EMBARQUE') {
+                            prefixoDoc = 'Embarque:';
+                            iconeDoc = 'bi-airplane';
+                        } else if (tipoUpper === 'TRANSFERENCIA') {
+                            prefixoDoc = 'Transf:';
+                            iconeDoc = 'bi-arrow-left-right';
+                        } else if (!n.chave_acesso && n.numero_cte) {
+                            prefixoDoc = 'CT-e:';
+                            iconeDoc = 'bi-truck';
+                        }
+
                         let stBadge = '';
                         if (n.status === 'BAIXADA' || n.status === 'ENTREGUE' || n.status === 'COLETADO') {
-                            stBadge = '<span class="badge bg-success-subtle text-success border border-success"><i class="bi bi-check-circle-fill me-1"></i>ENTREGUE</span>';
+                            const lblSucesso = (tipoUpper === 'COLETA') ? 'COLETADO' : 'ENTREGUE';
+                            stBadge = `<span class="badge bg-success-subtle text-success border border-success"><i class="bi bi-check-circle-fill me-1"></i>${lblSucesso}</span>`;
                         } else if (n.status === 'OCORRENCIA') {
-                            stBadge = '<span class="badge bg-danger-subtle text-danger border border-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>OCORRÊNCIA</span>';
+                            const lblErro = (tipoUpper === 'COLETA') ? 'NÃO COLETADO' : 'OCORRÊNCIA';
+                            stBadge = `<span class="badge bg-danger-subtle text-danger border border-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>${lblErro}</span>`;
                         } else {
                             stBadge = '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning"><i class="bi bi-clock-fill me-1"></i>PENDENTE</span>';
                         }
 
                         notasCardsHtml += `
                             <div class="col-md-6 col-lg-4">
-                                <div class="card border shadow-sm h-100 hover-shadow" style="cursor: pointer; transition: transform 0.15s;" onclick="abrirDetalhes(${n.id})" title="Clique para abrir detalhes completos da NF-e">
+                                <div class="card border shadow-sm h-100 hover-shadow" style="cursor: pointer; transition: transform 0.15s;" onclick="abrirDetalhes(${n.id})" title="Clique para abrir detalhes do documento">
                                     <div class="card-body p-3">
                                         <div class="d-flex justify-content-between align-items-center mb-2">
-                                            <span class="fw-bold text-primary fs-6">NF: ${n.numero_nota}</span>
+                                            <span class="fw-bold text-primary fs-6"><i class="bi ${iconeDoc} me-1"></i>${prefixoDoc} ${n.numero_nota}</span>
                                             ${stBadge}
                                         </div>
                                         <small class="text-muted d-block text-truncate mb-1" title="${n.destinatario}">
