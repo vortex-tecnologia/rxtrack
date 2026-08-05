@@ -235,62 +235,80 @@ def consolidar_erros_existentes(filial=None):
     (mesmo manifesto/NF, mesma categoria, mesmo titulo/descricao) em um único registro principal,
     atualizando a quantidade de tentativas e o histórico de datas/horas.
     Limpa do banco centenas de registros duplicados do passado.
+    Suporta isolamento por tenant do django-tenants.
     """
+    total_deletados = 0
+    try:
+        from django_tenants.utils import get_tenant_model, schema_context
+        TenantModel = get_tenant_model()
+        for tenant in TenantModel.objects.all():
+            try:
+                with schema_context(tenant.schema_name):
+                    total_deletados += _executar_consolidacao_schema(filial)
+            except Exception:
+                pass
+    except Exception:
+        total_deletados += _executar_consolidacao_schema(filial)
+
+    return total_deletados
+
+
+def _executar_consolidacao_schema(filial=None):
     from operacional.models import LogErroOperacional
     from django.db import transaction
     from django.utils import timezone
 
-    qs = LogErroOperacional.objects.filter(status='ABERTO').order_by('criado_em')
-    if filial:
-        qs = qs.filter(filial=filial)
+    try:
+        qs = LogErroOperacional.objects.filter(status='ABERTO').order_by('criado_em')
+        if filial:
+            qs = qs.filter(filial=filial)
 
-    # Agrupa por chave única
-    grupos = {}
-    for err in qs:
-        key = (
-            err.filial_id,
-            err.categoria,
-            (err.manifesto_numero or '').strip(),
-            (err.nota_fiscal_numero or '').strip(),
-            (err.titulo or '').strip(),
-            (err.descricao or '').strip()[:100]
-        )
-        if key not in grupos:
-            grupos[key] = []
-        grupos[key].append(err)
+        # Agrupa por chave única
+        grupos = {}
+        for err in qs:
+            key = (
+                err.filial_id,
+                err.categoria,
+                (err.manifesto_numero or '').strip(),
+                (err.nota_fiscal_numero or '').strip(),
+                (err.titulo or '').strip(),
+                (err.descricao or '').strip()[:100]
+            )
+            if key not in grupos:
+                grupos[key] = []
+            grupos[key].append(err)
 
-    qtd_deletados = 0
+        qtd_deletados = 0
 
-    with transaction.atomic():
-        for key, lista_erros in grupos.items():
-            if len(lista_erros) > 1:
-                # O mais antigo (primeiro) vira o registro principal
-                principal = lista_erros[0]
-                duplicados = lista_erros[1:]
+        with transaction.atomic():
+            for key, lista_erros in grupos.items():
+                if len(lista_erros) > 1:
+                    principal = lista_erros[0]
+                    duplicados = lista_erros[1:]
 
-                timestamps = []
-                total_tentativas = 0
+                    timestamps = []
+                    total_tentativas = 0
 
-                for item in lista_erros:
-                    total_tentativas += getattr(item, 'qtd_tentativas', 1) or 1
-                    if item.historico_tentativas and isinstance(item.historico_tentativas, list):
-                        timestamps.extend(item.historico_tentativas)
-                    elif item.criado_em:
-                        timestamps.append(timezone.localtime(item.criado_em).isoformat())
+                    for item in lista_erros:
+                        total_tentativas += getattr(item, 'qtd_tentativas', 1) or 1
+                        if item.historico_tentativas and isinstance(item.historico_tentativas, list):
+                            timestamps.extend(item.historico_tentativas)
+                        elif item.criado_em:
+                            timestamps.append(timezone.localtime(item.criado_em).isoformat())
 
-                # Remove duplicatas mantendo ordem cronológica
-                timestamps_unicos = sorted(list(dict.fromkeys(timestamps)))
+                    timestamps_unicos = sorted(list(dict.fromkeys(timestamps)))
 
-                principal.qtd_tentativas = total_tentativas
-                principal.historico_tentativas = timestamps_unicos
-                if duplicados and duplicados[-1].criado_em:
-                    principal.atualizado_em = duplicados[-1].criado_em
+                    principal.qtd_tentativas = total_tentativas
+                    principal.historico_tentativas = timestamps_unicos
+                    if duplicados and duplicados[-1].criado_em:
+                        principal.atualizado_em = duplicados[-1].criado_em
 
-                principal.save()
+                    principal.save()
 
-                # Deleta os duplicados acumulados no passado
-                ids_deletar = [d.id for d in duplicados]
-                LogErroOperacional.objects.filter(id__in=ids_deletar).delete()
-                qtd_deletados += len(ids_deletar)
+                    ids_deletar = [d.id for d in duplicados]
+                    LogErroOperacional.objects.filter(id__in=ids_deletar).delete()
+                    qtd_deletados += len(ids_deletar)
 
-    return qtd_deletados
+        return qtd_deletados
+    except Exception:
+        return 0
