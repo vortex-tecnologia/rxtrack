@@ -85,14 +85,16 @@ class RegistrarBaixaView(APIView):
                 
                 if nota_id:
                     filtros['id'] = nota_id
-                elif nota_id_tms:
-                    filtros['freight_id_tms'] = nota_id_tms
                 elif chave_acesso:
                     filtros['chave_acesso'] = chave_acesso
                 elif numero_nota:
                     num_clean = numero_nota.lstrip('0')
                     num_opcoes = [numero_nota, num_clean] if num_clean else [numero_nota]
                     filtros['numero_nota__in'] = num_opcoes
+                    if nota_id_tms:
+                        filtros['freight_id_tms'] = nota_id_tms
+                elif nota_id_tms:
+                    filtros['freight_id_tms'] = nota_id_tms
 
                 # Vincula ao manifesto correto (Só aplica filtros de segurança se NÃO for via ID direto)
                 if not nota_id:
