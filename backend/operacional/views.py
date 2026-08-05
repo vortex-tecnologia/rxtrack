@@ -1529,6 +1529,8 @@ def api_erros_torre(request):
                 "nota_fiscal_numero": e.nota_fiscal_numero,
                 "motorista_nome": e.motorista_nome,
                 "criado_em": timezone.localtime(e.criado_em).isoformat(),
+                "atualizado_em": timezone.localtime(e.atualizado_em).isoformat() if e.atualizado_em else None,
+                "qtd_tentativas": getattr(e, 'qtd_tentativas', 1),
                 "publico_alvo": e.publico_alvo,
                 "status": e.status
             })
@@ -1544,10 +1546,30 @@ def api_erros_torre(request):
 
 @login_required
 def api_erro_detalhe(request, erro_id):
-    """Retorna detalhes completos de um erro para o modal"""
+    """Retorna detalhes completos de um erro para o modal com histórico de tentativas"""
     try:
+        from datetime import datetime
         e = LogErroOperacional.objects.select_related('regra_aplicada', 'resolvido_por').get(id=erro_id)
         
+        hist_formatado = []
+        raw_hist = getattr(e, 'historico_tentativas', []) or []
+        for index, h in enumerate(raw_hist, 1):
+            try:
+                dt = datetime.fromisoformat(h)
+                dt_str = timezone.localtime(dt).strftime('%d/%m/%Y %H:%M:%S')
+            except Exception:
+                dt_str = str(h)
+            hist_formatado.append({
+                'numero': index,
+                'data_hora': dt_str
+            })
+
+        if not hist_formatado and e.criado_em:
+            hist_formatado.append({
+                'numero': 1,
+                'data_hora': timezone.localtime(e.criado_em).strftime('%d/%m/%Y %H:%M:%S')
+            })
+
         return JsonResponse({
             'status': 'sucesso',
             'erro': {
@@ -1561,6 +1583,9 @@ def api_erro_detalhe(request, erro_id):
                 'nota_fiscal_numero': e.nota_fiscal_numero,
                 'motorista_nome': e.motorista_nome,
                 'criado_em': timezone.localtime(e.criado_em).strftime('%d/%m/%Y %H:%M:%S'),
+                'atualizado_em': timezone.localtime(e.atualizado_em).strftime('%d/%m/%Y %H:%M:%S') if e.atualizado_em else None,
+                'qtd_tentativas': getattr(e, 'qtd_tentativas', 1),
+                'historico_tentativas': hist_formatado,
                 'regra_aplicada': e.regra_aplicada.nome if e.regra_aplicada else 'Padrão do Sistema',
                 'status': e.status,
                 'resolvido_por': e.resolvido_por.get_full_name() or e.resolvido_por.username if e.resolvido_por else None,

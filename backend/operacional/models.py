@@ -93,6 +93,10 @@ class LogErroOperacional(models.Model):
     nota_fiscal_numero = models.CharField(max_length=50, blank=True, null=True)
     motorista_nome = models.CharField(max_length=255, blank=True, null=True)
     
+    # Agrupamento e Contador de Retentativas
+    qtd_tentativas = models.IntegerField(default=1, verbose_name="Qtd de Tentativas", help_text="Quantidade de vezes que este exato erro ocorreu")
+    historico_tentativas = models.JSONField(default=list, blank=True, verbose_name="Histórico de Tentativas", help_text="Lista de datas/horas de cada ocorrência")
+
     # Regra que classificou (null = classificação padrão)
     regra_aplicada = models.ForeignKey(RegraClassificacaoErro, null=True, blank=True,
         on_delete=models.SET_NULL, verbose_name="Regra que classificou")

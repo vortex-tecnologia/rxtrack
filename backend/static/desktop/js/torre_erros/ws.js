@@ -85,11 +85,21 @@ document.addEventListener("DOMContentLoaded", function() {
             actions = `<span class="badge bg-success">Resolvido</span>`;
         }
 
+        const qtd = erro.qtd_tentativas || 1;
+        const badgeTentativas = qtd > 1 
+            ? `<span class="badge bg-danger bg-opacity-75 text-white ms-1 rounded-pill" title="${qtd} tentativas acumuladas para este mesmo erro"><i class="bi bi-arrow-repeat me-1"></i>${qtd}x</span>` 
+            : '';
+
+        const dataExibicao = formatDate(erro.atualizado_em || erro.criado_em);
+
         return `
             <tr id="erro-${erro.id}" class="${getRowClass(erro.severidade)}" style="cursor: pointer;" onclick="abrirModalErro(${erro.id})">
-                <td><span class="badge ${getBadgeClass(erro.severidade)}">${erro.severidade}</span></td>
+                <td>
+                    <span class="badge ${getBadgeClass(erro.severidade)}">${erro.severidade}</span>
+                    ${badgeTentativas}
+                </td>
                 <td><small class="fw-bold text-secondary">${erro.categoria_display}</small></td>
-                <td><small>${formatDate(erro.criado_em)}</small></td>
+                <td><small>${dataExibicao}</small></td>
                 <td>
                     <div class="small fw-bold">${refs.join(' | ')}</div>
                     ${erro.motorista_nome ? `<small class="text-muted"><i class="bi bi-person"></i> ${erro.motorista_nome}</small>` : ''}
@@ -237,11 +247,31 @@ document.addEventListener("DOMContentLoaded", function() {
                     tableBody.insertAdjacentHTML('afterbegin', createRowHTML(dados));
                 }
 
-                // Se for crítico, pode exibir toast/alerta
+                // Se for crítico, exibe toast/alerta
                 if (dados.severidade === 'CRITICO') {
                     mostrarToastNotificacao('Erro Crítico Registrado', dados.titulo, 'danger');
                 }
 
+            } else if (tipoEvento === 'atualizacao_erro') {
+                // Erro repetido acumulou nova tentativa
+                const rowExistente = document.getElementById(`erro-${dados.id}`);
+                if (rowExistente) {
+                    rowExistente.outerHTML = createRowHTML(dados);
+                    const newRow = document.getElementById(`erro-${dados.id}`);
+                    if (newRow) {
+                        tableBody.prepend(newRow);
+                        newRow.style.backgroundColor = 'rgba(255, 193, 7, 0.2)';
+                        setTimeout(() => { newRow.style.backgroundColor = ''; }, 1500);
+                    }
+                } else {
+                    if (
+                        (!filterSeveridade.value || filterSeveridade.value === dados.severidade) &&
+                        (!filterCategoria.value || filterCategoria.value === dados.categoria)
+                    ) {
+                        emptyState.classList.add('d-none');
+                        tableBody.insertAdjacentHTML('afterbegin', createRowHTML(dados));
+                    }
+                }
             } else if (tipoEvento === 'erro_resolvido') {
                 const row = document.getElementById(`erro-${dados.id}`);
                 
@@ -342,6 +372,29 @@ document.addEventListener("DOMContentLoaded", function() {
                     document.getElementById('modalErroRegra').innerText = e.regra_aplicada;
                     document.getElementById('modalErroDescricao').innerText = e.descricao;
                     document.getElementById('modalErroRaw').innerText = e.erro_raw;
+
+                    // Renderiza histórico de tentativas
+                    const containerQtd = document.getElementById('modalErroQtdTentativas');
+                    const timelineDiv = document.getElementById('modalErroHistoricoTimeline');
+                    if (containerQtd && timelineDiv) {
+                        containerQtd.innerText = `${e.qtd_tentativas || 1}x`;
+                        
+                        let histHtml = '';
+                        if (e.historico_tentativas && e.historico_tentativas.length > 0) {
+                            e.historico_tentativas.forEach(h => {
+                                const isUltima = (h.numero === e.historico_tentativas.length);
+                                histHtml += `
+                                    <div class="d-flex justify-content-between align-items-center py-1 ${isUltima ? 'fw-bold text-danger' : 'text-muted'}" style="border-bottom: 1px dashed #e0e0e0;">
+                                        <span><i class="bi bi-clock me-2"></i>Tentativa #${h.numero}</span>
+                                        <span>${h.data_hora} ${isUltima ? '<span class="badge bg-danger text-white ms-1">Mais Recente</span>' : ''}</span>
+                                    </div>
+                                `;
+                            });
+                        } else {
+                            histHtml = `<div class="text-muted"><i class="bi bi-clock me-2"></i>1ª Tentativa: ${e.criado_em}</div>`;
+                        }
+                        timelineDiv.innerHTML = histHtml;
+                    }
                     
                     const acoesDiv = document.getElementById('modalErroAcoes');
                     const infoResolvido = document.getElementById('modalErroResolvidoInfo');

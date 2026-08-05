@@ -188,6 +188,13 @@
                     <p id="modalErroDescricao" class="mb-0"></p>
                 </div>
 
+                <div class="mb-3" id="modalErroHistoricoContainer">
+                    <small class="text-muted d-block mb-1 fw-bold"><i class="bi bi-clock-history me-1 text-primary"></i>Histórico de Tentativas (<span id="modalErroQtdTentativas">1</span>):</small>
+                    <div id="modalErroHistoricoTimeline" class="p-3 bg-light rounded border small" style="max-height: 140px; overflow-y: auto;">
+                        <!-- Preenchido via JS -->
+                    </div>
+                </div>
+
                 <div class="mb-4">
                     <small class="text-muted d-block mb-1">Log do Erro Completo</small>
                     <div class="bg-light p-3 rounded font-monospace small" style="max-height: 200px; overflow-y: auto;" id="modalErroRaw"></div>
