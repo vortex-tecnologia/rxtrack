@@ -617,6 +617,14 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         )
                         ids_processadas.append(nota_obj.id)
 
+                    # 📍 Dispara enriquecimento de geolocalização automática se não tiver coordenadas
+                    if nota_obj and (nota_obj.latitude is None or nota_obj.longitude is None):
+                        try:
+                            from manifesto.tasks import enriquecer_geolocalizacao_nota_task
+                            enriquecer_geolocalizacao_nota_task.delay(nota_obj.id)
+                        except Exception as geo_err:
+                            logger.warning(f"Erro ao agendar geolocalização para nota #{nota_obj.numero_nota}: {geo_err}")
+
                     total_processadas += 1
 
                 except Exception as e:

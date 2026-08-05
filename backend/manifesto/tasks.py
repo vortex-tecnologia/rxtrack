@@ -517,3 +517,30 @@ def processar_soap_task(self, evento_id):
         except:
             pass
         raise self.retry(exc=e, countdown=60)
+
+
+@shared_task
+def enriquecer_geolocalizacao_nota_task(nota_id):
+    """
+    Busca automaticamente Latitude e Longitude a partir do CEP e Endereço de entrega da NotaFiscal
+    e grava no banco de dados.
+    """
+    try:
+        from manifesto.models import NotaFiscal
+        from common.geocoding import buscar_lat_lng_endereco
+
+        nf = NotaFiscal.objects.get(id=nota_id)
+        if nf.latitude is not None and nf.longitude is not None:
+            return f"Nota #{nf.numero_nota} ja possui coordenadas."
+
+        lat, lng = buscar_lat_lng_endereco(cep=nf.cep, endereco=nf.endereco_entrega)
+        if lat is not None and lng is not None:
+            nf.latitude = lat
+            nf.longitude = lng
+            nf.save(update_fields=['latitude', 'longitude'])
+            return f"Coordenadas gravadas com sucesso para NF #{nf.numero_nota}: {lat}, {lng}"
+        else:
+            return f"Não foi possível obter coordenadas para NF #{nf.numero_nota} (CEP: {nf.cep})"
+    except Exception as e:
+        logger.error(f"Erro ao enriquecer geolocalizacao da NF {nota_id}: {e}")
+        return str(e)
