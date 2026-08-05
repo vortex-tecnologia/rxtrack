@@ -8,10 +8,15 @@
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3 class="fw-bold">Monitoramento de NF-e</h3>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 align-items-center">
+            <span class="badge bg-white text-dark border p-2 shadow-sm d-flex align-items-center gap-1" style="font-size: 0.85rem;" title="A página será recarregada automaticamente quando o tempo expirar">
+                <i class="bi bi-arrow-repeat text-primary fs-6"></i>
+                <span class="text-muted">Atualizando em:</span>
+                <strong id="timer-regressivo" class="text-primary font-monospace">01:00</strong>
+            </span>
             <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalImportarNfe">
-    <i class="bi bi-plus-circle"></i> Importar NF-e
-</button>
+                <i class="bi bi-plus-circle"></i> Importar NF-e
+            </button>
         </div>
     </div>
 
@@ -1515,6 +1520,38 @@ function executarDeletarOcorrencia(notaId) {
                 containerDireita.innerHTML = '<div class="alert alert-danger small m-2">Erro ao carregar detalhes dos manifestos.</div>';
             });
     }
+
+    // Cronômetro regressivo de 1 minuto (60 segundos) para atualização automática da página
+    let tempoRestanteNotas = 60;
+
+    function iniciarTimerRegressivoNotas() {
+        const display = document.getElementById('timer-regressivo');
+        if (!display) return;
+
+        const intervalo = setInterval(function () {
+            let minutos = Math.floor(tempoRestanteNotas / 60);
+            let segundos = tempoRestanteNotas % 60;
+
+            let minFormatado = minutos < 10 ? '0' + minutos : minutos;
+            let segFormatado = segundos < 10 ? '0' + segundos : segundos;
+
+            display.innerText = `${minFormatado}:${segFormatado}`;
+
+            if (--tempoRestanteNotas < 0) {
+                // Proteção: Se o usuário estiver interagindo com algum modal aberto, adia 15 segundos
+                if (document.querySelector('.modal.show')) {
+                    tempoRestanteNotas = 15;
+                } else {
+                    clearInterval(intervalo);
+                    location.reload();
+                }
+            }
+        }, 1000);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        iniciarTimerRegressivoNotas();
+    });
 </script>
 
 <script src="{% static 'desktop/js/nota_fiscal.js' %}"></script>
