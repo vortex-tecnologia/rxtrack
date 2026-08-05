@@ -255,10 +255,23 @@ class RegistrarBaixaView(APIView):
                 # Lógica: se tem data manual, usa ela. Se não, se já existe baixa, mantém a data dela. Se é nova, usa agora.
                 data_final_baixa = data_manual if data_manual else (baixa_existente.data_baixa if baixa_existente else timezone.now())
 
+                # Determina se a ocorrência representa SUCESSO (Entrega/Coleta Realizada)
+                cod_ref_str = str(ocorrencia.codigo_referencia or '').strip()
+                cod_tms_str = str(ocorrencia.codigo_tms or '').strip()
+                desc_upper = str(ocorrencia.descricao or '').upper()
+
+                is_sucesso = (
+                    ocorrencia.tipo == 'ENTREGA' or
+                    cod_ref_str in ['01', '02', '1', '2'] or
+                    cod_tms_str in ['01', '02', '1', '2'] or
+                    'REALIZADA' in desc_upper or
+                    'ENTREGUE' in desc_upper
+                )
+
                 baixa, created = BaixaNF.objects.update_or_create(
                     nota_fiscal=nf,
                     defaults={
-                        'tipo': 'ENTREGA' if ocorrencia.tipo == 'ENTREGA' else 'OCORRENCIA',
+                        'tipo': 'ENTREGA' if is_sucesso else 'OCORRENCIA',
                         'ocorrencia': ocorrencia,
                         'comprovante_foto_url': url_final_foto, 
                         'comprovante_original_url': url_final_foto if config_backup.armazenar_foto_backup else '', # 👈 Controlado pela flag
@@ -270,7 +283,7 @@ class RegistrarBaixaView(APIView):
                     }
                 )
                 
-                _trace.append(f"[BAIXA_SALVA] ID={baixa.id}, created={created}, tipo='{baixa.tipo}', ocorrencia_tms='{ocorrencia.codigo_tms}'")
+                _trace.append(f"[BAIXA_SALVA] ID={baixa.id}, created={created}, tipo='{baixa.tipo}', ocorrencia_tms='{ocorrencia.codigo_tms}', is_sucesso={is_sucesso}")
                 
                 # Se foi UPDATE (motorista refez a baixa), restaura o backup original 
                 # para não perder a foto verdadeiramente original 
@@ -279,7 +292,7 @@ class RegistrarBaixaView(APIView):
                     baixa.save(update_fields=['comprovante_original_url'])
 
 
-                nf.status = 'BAIXADA' if baixa.tipo == 'ENTREGA' else 'OCORRENCIA'
+                nf.status = 'BAIXADA' if is_sucesso else 'OCORRENCIA'
                 nf.save()
                 
                 # --- DISPARO DA TASK CORRETA (O CÉREBRO) ---

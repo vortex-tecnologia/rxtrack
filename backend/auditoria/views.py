@@ -161,9 +161,21 @@ class RegistrarBaixaManualSACView(APIView):
                 perfil_sac = getattr(request.user, 'motorista_perfil', None)
 
                 # Registro da Baixa
+                cod_ref_str = str(ocorrencia.codigo_referencia or '').strip()
+                cod_tms_str = str(ocorrencia.codigo_tms or '').strip()
+                desc_upper = str(ocorrencia.descricao or '').upper()
+
+                is_sucesso = (
+                    ocorrencia.tipo == 'ENTREGA' or
+                    cod_ref_str in ['01', '02', '1', '2'] or
+                    cod_tms_str in ['01', '02', '1', '2'] or
+                    'REALIZADA' in desc_upper or
+                    'ENTREGUE' in desc_upper
+                )
+
                 baixa = BaixaNF.objects.create(
                     nota_fiscal=nf,
-                    tipo='ENTREGA' if ocorrencia.tipo == 'ENTREGA' else 'OCORRENCIA',
+                    tipo='ENTREGA' if is_sucesso else 'OCORRENCIA',
                     ocorrencia=ocorrencia,
                     comprovante_foto_url=url_final_foto,
                     recebedor=recebedor_in if recebedor_in else "FINALIZADO PELO SAC",
@@ -173,7 +185,7 @@ class RegistrarBaixaManualSACView(APIView):
                     data_baixa=timezone.now()
                 )
 
-                nf.status = 'BAIXADA' if baixa.tipo == 'ENTREGA' else 'OCORRENCIA'
+                nf.status = 'BAIXADA' if is_sucesso else 'OCORRENCIA'
                 nf.save()
 
                 # Integração Inteligente com o TMS conforme o tipo
