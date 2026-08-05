@@ -80,6 +80,7 @@ def buscar_e_importar_nfe(request):
                         break
                 
                 if nota_encontrada:
+                    cep_tms = nota_encontrada.get('ioe_rpt_mds_postal_code') or nota_encontrada.get('ioe_rpt_zip_code') or nota_encontrada.get('zip_code')
                     return JsonResponse({
                         "sucesso": True,
                         "origem": "tms",
@@ -87,7 +88,8 @@ def buscar_e_importar_nfe(request):
                             "numero": nota_encontrada.get('number'),
                             "chave": nota_encontrada.get('key'),
                             "destinatario": nota_encontrada.get('ioe_rpt_name'),
-                            "endereco": f"{nota_encontrada.get('ioe_rpt_mds_line_1')}, {nota_encontrada.get('ioe_rpt_mds_number')}"
+                            "endereco": f"{nota_encontrada.get('ioe_rpt_mds_line_1')}, {nota_encontrada.get('ioe_rpt_mds_number')}",
+                            "cep": str(cep_tms).strip()[:10] if cep_tms else None
                         }
                     })
                 
@@ -102,10 +104,9 @@ def buscar_e_importar_nfe(request):
                 manifesto=manifesto,
                 numero_nota=data.get('numero'),
                 chave_acesso=data.get('chave'),
-                # salva destinação sempre maiuscula
                 destinatario=data.get('destinatario').upper() if data.get('destinatario') else None,
-                # salva endereço sempre maiusculo
                 endereco_entrega=data.get('endereco').upper() if data.get('endereco') else None,
+                cep=data.get('cep'),
                 status='PENDENTE'
             )
             # 📲 Notifica motorista (Push FCM) sobre adicao manual da nota

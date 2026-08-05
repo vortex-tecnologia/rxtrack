@@ -531,7 +531,13 @@ class ESLCloudAdapter(BaseTMSAdapter):
                             if rua:
                                 endereco = f"{rua} {num}".strip().upper()
 
-                            cep_val = detalhes.get('ioe_rpt_zip_code') or detalhes.get('ioe_rpt_mds_zip_code') or detalhes.get('zip_code') or detalhes.get('cep')
+                            cep_val = (
+                                detalhes.get('ioe_rpt_mds_postal_code') or 
+                                detalhes.get('ioe_rpt_zip_code') or 
+                                detalhes.get('ioe_rpt_mds_zip_code') or 
+                                detalhes.get('zip_code') or 
+                                detalhes.get('cep')
+                            )
                             if cep_val:
                                 cep_nota = str(cep_val).strip()[:10]
 
