@@ -1448,6 +1448,13 @@ class TorreErrosView(TemplateView):
         elif tipo_user == 'OPERACIONAL':
             qs_base = qs_base.filter(publico_alvo__in=['OPERACIONAL', 'AMBOS'])
 
+        # 📌 Consolidação Automática: Agrupa erros idênticos abertos acumulados no passado
+        from operacional.services import consolidar_erros_existentes
+        try:
+            consolidar_erros_existentes(usuario_filial if (usuario_filial and tipo_user != 'GESTOR') else None)
+        except Exception as e_cons:
+            logger.warning(f"Erro na consolidação automatica: {e_cons}")
+
         erros_abertos = qs_base.filter(status='ABERTO')
         
         context['count_criticos'] = erros_abertos.filter(severidade='CRITICO').count()
@@ -1480,7 +1487,14 @@ def api_erros_torre(request):
             tipo_user = perfil.tipo_usuario
         except Motorista.DoesNotExist:
             tipo_user = 'OPERACIONAL'
-            
+
+        # 📌 Consolidar duplicatas existentes antes de listar
+        from operacional.services import consolidar_erros_existentes
+        try:
+            consolidar_erros_existentes(usuario_filial if (usuario_filial and tipo_user != 'GESTOR') else None)
+        except Exception:
+            pass
+
         qs = LogErroOperacional.objects.all().select_related('filial')
         
         # Regras de visibilidade
