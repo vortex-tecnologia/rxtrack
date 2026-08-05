@@ -108,16 +108,25 @@ class AuditoriaDashboardView(TemplateView):
 
         return context
 
+from rest_framework.parsers import MultiPartParser, FormParser
+from manifesto.rotas.baixa import upload_via_ftp
+from manifesto.tasks import enviar_baixa_esl_task, enviar_baixa_minuta_task, enviar_coleta_esl_task
+
 class RegistrarBaixaManualSACView(APIView):
     """
     Endpoint exclusivo para o SAC realizar baixas forçadas pelo painel de auditoria.
+    Suporta envio de comprovante/foto, validações de ocorrências por tipo de documento e despacho TMS.
     """
     permission_classes = [IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
 
     def post(self, request):
         nota_id = request.data.get('nota_id')
         codigo_tms = request.data.get('codigo_tms')
+        motivo_baixa = request.data.get('motivo_baixa', 'OPERACAO_NORMAL')
         observacao = request.data.get('observacao', '')
+        recebedor_in = request.data.get('recebedor')
+        foto_arquivo = request.FILES.get('foto') or request.FILES.get('comprovante')
         
         if not nota_id or not codigo_tms:
             return Response({'erro': 'Nota e Código de Ocorrência são obrigatórios.'}, status=400)
@@ -125,34 +134,65 @@ class RegistrarBaixaManualSACView(APIView):
         try:
             with transaction.atomic():
                 nf = NotaFiscal.objects.get(id=nota_id)
-                ocorrencia = Ocorrencia.objects.get(codigo_tms=codigo_tms)
-                
-                # Identifica o SAC que está realizando a baixa
+                ocorrencia = Ocorrencia.objects.filter(
+                    Q(codigo_tms=codigo_tms) | Q(codigo_referencia=codigo_tms)
+                ).first()
+
+                if not ocorrencia:
+                    return Response({'erro': f'Código de ocorrência {codigo_tms} não localizado.'}, status=400)
+
+                # --- REGRA DE VALIDAÇÃO DE FOTO ---
+                # Para Entregas (NF-e/CT-e), ocorrências 01 ou 02 EXIGEM foto
+                cod_ref = str(ocorrencia.codigo_referencia or ocorrencia.codigo_tms or '').strip()
+                if nf.tipo_operacao != 'COLETA' and (cod_ref in ['01', '02', '1', '2'] or str(codigo_tms).strip() in ['01', '02', '1', '2']):
+                    if not foto_arquivo:
+                        return Response({
+                            'erro': 'O anexo de foto/comprovante é OBRIGATÓRIO para entregas finalizadas com código 01 (Entregue) ou 02 (Parcial).'
+                        }, status=400)
+
+                # Upload da Foto via FTP caso anexada
+                url_final_foto = None
+                if foto_arquivo:
+                    id_foto = nf.chave_acesso if nf.chave_acesso else f"sac_nota_{nf.numero_nota}"
+                    nome_arquivo = f"sac_{nf.id}_{id_foto}.jpg"
+                    url_final_foto = upload_via_ftp(foto_arquivo.read(), nome_arquivo)
+
+                # Identifica o perfil do SAC
                 perfil_sac = getattr(request.user, 'motorista_perfil', None)
-                
+
+                # Registro da Baixa
                 baixa = BaixaNF.objects.create(
                     nota_fiscal=nf,
                     tipo='ENTREGA' if ocorrencia.tipo == 'ENTREGA' else 'OCORRENCIA',
                     ocorrencia=ocorrencia,
-                    recebedor="FINALIZADO PELO SAC",
+                    comprovante_foto_url=url_final_foto,
+                    recebedor=recebedor_in if recebedor_in else "FINALIZADO PELO SAC",
                     observacao=f"[BAIXA SAC] {observacao}",
+                    motivo_baixa=motivo_baixa,
                     autor_baixa=perfil_sac,
                     data_baixa=timezone.now()
                 )
-                
+
                 nf.status = 'BAIXADA' if baixa.tipo == 'ENTREGA' else 'OCORRENCIA'
                 nf.save()
-                
-                # Integração com TMS
+
+                # Integração Inteligente com o TMS conforme o tipo
                 from configuracao.utils import get_config
                 config = get_config()
                 if config.enviar_tms:
-                    enviar_baixa_esl_task.delay(baixa.id)
-                
+                    if nf.tipo_operacao == 'COLETA':
+                        enviar_coleta_esl_task.delay(baixa.id)
+                    elif nf.chave_acesso:
+                        enviar_baixa_esl_task.delay(baixa.id)
+                    else:
+                        enviar_baixa_minuta_task.delay(baixa.id)
+
                 return Response({
                     'status': 'sucesso',
-                    'mensagem': f'Nota {nf.numero_nota} baixada com sucesso pelo SAC e enviada ao TMS.'
+                    'mensagem': f'Nota {nf.numero_nota} baixada com sucesso pelo SAC e enviada para integração com o TMS.'
                 })
-                
+
+        except NotaFiscal.DoesNotExist:
+            return Response({'erro': 'Nota fiscal não localizada.'}, status=404)
         except Exception as e:
             return Response({'erro': str(e)}, status=400)

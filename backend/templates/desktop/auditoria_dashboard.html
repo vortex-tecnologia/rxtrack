@@ -317,7 +317,7 @@
                 </td>
                 <td class="text-end pe-3">
                     ${nota.status === 'PENDENTE' ? `
-                        <button class="btn btn-sm btn-primary" onclick="realizarBaixaSAC('${nota.id}', '${nota.numero_nota}')">
+                        <button class="btn btn-sm btn-primary" onclick="realizarBaixaSAC('${nota.id}', '${nota.numero_nota}', '${nota.tipo_operacao || 'ENTREGA'}')">
                             <i class="bi bi-check-lg"></i> Baixa Forçada
                         </button>
                     ` : `
@@ -341,49 +341,128 @@
         document.getElementById('modalContent').style.display = 'block';
     }
 
-    async function realizarBaixaSAC(notaId, numeroNota) {
+    async function realizarBaixaSAC(notaId, numeroNota, tipoOperacao = 'ENTREGA') {
+        Swal.showLoading();
+
+        // 1. Busca ocorrências dinâmicas do banco filtradas pelo tipo de operação (COLETA vs ENTREGA/NFE)
+        let ocorrencias = [];
+        try {
+            const resOc = await fetch(`/api/manifesto/ocorrencias/?tipo_operacao=${encodeURIComponent(tipoOperacao)}`);
+            ocorrencias = await resOc.json();
+        } catch (err) {
+            console.error("Erro ao buscar ocorrências:", err);
+        }
+
+        if (!ocorrencias || ocorrencias.length === 0) {
+            ocorrencias = [
+                { codigo_tms: '01', descricao: 'ENTREGA REALIZADA' },
+                { codigo_tms: '02', descricao: 'ENTREGA PARCIAL' },
+                { codigo_tms: '04', descricao: 'RECUSA POR AVARIA' },
+                { codigo_tms: '07', descricao: 'ENDEREÇO NÃO LOCALIZADO' }
+            ];
+        }
+
+        let optionsHtml = '';
+        ocorrencias.forEach(oc => {
+            optionsHtml += `<option value="${oc.codigo_tms}">${oc.codigo_tms} - ${oc.descricao}</option>`;
+        });
+
+        const isColeta = (tipoOperacao === 'COLETA');
+
         const { value: formValues } = await Swal.fire({
-            title: `Baixa SAC - NF ${numeroNota}`,
+            title: `Baixa SAC - ${isColeta ? 'Coleta' : 'Doc'} ${numeroNota}`,
             html: `
                 <div class="text-start">
                     <label class="small fw-bold mb-1">Tipo de Ocorrência:</label>
-                    <select id="swal-ocorrencia" class="form-select mb-3">
-                        <option value="01">01 - ENTREGA REALIZADA</option>
-                        <option value="1">1 - ENTREGA REALIZADA (Simplificado)</option>
-                        <option value="02">02 - ENTREGA PARCIAL</option>
-                        <option value="04">04 - RECUSA POR AVARIA</option>
-                        <option value="07">07 - ENDEREÇO NÃO LOCALIZADO</option>
+                    <select id="swal-ocorrencia" class="form-select mb-3" onchange="atualizarIndicadorFoto('${tipoOperacao}')">
+                        ${optionsHtml}
                     </select>
+
+                    <label class="small fw-bold mb-1">Motivo da Baixa (Auditoria):</label>
+                    <select id="swal-motivo" class="form-select mb-3">
+                        <option value="OPERACAO_NORMAL">Operação Normal / Processado pelo SAC</option>
+                        <option value="MOTORISTA_DESLEIXO">Desleixo do Motorista (Penalização)</option>
+                        <option value="APP_ERROR">Erro de Aplicativo / Sistema</option>
+                    </select>
+
+                    <div class="mb-3">
+                        <label class="small fw-bold mb-1 d-flex justify-content-between align-items-center">
+                            <span>Foto / Comprovante:</span>
+                            <span id="badge-foto-req" class="badge bg-danger">Obrigatório</span>
+                        </label>
+                        <input type="file" id="swal-foto" class="form-control" accept="image/*" capture="environment">
+                    </div>
+
                     <label class="small fw-bold mb-1">Observação Interna:</label>
                     <textarea id="swal-obs" class="form-control" placeholder="Motivo da baixa manual pelo SAC..."></textarea>
                 </div>
             `,
+            didOpen: () => {
+                window.atualizarIndicadorFoto = function(tipoOp) {
+                    const select = document.getElementById('swal-ocorrencia');
+                    const badge = document.getElementById('badge-foto-req');
+                    if (!select || !badge) return;
+
+                    const val = select.value;
+                    const eColeta = (tipoOp === 'COLETA');
+
+                    // Regra: Entregas 01/02 exigem foto. Coleta 01 NÃO exige foto.
+                    if (!eColeta && (val === '01' || val === '02' || val === '1' || val === '2')) {
+                        badge.className = 'badge bg-danger';
+                        badge.innerText = 'Obrigatório para 01/02';
+                    } else {
+                        badge.className = 'badge bg-secondary';
+                        badge.innerText = 'Opcional';
+                    }
+                };
+                window.atualizarIndicadorFoto(tipoOperacao);
+            },
             focusConfirm: false,
             showCancelButton: true,
             confirmButtonText: 'Confirmar Baixa',
             cancelButtonText: 'Cancelar',
             preConfirm: () => {
-                return {
-                    codigo_tms: document.getElementById('swal-ocorrencia').value,
-                    observacao: document.getElementById('swal-obs').value
+                const selectOc = document.getElementById('swal-ocorrencia').value;
+                const motivo = document.getElementById('swal-motivo').value;
+                const obs = document.getElementById('swal-obs').value;
+                const fotoInput = document.getElementById('swal-foto');
+                const temFoto = fotoInput && fotoInput.files && fotoInput.files.length > 0;
+
+                // Validação estrita: Entrega 01/02 EXIGE foto
+                if (tipoOperacao !== 'COLETA' && (selectOc === '01' || selectOc === '02' || selectOc === '1' || selectOc === '2')) {
+                    if (!temFoto) {
+                        Swal.showValidationMessage('Anexo de foto/comprovante é OBRIGATÓRIO para baixas de entrega com código 01 ou 02.');
+                        return false;
+                    }
                 }
+
+                return {
+                    codigo_tms: selectOc,
+                    motivo_baixa: motivo,
+                    observacao: obs,
+                    foto: temFoto ? fotoInput.files[0] : null
+                };
             }
         });
 
         if (formValues) {
             Swal.showLoading();
             try {
+                const formData = new FormData();
+                formData.append('nota_id', notaId);
+                formData.append('codigo_tms', formValues.codigo_tms);
+                formData.append('motivo_baixa', formValues.motivo_baixa);
+                formData.append('observacao', formValues.observacao);
+                if (formValues.foto) {
+                    formData.append('foto', formValues.foto);
+                }
+
                 const response = await fetch('/auditoria/api/baixa-sac/', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
                         'X-CSRFToken': getCookie('csrftoken')
                     },
-                    body: JSON.stringify({
-                        nota_id: notaId,
-                        codigo_tms: formValues.codigo_tms,
-                        observacao: formValues.observacao
-                    })
+                    body: formData
                 });
 
                 const res = await response.json();
@@ -395,7 +474,7 @@
                     Swal.fire('Erro', res.erro || 'Falha ao registrar baixa.', 'error');
                 }
             } catch (err) {
-                Swal.fire('Erro', 'Falha na comunicação.', 'error');
+                Swal.fire('Erro', 'Falha na comunicação com o servidor.', 'error');
             }
         }
     }
