@@ -1551,6 +1551,28 @@ function executarDeletarOcorrencia(notaId) {
 
     document.addEventListener('DOMContentLoaded', function() {
         iniciarTimerRegressivoNotas();
+
+        // 📌 Persistência de Aba Ativa (Salva no localStorage ao alternar abas)
+        document.querySelectorAll('#nfeTabs button[data-bs-toggle="tab"]').forEach(btn => {
+            btn.addEventListener('shown.bs.tab', function (e) {
+                localStorage.setItem('abaAtivaNfePage', e.target.id);
+            });
+        });
+
+        // 🔄 Restaura a aba selecionada antes do refresh
+        const abaSalva = localStorage.getItem('abaAtivaNfePage');
+        if (abaSalva && abaSalva !== 'tab-nfe') {
+            const elTab = document.getElementById(abaSalva);
+            if (elTab) {
+                const tabObj = new bootstrap.Tab(elTab);
+                tabObj.show();
+                if (abaSalva === 'tab-fretes' && typeof carregarFretes === 'function') {
+                    carregarFretes();
+                } else if (abaSalva === 'tab-cargas-fretes' && typeof carregarCargasFretesResumo === 'function') {
+                    carregarCargasFretesResumo();
+                }
+            }
+        }
     });
 </script>
 
