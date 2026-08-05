@@ -29,18 +29,32 @@ class Command(BaseCommand):
     def _processar_schema(self):
         nfs_sem_coords = NotaFiscal.objects.filter(latitude__isnull=True, longitude__isnull=True)
         total = 0
-        for nf in nfs_sem_coords:
-            if not nf.cep and not nf.endereco_entrega:
-                continue
+        local_cache = {}
 
-            lat, lng = buscar_lat_lng_endereco(cep=nf.cep, endereco=nf.endereco_entrega)
-            if lat is not None and lng is not None:
-                nf.latitude = lat
-                nf.longitude = lng
-                nf.save(update_fields=['latitude', 'longitude'])
-                total += 1
-                self.stdout.write(f"    ✓ NF #{nf.numero_nota} (CEP: {nf.cep}) -> Lat: {lat}, Lng: {lng}")
-                # Pausa leve para não sobrecarregar API pública
-                time.sleep(0.3)
+        for nf in nfs_sem_coords:
+            try:
+                cep_str = str(nf.cep or '').strip()
+                end_str = str(nf.endereco_entrega or '').strip()
+                if not cep_str and not end_str:
+                    continue
+
+                key = f"{cep_str}_{end_str}"
+                if key in local_cache:
+                    lat, lng = local_cache[key]
+                else:
+                    lat, lng = buscar_lat_lng_endereco(cep=cep_str, endereco=end_str)
+                    local_cache[key] = (lat, lng)
+                    # Respeita o rate-limit de 1 requisição por segundo apenas quando faz chamada HTTP
+                    time.sleep(1.0)
+
+                if lat is not None and lng is not None:
+                    nf.latitude = lat
+                    nf.longitude = lng
+                    nf.save(update_fields=['latitude', 'longitude'])
+                    total += 1
+                    self.stdout.write(f"    ✓ NF #{nf.numero_nota} (CEP: {cep_str}) -> Lat: {lat}, Lng: {lng}")
+            except Exception as item_err:
+                self.stdout.write(f"    ⚠ Ignorando NF #{getattr(nf, 'numero_nota', 'N/A')}: {item_err}")
+                continue
 
         return total
