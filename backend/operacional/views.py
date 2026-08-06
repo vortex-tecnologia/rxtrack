@@ -553,6 +553,12 @@ def salvar_edicao_manifesto_view(request, manifesto_id):
         # 5. Salva no Banco de Dados
         manifesto.save()
 
+        try:
+            from manifesto.services import notificar_atualizacao_cargas_fretes
+            notificar_atualizacao_cargas_fretes(manifesto.filial)
+        except Exception:
+            pass
+
         # Dispara integração TMS em background se acabou de ser finalizado
         if enviar_finalizacao_tms:
             from manifesto.tasks import finalizar_manifesto_tms_task
@@ -1879,19 +1885,30 @@ def api_cargas_fretes_resumo(request):
     q = request.GET.get('q', '').strip()
     data_param = request.GET.get('data')
 
+    hoje = timezone.now().date()
     if data_param:
         try:
             data_busca = datetime.strptime(data_param, '%Y-%m-%d').date()
         except ValueError:
-            data_busca = timezone.now().date()
+            data_busca = hoje
     else:
-        data_busca = timezone.now().date()
+        data_busca = hoje
 
     notas_qs = NotaFiscal.objects.select_related(
         'manifesto', 'manifesto__motorista', 'manifesto__filial', 'frete'
     ).filter(manifesto__isnull=False)
 
-    notas_qs = notas_qs.filter(manifesto__data_criacao__date=data_busca)
+    # 📌 Regra SAC Live:
+    # 1. Manifestos ativos (em transporte/abertos): mostram sempre, independente de quando foram criados
+    # 2. Manifestos finalizados: continuam visíveis até às 23:59 do dia em que foram finalizados!
+    filtro_sac = (
+        Q(manifesto__finalizado=False) |
+        ~Q(manifesto__status='FINALIZADO') |
+        Q(manifesto__data_finalizacao__date__gte=data_busca) |
+        Q(manifesto__finalizado=True, manifesto__data_finalizacao__isnull=True, manifesto__data_criacao__date__gte=data_busca)
+    )
+
+    notas_qs = notas_qs.filter(filtro_sac)
 
     if filial_param and filial_param != 'todas':
         notas_qs = notas_qs.filter(manifesto__filial_id=filial_param)
@@ -1983,17 +2000,27 @@ def api_cargas_fretes_detalhes(request):
     q = request.GET.get('q', '').strip()
     data_param = request.GET.get('data')
 
+    hoje = timezone.now().date()
     if data_param:
         try:
             data_busca = datetime.strptime(data_param, '%Y-%m-%d').date()
         except ValueError:
-            data_busca = timezone.now().date()
+            data_busca = hoje
     else:
-        data_busca = timezone.now().date()
+        data_busca = hoje
 
     notas_qs = NotaFiscal.objects.select_related(
         'manifesto', 'manifesto__motorista', 'manifesto__filial', 'frete'
-    ).filter(manifesto__isnull=False, manifesto__data_criacao__date=data_busca)
+    ).filter(manifesto__isnull=False)
+
+    filtro_sac = (
+        Q(manifesto__finalizado=False) |
+        ~Q(manifesto__status='FINALIZADO') |
+        Q(manifesto__data_finalizacao__date__gte=data_busca) |
+        Q(manifesto__finalizado=True, manifesto__data_finalizacao__isnull=True, manifesto__data_criacao__date__gte=data_busca)
+    )
+
+    notas_qs = notas_qs.filter(filtro_sac)
 
     if filial_param and filial_param != 'todas':
         notas_qs = notas_qs.filter(manifesto__filial_id=filial_param)
