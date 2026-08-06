@@ -1318,7 +1318,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             
             codigo_tms_val = (baixa.ocorrencia.codigo_tms or baixa.ocorrencia.codigo_referencia) if baixa.ocorrencia else None
             codigo_ocorrencia = limpar_codigo_ocorrencia(codigo_tms_val) if codigo_tms_val else 1
-            
+
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {TOKEN}"
@@ -1544,3 +1544,101 @@ class ESLCloudAdapter(BaseTMSAdapter):
             if task:
                 raise task.retry(exc=exc, countdown=300)
             raise
+
+    def enviar_comprovante_entrega(self, baixa_id, task=None):
+        """
+        Cadastra/Atualiza o comprovante de entrega (foto/canhoto) no TMS ESL Cloud.
+        Endpoints ESL Cloud:
+        1. NF-e (chave_acesso): POST /api/freight_invoice_delivery_receipts
+        2. Frete / CT-e (chave_cte): POST /api/freight_delivery_receipts
+        """
+        TOKEN = self.config.token_invoices
+        try:
+            baixa = BaixaNF.objects.select_related(
+                'nota_fiscal',
+                'nota_fiscal__manifesto',
+                'nota_fiscal__frete'
+            ).get(id=baixa_id)
+
+            nf = baixa.nota_fiscal
+            url_foto = baixa.comprovante_foto_url
+            if not url_foto:
+                msg = f"Nenhuma URL de foto cadastrada na baixa #{baixa_id}."
+                logger.warning(msg)
+                return msg
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {TOKEN}"
+            }
+
+            # 1. Tenta por chave_acesso NF-e primeiro
+            if nf.chave_acesso:
+                url_esl = f"https://{self.config.dominio_esl}/api/freight_invoice_delivery_receipts"
+                payload = {
+                    "freight_invoice_delivery_receipt": {
+                        "invoice": {
+                            "key": str(nf.chave_acesso).strip(),
+                            "delivery_receipt_url": str(url_foto).strip()
+                        }
+                    }
+                }
+                logger.info(f"📸 [ESL COMPROVANTE] Enviando comprovante NF-e {nf.numero_nota} (Chave: {nf.chave_acesso})")
+            else:
+                # 2. Tenta por chave_cte do Frete/Minuta
+                chave_cte = None
+                if nf.chave_cte:
+                    chave_cte = nf.chave_cte
+                elif hasattr(nf, 'frete') and nf.frete and nf.frete.chave_cte:
+                    chave_cte = nf.frete.chave_cte
+                elif nf.numero_cte:
+                    chave_cte = nf.numero_cte
+
+                if chave_cte:
+                    url_esl = f"https://{self.config.dominio_esl}/api/freight_delivery_receipts"
+                    payload = {
+                        "freight_delivery_receipt": {
+                            "freight": {
+                                "cte_key": str(chave_cte).strip(),
+                                "delivery_receipt_url": str(url_foto).strip()
+                            }
+                        }
+                    }
+                    logger.info(f"📸 [ESL COMPROVANTE] Enviando comprovante Frete/CT-e {nf.numero_nota} (Chave CT-e: {chave_cte})")
+                else:
+                    msg = f"Nota #{nf.numero_nota} sem chave_acesso nem chave_cte para envio do comprovante ao TMS."
+                    logger.warning(msg)
+                    baixa.log_erro_tms = msg
+                    baixa.save(update_fields=['log_erro_tms'])
+                    return msg
+
+            response = requests.post(url_esl, json=payload, headers=headers, timeout=30)
+            
+            if response.status_code == 429:
+                import time
+                logger.warning("Rate limit 429 atingido ao enviar comprovante. Aguardando 2.5s...")
+                time.sleep(2.5)
+                response = requests.post(url_esl, json=payload, headers=headers, timeout=30)
+
+            response.raise_for_status()
+
+            baixa.processado_tms = True
+            baixa.integrado_tms = True
+            baixa.log_erro_tms = f"Sucesso: Comprovante de entrega atualizado no TMS ESL Cloud em {timezone.now().strftime('%d/%m/%Y %H:%M')}"
+            baixa.data_integracao = timezone.now()
+            baixa.save(update_fields=['processado_tms', 'integrado_tms', 'log_erro_tms', 'data_integracao'])
+
+            logger.info(f"✅ Comprovante da nota #{nf.numero_nota} atualizado no TMS com sucesso!")
+            return f"Comprovante da nota #{nf.numero_nota} atualizado com sucesso."
+
+        except Exception as e:
+            msg_falha = f"Erro ao cadastrar comprovante no TMS: {str(e)}"
+            if hasattr(e, 'response') and e.response is not None:
+                msg_falha = f"Erro ao cadastrar comprovante no TMS ({e.response.status_code}): {e.response.text}"
+            logger.error(msg_falha)
+            baixa.log_erro_tms = msg_falha[:500]
+            baixa.save(update_fields=['log_erro_tms'])
+            if task:
+                raise task.retry(exc=e, countdown=60)
+            raise
+

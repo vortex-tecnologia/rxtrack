@@ -12,7 +12,7 @@ from ftplib import FTP
 from io import BytesIO
 
 @shared_task(queue='ai_queue')
-def task_processar_canhoto_ia(baixa_id):
+def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
     """
     Interceptor do Agente IA: 
     Processa a foto antes do envio final para o TMS.
@@ -24,7 +24,7 @@ def task_processar_canhoto_ia(baixa_id):
 
     url_original = baixa.comprovante_foto_url
     if not url_original:
-        return finalizar_fluxo_tms(baixa)
+        return finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
 
     # 2. Baixa a imagem da URL original para a memória
     resp = requests.get(url_original)
@@ -32,7 +32,7 @@ def task_processar_canhoto_ia(baixa_id):
     img_original = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
     
     if img_original is None:
-        return finalizar_fluxo_tms(baixa)
+        return finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
 
     # 3. Monta o texto da Tarja Preta
     from django.utils import timezone
@@ -131,7 +131,7 @@ def task_processar_canhoto_ia(baixa_id):
         upload_via_ftp_agente(buffer_err.tobytes(), f"FALHA_{nome_arquivo}", caminho_erro)
 
     # 7. Finaliza enviando para o TMS
-    finalizar_fluxo_tms(baixa)
+    finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
 
 
 def upload_via_ftp_agente(imagem_bytes, nome_arquivo, caminho_destino):
@@ -156,13 +156,19 @@ def upload_via_ftp_agente(imagem_bytes, nome_arquivo, caminho_destino):
         print(f"Erro no Upload FTP AgenteIA: {e}")
         return None
 
-def finalizar_fluxo_tms(baixa):
+def finalizar_fluxo_tms(baixa, somente_comprovante=False):
     """Dispara a integração final com o delay necessário (controlado pela flag enviar_tms)"""
     from configuracao.utils import get_config
+    from manifesto.tasks import enviar_comprovante_esl_task
     config = get_config()
     
     if not config.enviar_tms:
         print(f"TMS: Envio DESLIGADO nas configurações. Baixa {baixa.id} salva apenas localmente.")
+        return
+
+    if somente_comprovante:
+        enviar_comprovante_esl_task.apply_async(args=[baixa.id], countdown=2)
+        print(f"TMS: Recadastro exclusivo de comprovante para Baixa #{baixa.id} despachado.")
         return
     
     nf = baixa.nota_fiscal

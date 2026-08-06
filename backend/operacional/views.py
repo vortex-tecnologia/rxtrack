@@ -2112,3 +2112,72 @@ def api_cargas_fretes_detalhes(request):
     manifestos_lista.sort(key=lambda x: x['numero_manifesto'], reverse=True)
 
     return JsonResponse({'status': 'sucesso', 'manifestos': manifestos_lista})
+
+
+@login_required
+@require_POST
+def atualizar_foto_baixa_view(request, baixa_id):
+    """
+    Recebe um novo arquivo de foto/canhoto para uma baixa existente, salva via FTP,
+    submete a IA (YOLO/OCR) e recadastra o comprovante no TMS ESL Cloud em background.
+    """
+    from django.shortcuts import get_object_or_404
+    from manifesto.models import BaixaNF
+    from manifesto.rotas.baixa import upload_via_ftp
+    from configuracao.utils import get_config
+    from manifesto.services import enviar_painel
+    from manifesto.tasks import enviar_comprovante_esl_task
+    from AgenteIa.tasks import task_processar_canhoto_ia
+    import logging
+
+    logger = logging.getLogger(__name__)
+    baixa = get_object_or_404(BaixaNF, id=baixa_id)
+    foto_arquivo = request.FILES.get('foto')
+
+    if not foto_arquivo:
+        return JsonResponse({'status': 'erro', 'message': 'Nenhum arquivo de imagem foi selecionado.'}, status=400)
+
+    try:
+        config = get_config()
+        nf = baixa.nota_fiscal
+
+        # Nome único para a imagem
+        id_foto = nf.chave_acesso if (nf and nf.chave_acesso) else f"baixa_{baixa.id}_reupload"
+        nome_arquivo = f"update_{baixa.id}_{id_foto}.jpg"
+
+        url_final_foto = upload_via_ftp(foto_arquivo.read(), nome_arquivo)
+
+        if not url_final_foto:
+            return JsonResponse({'status': 'erro', 'message': 'Falha no envio da imagem para o servidor de arquivos (FTP).'}, status=500)
+
+        # Preserva backup original se ainda não tiver
+        if not baixa.comprovante_original_url:
+            baixa.comprovante_original_url = baixa.comprovante_foto_url or url_final_foto
+
+        baixa.comprovante_foto_url = url_final_foto
+        baixa.processado_tms = False
+        baixa.integrado_tms = False
+        baixa.log_erro_tms = "Iniciando processamento da nova foto via IA / TMS..."
+        baixa.save()
+
+        # Se YOLO estiver ativo, passa pelo agente IA primeiro
+        if config.processar_yolo:
+            task_processar_canhoto_ia.delay(baixa.id, somente_comprovante=True)
+            msg_status = "Nova foto salva! IA (YOLO/OCR) e recadastro no TMS iniciados."
+        else:
+            enviar_comprovante_esl_task.delay(baixa.id)
+            msg_status = "Nova foto salva! Recadastro no TMS iniciado."
+
+        if nf and nf.manifesto:
+            transaction.on_commit(lambda: enviar_painel(nf.manifesto))
+
+        return JsonResponse({
+            'status': 'sucesso',
+            'message': msg_status,
+            'nova_url': url_final_foto
+        })
+
+    except Exception as e:
+        logger.error(f"Erro ao atualizar foto da baixa #{baixa_id}: {e}")
+        return JsonResponse({'status': 'erro', 'message': f'Erro interno: {str(e)}'}, status=500)
+

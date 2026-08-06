@@ -91,6 +91,15 @@ def enviar_coleta_esl_task(self, baixa_id):
 
 
 @shared_task(bind=True, max_retries=3)
+def enviar_comprovante_esl_task(self, baixa_id):
+    """Dispara o recadastro exclusivo da foto/comprovante de entrega no TMS."""
+    adapter = get_tms_adapter()
+    if adapter:
+        return adapter.enviar_comprovante_entrega(baixa_id, task=self)
+    return "TMS Desativado."
+
+
+@shared_task(bind=True, max_retries=3)
 def processar_webhook_manifesto_task(self, event_id):
     """
     Processa o payload de um WebhookEventoManifestoESL.

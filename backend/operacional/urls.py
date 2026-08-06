@@ -26,6 +26,7 @@ urlpatterns = [
     path('api/manifesto/deletar/<int:manifesto_id>/', views.deletar_manifesto_operacional_view, name='deletar_manifesto_operacional'),
     path('api/nota-fiscal/deletar/<int:nota_id>/', views.deletar_nota_fiscal_view, name='deletar_nota_fiscal'),
     path('api/nota-fiscal/deletar-ocorrencia/<int:nota_id>/', views.deletar_ocorrencia_view, name='deletar_ocorrencia'),
+    path('api/operacional/baixa/<int:baixa_id>/atualizar-foto/', views.atualizar_foto_baixa_view, name='atualizar_foto_baixa'),
     path('api/fretes/', views.api_fretes_listar, name='api_fretes_listar'),
     path('api/fretes/<int:frete_id>/notas/', views.api_fretes_detalhes_notas, name='api_fretes_detalhes_notas'),
     path('api/cargas-fretes/resumo/', views.api_cargas_fretes_resumo, name='api_cargas_fretes_resumo'),
