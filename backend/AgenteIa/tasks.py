@@ -149,12 +149,11 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
     if os.path.exists(img_path):
         os.remove(img_path)
 
-    # 6. CASO DE FALHA: Salva original na pasta de Erro para seu Treinamento
+    # 6. CASO DE FALHA YOLO: Salva original na pasta de Erro para Treinamento futuro do modelo
+    #    NÃO grava em log_erro_tms para não disparar notificações de falso erro.
+    #    Os badges visuais (IA: Canhoto Falhou / IA: Leitura Falhou) no modal já informam isso.
     if not found_canhoto:
-        msg_aviso_yolo = f"Aviso IA: YOLO não detectou a borda do canhoto. Foto original enviada ao TMS sem recorte. Out: {out[:150]}"
-        print(msg_aviso_yolo)
-        baixa.log_erro_tms = msg_aviso_yolo[:500]
-        baixa.save(update_fields=['log_erro_tms'])
+        print(f"[IA] YOLO não detectou canhoto na Baixa #{baixa.id}. Foto original será enviada ao TMS sem recorte. Out: {out[:200]}")
         caminho_erro = 'public_html/uploads/AgenteIA/ErroLeitura'
         _, buffer_err = cv2.imencode('.jpg', img_original)
         upload_via_ftp_agente(buffer_err.tobytes(), f"FALHA_{nome_arquivo}", caminho_erro)
