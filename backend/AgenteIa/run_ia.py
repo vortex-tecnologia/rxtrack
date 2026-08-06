@@ -86,7 +86,7 @@ def run_ml(img_path, watermark_text="", expected_nfe="", skip_ocr=False, codigo_
                     cv2.imwrite(temp_crop_path, crop_img, [cv2.IMWRITE_JPEG_QUALITY, 90])
                     
                     florence_res = subprocess.run(
-                        ['python', florence_script, temp_crop_path, str(expected_nfe or '')],
+                        [sys.executable, florence_script, temp_crop_path, str(expected_nfe or '')],
                         capture_output=True, text=True, timeout=60
                     )
                     fl_out = florence_res.stdout.strip()

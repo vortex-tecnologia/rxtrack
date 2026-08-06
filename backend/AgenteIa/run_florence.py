@@ -142,6 +142,9 @@ def process_florence(crop_path, expected_nfe=""):
     print("FLORENCE_SUCESSO", flush=True)
 
 if __name__ == "__main__":
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
+
     if len(sys.argv) < 2:
         print("FLORENCE_ERRO:Argumentos insuficientes", flush=True)
         sys.exit(1)

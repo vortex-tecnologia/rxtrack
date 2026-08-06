@@ -116,7 +116,8 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
         codigos_banco = config.get_codigos_yolo_list()
         codigo_oc_passar = codigos_banco[0] if codigos_banco else ""
     print(f"Iniciando YOLO Externo para Baixa #{baixa.id} (Ocorrência Banco: '{codigo_oc_passar}', OCR: {'ON' if config.processar_ocr else 'OFF'})...")
-    run_result = subprocess.run(['python', script_path, img_path, watermark_text, nfe_num, skip_ocr, codigo_oc_passar], capture_output=True, text=True)
+    import sys
+    run_result = subprocess.run([sys.executable, script_path, img_path, watermark_text, nfe_num, skip_ocr, codigo_oc_passar], capture_output=True, text=True)
     out = run_result.stdout.strip()
     err = run_result.stderr.strip()
     
