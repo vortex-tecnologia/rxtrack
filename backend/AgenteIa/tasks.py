@@ -151,7 +151,10 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
 
     # 6. CASO DE FALHA: Salva original na pasta de Erro para seu Treinamento
     if not found_canhoto:
-        print(f"YOLO Falhou ou nao encontrou classe 0. Out: {out}")
+        msg_aviso_yolo = f"Aviso IA: YOLO não detectou a borda do canhoto. Foto original enviada ao TMS sem recorte. Out: {out[:150]}"
+        print(msg_aviso_yolo)
+        baixa.log_erro_tms = msg_aviso_yolo[:500]
+        baixa.save(update_fields=['log_erro_tms'])
         caminho_erro = 'public_html/uploads/AgenteIA/ErroLeitura'
         _, buffer_err = cv2.imencode('.jpg', img_original)
         upload_via_ftp_agente(buffer_err.tobytes(), f"FALHA_{nome_arquivo}", caminho_erro)

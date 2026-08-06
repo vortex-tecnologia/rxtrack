@@ -1641,12 +1641,32 @@ class ESLCloudAdapter(BaseTMSAdapter):
             return f"Comprovante da nota #{nf.numero_nota} atualizado com sucesso."
 
         except Exception as e:
-            msg_falha = f"Erro ao cadastrar comprovante no TMS: {str(e)}"
+            payload_str = f" | Payload: {json.dumps(payload)}" if ('payload' in locals() and payload) else ""
+            msg_falha = f"Erro ao cadastrar comprovante no TMS: {str(e)}{payload_str}"
             if hasattr(e, 'response') and e.response is not None:
-                msg_falha = f"Erro ao cadastrar comprovante no TMS ({e.response.status_code}): {e.response.text}"
+                msg_falha = f"Erro ao cadastrar comprovante no TMS ({e.response.status_code}): {e.response.text}{payload_str}"
+            
             logger.error(msg_falha)
             baixa.log_erro_tms = msg_falha[:500]
-            baixa.save(update_fields=['log_erro_tms'])
+            baixa.integrado_tms = False
+            baixa.save(update_fields=['log_erro_tms', 'integrado_tms'])
+
+            try:
+                from operacional.services import registrar_erro_torre
+                registrar_erro_torre(
+                    filial=nf.manifesto.filial if (nf and nf.manifesto) else None,
+                    categoria='INTEGRACAO_COMPROVANTE',
+                    severidade_padrao='CRITICO',
+                    titulo=f"Falha envio comprovante NF {nf.numero_nota if nf else baixa_id}",
+                    descricao=msg_falha[:300],
+                    erro_raw=msg_falha,
+                    manifesto_numero=nf.manifesto.numero_manifesto if (nf and nf.manifesto) else None,
+                    nota_fiscal_numero=nf.numero_nota if nf else None,
+                    motorista_nome=nf.manifesto.motorista.nome_completo if (nf and nf.manifesto and nf.manifesto.motorista) else "Operacional",
+                )
+            except Exception as tr_exc:
+                logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+
             if task:
                 raise task.retry(exc=e, countdown=60)
             raise
