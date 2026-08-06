@@ -867,14 +867,10 @@ function abrirDetalhes(notaId) {
     });
 }
 
-function enviarNovaFotoBaixa(baixaId, inputEl) {
+function enviarNovaFotoBaixa(baixaId, inputEl, notaId) {
     if (!inputEl || !inputEl.files || !inputEl.files[0]) return;
     const file = inputEl.files[0];
-
-    if (!confirm("Deseja realmente atualizar o comprovante/foto desta baixa?\n\nA imagem passará pela validação de IA (YOLO/OCR) e será re-enviada ao TMS ESL Cloud.")) {
-        inputEl.value = '';
-        return;
-    }
+    const feedbackEl = document.getElementById(`feedbackFotoBaixa_${baixaId}`);
 
     function getCookieVal(name) {
         let cookieValue = null;
@@ -898,7 +894,12 @@ function enviarNovaFotoBaixa(baixaId, inputEl) {
     const originalText = btn ? btn.innerHTML : '';
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Enviando foto e IA...';
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Processando Foto & IA...';
+    }
+
+    if (feedbackEl) {
+        feedbackEl.className = 'alert alert-info small mb-2 p-2 rounded d-block';
+        feedbackEl.innerHTML = '<i class="bi bi-cpu me-1"></i>Enviando foto para IA (YOLO/OCR) e TMS...';
     }
 
     fetch(`/api/operacional/baixa/${baixaId}/atualizar-foto/`, {
@@ -911,10 +912,22 @@ function enviarNovaFotoBaixa(baixaId, inputEl) {
     .then(res => res.json())
     .then(data => {
         if (data.status === 'sucesso') {
-            alert("✅ " + data.message);
-            location.reload();
+            if (feedbackEl) {
+                feedbackEl.className = 'alert alert-success small mb-2 p-2 rounded d-block';
+                feedbackEl.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i>${data.message}`;
+            }
+            setTimeout(() => {
+                if (typeof abrirDetalhes === 'function' && notaId) {
+                    abrirDetalhes(notaId);
+                } else {
+                    location.reload();
+                }
+            }, 1200);
         } else {
-            alert("❌ Erro: " + (data.message || 'Falha ao atualizar foto.'));
+            if (feedbackEl) {
+                feedbackEl.className = 'alert alert-danger small mb-2 p-2 rounded d-block';
+                feedbackEl.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i>${data.message || 'Falha ao atualizar foto.'}`;
+            }
             if (btn) {
                 btn.disabled = false;
                 btn.innerHTML = originalText;
@@ -923,7 +936,10 @@ function enviarNovaFotoBaixa(baixaId, inputEl) {
     })
     .catch(err => {
         console.error(err);
-        alert("❌ Erro de conexão ao enviar foto.");
+        if (feedbackEl) {
+            feedbackEl.className = 'alert alert-danger small mb-2 p-2 rounded d-block';
+            feedbackEl.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i>Erro de conexão ao enviar foto.';
+        }
         if (btn) {
             btn.disabled = false;
             btn.innerHTML = originalText;
