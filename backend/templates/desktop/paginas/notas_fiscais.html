@@ -1350,7 +1350,7 @@ function executarDeletarOcorrencia(notaId) {
         }, 300);
     }
 
-    function carregarCargasFretesResumo() {
+    function carregarCargasFretesResumo(isSilent = false) {
         const container = document.getElementById('listaRemetentesContainer');
         const badgeTotal = document.getElementById('badgeTotalRemetentes');
         const q = document.getElementById('buscaRemetenteFrete') ? document.getElementById('buscaRemetenteFrete').value.trim() : '';
@@ -1361,12 +1361,14 @@ function executarDeletarOcorrencia(notaId) {
         let url = `/api/cargas-fretes/resumo/?filial=${encodeURIComponent(filialParam)}`;
         if (q) url += `&q=${encodeURIComponent(q)}`;
 
-        container.innerHTML = `
-            <div class="text-center py-5 text-muted">
-                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
-                <span>Carregando clientes do dia...</span>
-            </div>
-        `;
+        if (!isSilent) {
+            container.innerHTML = `
+                <div class="text-center py-5 text-muted">
+                    <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                    <span>Carregando clientes do dia...</span>
+                </div>
+            `;
+        }
 
         fetch(url)
             .then(res => res.json())
@@ -1421,16 +1423,16 @@ function executarDeletarOcorrencia(notaId) {
 
                 if (data.remetentes.length > 0) {
                     const alvo = (clienteSelecionadoAtual && data.remetentes.some(r => r.remetente === clienteSelecionadoAtual)) ? clienteSelecionadoAtual : data.remetentes[0].remetente;
-                    selecionarRemetente(alvo);
+                    selecionarRemetente(alvo, null, isSilent);
                 }
             })
             .catch(err => {
                 console.error(err);
-                container.innerHTML = '<div class="alert alert-danger small m-2">Erro ao carregar clientes do dia.</div>';
+                if (!isSilent) container.innerHTML = '<div class="alert alert-danger small m-2">Erro ao carregar clientes do dia.</div>';
             });
     }
 
-    function selecionarRemetente(remetenteNome, elCard = null) {
+    function selecionarRemetente(remetenteNome, elCard = null, isSilent = false) {
         clienteSelecionadoAtual = remetenteNome;
 
         if (elCard) {
@@ -1452,12 +1454,14 @@ function executarDeletarOcorrencia(notaId) {
         if (tituloEl) tituloEl.innerHTML = `<i class="bi bi-building me-2 text-primary"></i> ${remetenteNome}`;
         if (subtituloEl) subtituloEl.innerText = `Cargas e manifestos ativos na rua hoje`;
 
-        containerDireita.innerHTML = `
-            <div class="text-center py-5 text-muted">
-                <div class="spinner-border text-primary me-2" role="status"></div>
-                <p class="mt-2 fw-bold mb-0">Buscando motoristas do cliente...</p>
-            </div>
-        `;
+        if (!isSilent) {
+            containerDireita.innerHTML = `
+                <div class="text-center py-5 text-muted">
+                    <div class="spinner-border text-primary me-2" role="status"></div>
+                    <p class="mt-2 fw-bold mb-0">Buscando motoristas do cliente...</p>
+                </div>
+            `;
+        }
 
         let url = `/api/cargas-fretes/detalhes/?remetente=${encodeURIComponent(remetenteNome)}&filial=${encodeURIComponent(filialParam)}`;
         if (q) url += `&q=${encodeURIComponent(q)}`;
@@ -1593,7 +1597,7 @@ function executarDeletarOcorrencia(notaId) {
                 if (data.type === 'atualizar_cargas') {
                     console.log("⚡ [WS SAC] Atualização recebida! Recarregando dados em tempo real...");
                     if (typeof carregarCargasFretesResumo === 'function') {
-                        carregarCargasFretesResumo();
+                        carregarCargasFretesResumo(true);
                     }
                 }
             } catch(err) {

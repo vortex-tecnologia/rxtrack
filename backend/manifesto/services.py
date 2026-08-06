@@ -60,6 +60,12 @@ def enviar_painel(manifesto):
             payload
         )
 
+    # ⚡ Transmite em tempo real para o SAC Live também!
+    try:
+        notificar_atualizacao_cargas_fretes(manifesto.filial if manifesto else None)
+    except Exception as sac_err:
+        print(f"❌ Erro ao notificar SAC no enviar_painel: {sac_err}")
+
 
 def notificar_atualizacao_cargas_fretes(filial=None):
     """
