@@ -392,7 +392,7 @@ function atualizarUltimoSinalTorre() {
                 if (diffCriacaoHours >= 24) {
                     card.classList.add('card-danger-pulse');
                     alertaContainer.innerHTML = `
-                        <i class="fas fa-exclamation-triangle text-danger fs-3" 
+                        <i class="bi bi-exclamation-triangle-fill text-danger fs-3" 
                            title="Manifesto criado há ${Math.floor(diffCriacaoHours/24)} dia(s) e não finalizado" 
                            data-bs-toggle="tooltip" 
                            style="cursor: help; animation: pulse 2s infinite;"></i>
@@ -404,7 +404,7 @@ function atualizarUltimoSinalTorre() {
                 } else if (diffCriacaoHours >= 12) {
                     card.classList.add('card-warning-pulse');
                     alertaContainer.innerHTML = `
-                        <i class="fas fa-exclamation-triangle text-warning fs-3" 
+                        <i class="bi bi-exclamation-triangle-fill text-warning fs-3" 
                            title="Manifesto aberto há ${Math.floor(diffCriacaoHours)}h sem finalizar" 
                            data-bs-toggle="tooltip" 
                            style="cursor: help; animation: pulse 2s infinite;"></i>

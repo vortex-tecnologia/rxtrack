@@ -53,7 +53,7 @@
                         <!-- Ícone de Alerta para Manifesto Antigo (Renderizado Nativo pelo Backend e JS) -->
                         <div id="alerta-antigo-{{ m.numero_manifesto }}" class="align-self-center px-2">
                             {% if m.is_antigo %}
-                            <i class="fas fa-exclamation-triangle text-warning fs-3" 
+                            <i class="bi bi-exclamation-triangle-fill text-warning fs-3" 
                                title="Manifesto criado há {{ m.dias_criado }} dia(s) e não finalizado" 
                                data-bs-toggle="tooltip" 
                                style="cursor: help; animation: pulse 2s infinite;"></i>
