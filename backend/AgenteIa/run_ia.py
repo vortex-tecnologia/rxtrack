@@ -70,132 +70,46 @@ def run_ml(img_path, watermark_text="", expected_nfe="", skip_ocr=False, codigo_
             if ch > cw:
                 crop_img = cv2.rotate(crop_img, cv2.ROTATE_90_CLOCKWISE)
             
-            # --- Ajuste OSD de Orientacao com Tesseract OCR ---
-            import pytesseract
-            ocr_detected = False
-            
-            if skip_ocr:
-                print("OCR DESLIGADO nas configuracoes. Pulando rotacao.", flush=True)
-                # Pula direto para a parte de salvar o crop (sem tentar girar)
-                final_img = crop_img
-                if watermark_text:
-                    font = cv2.FONT_HERSHEY_SIMPLEX
-                    h_final, w_final = final_img.shape[:2]
-                    text_scale = max(0.4, w_final / 1200)
-                    thickness = max(1, int(w_final / 600))
-                    bar_height = int(40 * text_scale)
-                    black_bar = np.zeros((bar_height, w_final, 3), dtype=np.uint8)
-                    text_color = (0, 255, 255)
-                    cv2.putText(black_bar, watermark_text, (20, bar_height - 15), font, text_scale, text_color, thickness, cv2.LINE_AA)
-                    final_img = cv2.vconcat([final_img, black_bar])
-                crop_path = img_path.replace(".jpg", "_crop.jpg")
-                cv2.imwrite(crop_path, final_img, [cv2.IMWRITE_JPEG_QUALITY, 90])
-                print(f"SUCESSO:{crop_path}", flush=True)
-                return
-            try:
-                # 1. Pré-processamento avançado específico para o OCR (OSD)
-                # O Tesseract OSD funciona muito melhor com imagens maiores, em escala de cinza e com contraste
-                
-                # Converte para escala de cinza
-                gray = cv2.cvtColor(crop_img, cv2.COLOR_BGR2GRAY)
-                
-                # Aumenta o tamanho (Upscaling 2x) para letras pequenas ficarem legiveis
-                gray = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-                
-                # Adiciona borda branca (Padding) para o Tesseract entender o layout/margens
-                temp_ocr = cv2.copyMakeBorder(gray, 100, 100, 100, 100, cv2.BORDER_CONSTANT, value=[255, 255, 255])
-                
-                # Aplica um filtro de nitidez (Laplacian) para reforçar bordas de letras
-                kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-                temp_ocr = cv2.filter2D(temp_ocr, -1, kernel)
-
-                # 2. Chama o Tesseract OSD (Orientation and Script Detection)
-                osd = pytesseract.image_to_osd(temp_ocr)
-                angle = 0
-                for line in osd.split('\n'):
-                    if 'Rotate: ' in line:
-                        angle = int(line.split(': ')[1].strip())
-                        ocr_detected = True 
-                        break
-                
-                # --- DOUBLE CHECK (Votação de Caracteres) ---
-                # Se o OSD disse 0, vamos conferir se invertido nao le melhor (erro comum do Tesseract)
-                if ocr_detected and angle == 0:
-                    # Tenta ler texto na posicao atual
-                    txt0 = pytesseract.image_to_string(temp_ocr, config='--psm 6')
-                    count0 = sum(c.isalnum() for c in txt0)
+            # --- Processamento Visual Florence-2 (LLM Local Vision) ---
+            if skip_ocr or skip_ocr == "skip_ocr":
+                print("OCR DESLIGADO nas configuracoes. Pulando leitura visual.", flush=True)
+            else:
+                try:
+                    import tempfile
+                    import subprocess
                     
-                    # Tenta ler texto invertido 180 graus
-                    temp_ocr_180 = cv2.rotate(temp_ocr, cv2.ROTATE_180)
-                    txt180 = pytesseract.image_to_string(temp_ocr_180, config='--psm 6')
-                    count180 = sum(c.isalnum() for c in txt180)
+                    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    florence_script = os.path.join(BASE_DIR, 'AgenteIa', 'run_florence.py')
                     
-                    # Se a versao invertida tiver MUITO mais caracteres legiveis (ex: cabeçalho da NF-e)
-                    # Forçamos a rotação de 180 graus
-                    if count180 > (count0 + 10) and count180 > (count0 * 1.5):
-                        angle = 180
-                        # print(f"DEBUG: Forçando 180 graus por OCR (C0:{count0} vs C180:{count180})")
-                
-                # --- QUADRUPLE CHECK (Âncora por Número da NF-e) ---
-                # Se ainda estamos em 0 e temos o número esperado da nota, buscamos ele na imagem.
-                # Se o número só aparecer "de cabeça para baixo", giramos 180.
-                if angle == 0 and expected_nfe and len(expected_nfe) >= 3:
-                    expected_nfe = str(expected_nfe).strip()
-                    # Tenta ler texto na posicao atual
-                    full_txt0 = pytesseract.image_to_string(temp_ocr, config='--psm 6')
+                    # Salva crop temporario para o Florence-2 analisar e rotacionar
+                    temp_crop_path = img_path.replace(".jpg", "_temp_crop.jpg")
+                    cv2.imwrite(temp_crop_path, crop_img, [cv2.IMWRITE_JPEG_QUALITY, 90])
                     
-                    if expected_nfe not in full_txt0:
-                        # Tenta ler texto invertido 180 graus
-                        temp_ocr_180 = cv2.rotate(temp_ocr, cv2.ROTATE_180)
-                        full_txt180 = pytesseract.image_to_string(temp_ocr_180, config='--psm 6')
+                    florence_res = subprocess.run(
+                        ['python', florence_script, temp_crop_path, str(expected_nfe or '')],
+                        capture_output=True, text=True, timeout=60
+                    )
+                    fl_out = florence_res.stdout.strip()
+                    
+                    if "FLORENCE_SUCESSO" in fl_out:
+                        print("INFO:OCR_SUCESSO", flush=True)
+                        # Re-imprime saídas do Florence para o tasks.py capturar
+                        for line in fl_out.split('\n'):
+                            if line.startswith("FLORENCE_"):
+                                print(line, flush=True)
                         
-                        if expected_nfe in full_txt180:
-                            angle = 180
-                            # print(f"DEBUG: Forçando 180 graus por Âncora NF-e ({expected_nfe})")
-
-                # --- TRIPLE CHECK (Bússola por Código de Barras) ---
-                # Se ainda estamos em 0, tentamos achar o codigo de barras. 
-                # Se o codigo de barras estiver "em cima", o canhoto estah de cabeça para baixo.
-                if angle == 0:
-                    try:
-                        # Processamento para realçar barras verticais
-                        gray_bc = cv2.cvtColor(crop_img, cv2.COLOR_BGR2GRAY)
-                        # Sobel para achar gradientes horizontais (bordas de barras verticais)
-                        gradX = cv2.Sobel(gray_bc, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=-1)
-                        gradX = cv2.convertScaleAbs(gradX)
-                        # Blur e Threshold para unir as barras em um unico bloco
-                        blurred = cv2.blur(gradX, (9, 9))
-                        (_, thresh) = cv2.threshold(blurred, 225, 255, cv2.THRESH_BINARY)
-                        # Morfologia para fechar buracos
-                        kernel_bc = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 7))
-                        closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel_bc)
-                        # Acha contornos
-                        cnts, _ = cv2.findContours(closed.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                        if cnts:
-                            # Pega o maior contorno (provavel codigo de barras)
-                            c_max = max(cnts, key=cv2.contourArea)
-                            if cv2.contourArea(c_max) > 500:
-                                x_bc, y_bc, w_bc, h_bc = cv2.boundingRect(c_max)
-                                # Se o codigo de barras estiver no TOP 35% da imagem (canhoto invertido)
-                                if (y_bc + h_bc/2) < (crop_img.shape[0] * 0.35):
-                                    angle = 180
-                                    # print("DEBUG: Forçando 180 graus por Codigo de Barras")
-                    except:
-                        pass
-
-                # 3. Aplica a rotacao detectada pelo OCR ou Codigo de Barras no recorte ORIGINAL
-                if angle == 90:
-                    crop_img = cv2.rotate(crop_img, cv2.ROTATE_90_CLOCKWISE)
-                elif angle == 180:
-                    crop_img = cv2.rotate(crop_img, cv2.ROTATE_180)
-                elif angle == 270:
-                    crop_img = cv2.rotate(crop_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-                
-                if ocr_detected:
-                    print(f"INFO:OCR_SUCESSO (Angulo: {angle})", flush=True)
-            except Exception as e:
-                # print(f"DEBUG OCR: {str(e)}")
-                pass
+                        # Recarrega a imagem recortada (já rotacionada pelo Florence se necessário)
+                        if os.path.exists(temp_crop_path):
+                            crop_img_rot = cv2.imread(temp_crop_path)
+                            if crop_img_rot is not None:
+                                crop_img = crop_img_rot
+                            os.remove(temp_crop_path)
+                    else:
+                        print(f"INFO:FLORENCE_AVISO ({fl_out[:100]})", flush=True)
+                        if os.path.exists(temp_crop_path):
+                            os.remove(temp_crop_path)
+                except Exception as e_fl:
+                    print(f"INFO:FLORENCE_ERRO ({str(e_fl)})", flush=True)
             
             valid_crops.append(crop_img)
 

@@ -140,9 +140,27 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
             found_canhoto = True
             os.remove(crop_path)
             
-    # --- ATUALIZA STATUS DA IA NO BANCO ---
+    # --- ATUALIZA STATUS E DADOS EXTRAÍDOS PELA IA NO BANCO ---
     baixa.ia_yolo_status = "INFO:YOLO_SUCESSO" in out
-    baixa.ia_ocr_status = "INFO:OCR_SUCESSO" in out
+    baixa.ia_ocr_status = "INFO:OCR_SUCESSO" in out or "FLORENCE_QUALIDADE:BOA" in out
+
+    # Extrai Recebedor e Documento lidos pelo Florence-2 caso o motorista não tenha informado
+    if "FLORENCE_RECEBEDOR:" in out and not baixa.recebedor:
+        for line in out.split('\n'):
+            if line.startswith("FLORENCE_RECEBEDOR:"):
+                rec_val = line.split("FLORENCE_RECEBEDOR:")[1].strip()
+                if rec_val:
+                    baixa.recebedor = rec_val[:100]
+                break
+
+    if "FLORENCE_DOCUMENTO:" in out and not baixa.documento_recebedor:
+        for line in out.split('\n'):
+            if line.startswith("FLORENCE_DOCUMENTO:"):
+                doc_val = line.split("FLORENCE_DOCUMENTO:")[1].strip()
+                if doc_val:
+                    baixa.documento_recebedor = doc_val[:20]
+                break
+
     baixa.save()
             
     # Limpa arquivo temporario
