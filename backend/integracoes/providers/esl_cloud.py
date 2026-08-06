@@ -1572,8 +1572,26 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 "Authorization": f"Bearer {TOKEN}"
             }
 
-            # 1. Tenta por chave_acesso NF-e primeiro
-            if nf.chave_acesso:
+            # Define se a operação é por Frete (CT-e/Minuta/Despacho) ou por Invoice (NF-e)
+            tipo_op = str(nf.tipo_operacao or '').strip().upper()
+            is_operacao_frete = tipo_op in ['DESPACHO', 'TRANSFERENCIA', 'FRETE'] or (not nf.chave_acesso)
+
+            chave_cte = nf.chave_cte or (nf.frete.chave_cte if (hasattr(nf, 'frete') and nf.frete) else None) or nf.numero_cte
+
+            if is_operacao_frete and chave_cte:
+                # 📍 Endpoint 1: Cadastrar Comprovante de Entrega por Frete (CT-e)
+                url_esl = f"https://{self.config.dominio_esl}/api/freight_delivery_receipts"
+                payload = {
+                    "freight_delivery_receipt": {
+                        "freight": {
+                            "cte_key": str(chave_cte).strip(),
+                            "delivery_receipt_url": str(url_foto).strip()
+                        }
+                    }
+                }
+                logger.info(f"📸 [ESL COMPROVANTE FRETE/CT-E] Enviando comprovante da Nota #{nf.numero_nota} (Chave CT-e: {chave_cte})")
+            elif nf.chave_acesso:
+                # 📍 Endpoint 2: Cadastrar Comprovante de Entrega por NF-e (Invoice)
                 url_esl = f"https://{self.config.dominio_esl}/api/freight_invoice_delivery_receipts"
                 payload = {
                     "freight_invoice_delivery_receipt": {
@@ -1583,34 +1601,25 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         }
                     }
                 }
-                logger.info(f"📸 [ESL COMPROVANTE] Enviando comprovante NF-e {nf.numero_nota} (Chave: {nf.chave_acesso})")
-            else:
-                # 2. Tenta por chave_cte do Frete/Minuta
-                chave_cte = None
-                if nf.chave_cte:
-                    chave_cte = nf.chave_cte
-                elif hasattr(nf, 'frete') and nf.frete and nf.frete.chave_cte:
-                    chave_cte = nf.frete.chave_cte
-                elif nf.numero_cte:
-                    chave_cte = nf.numero_cte
-
-                if chave_cte:
-                    url_esl = f"https://{self.config.dominio_esl}/api/freight_delivery_receipts"
-                    payload = {
-                        "freight_delivery_receipt": {
-                            "freight": {
-                                "cte_key": str(chave_cte).strip(),
-                                "delivery_receipt_url": str(url_foto).strip()
-                            }
+                logger.info(f"📸 [ESL COMPROVANTE INVOICE/NF-E] Enviando comprovante da Nota #{nf.numero_nota} (Chave NF-e: {nf.chave_acesso})")
+            elif chave_cte:
+                # Fallback: Se tem chave_cte envia por Frete
+                url_esl = f"https://{self.config.dominio_esl}/api/freight_delivery_receipts"
+                payload = {
+                    "freight_delivery_receipt": {
+                        "freight": {
+                            "cte_key": str(chave_cte).strip(),
+                            "delivery_receipt_url": str(url_foto).strip()
                         }
                     }
-                    logger.info(f"📸 [ESL COMPROVANTE] Enviando comprovante Frete/CT-e {nf.numero_nota} (Chave CT-e: {chave_cte})")
-                else:
-                    msg = f"Nota #{nf.numero_nota} sem chave_acesso nem chave_cte para envio do comprovante ao TMS."
-                    logger.warning(msg)
-                    baixa.log_erro_tms = msg
-                    baixa.save(update_fields=['log_erro_tms'])
-                    return msg
+                }
+                logger.info(f"📸 [ESL COMPROVANTE FRETE] Enviando comprovante da Nota #{nf.numero_nota} (Chave CT-e: {chave_cte})")
+            else:
+                msg = f"Nota #{nf.numero_nota} sem chave_acesso nem chave_cte para envio do comprovante ao TMS."
+                logger.warning(msg)
+                baixa.log_erro_tms = msg
+                baixa.save(update_fields=['log_erro_tms'])
+                return msg
 
             response = requests.post(url_esl, json=payload, headers=headers, timeout=30)
             

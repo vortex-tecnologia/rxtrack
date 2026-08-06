@@ -2150,11 +2150,9 @@ def atualizar_foto_baixa_view(request, baixa_id):
         if not url_final_foto:
             return JsonResponse({'status': 'erro', 'message': 'Falha no envio da imagem para o servidor de arquivos (FTP).'}, status=500)
 
-        # Preserva backup original se ainda não tiver
-        if not baixa.comprovante_original_url:
-            baixa.comprovante_original_url = baixa.comprovante_foto_url or url_final_foto
-
+        # Sobrescreve a foto com a nova versão enviada (apaga a anterior do registro)
         baixa.comprovante_foto_url = url_final_foto
+        baixa.comprovante_original_url = url_final_foto
         baixa.processado_tms = False
         baixa.integrado_tms = False
         baixa.log_erro_tms = "Iniciando processamento da nova foto via IA / TMS..."

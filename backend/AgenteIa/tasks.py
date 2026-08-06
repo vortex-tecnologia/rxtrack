@@ -26,6 +26,23 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
     if not url_original:
         return finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
 
+    # 1.1 O YOLO/OCR só deve rodar se a ocorrência for 01 ou 02 (Entrega/Coleta Realizada)
+    cod_ref = str(getattr(baixa.ocorrencia, 'codigo_referencia', '') or '').strip()
+    cod_tms = str(getattr(baixa.ocorrencia, 'codigo_tms', '') or '').strip()
+    
+    is_codigo_01_02 = (
+        cod_ref in ['01', '02', '1', '2'] or
+        cod_tms in ['01', '02', '1', '2'] or
+        baixa.tipo == 'ENTREGA'
+    )
+
+    if not is_codigo_01_02:
+        print(f"Ocorrência (TMS:{cod_tms}/Ref:{cod_ref}) não é 01 ou 02. Pulando YOLO/OCR e enviando foto diretamente ao TMS.")
+        baixa.ia_yolo_status = False
+        baixa.ia_ocr_status = False
+        baixa.save(update_fields=['ia_yolo_status', 'ia_ocr_status'])
+        return finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
+
     # 2. Baixa a imagem da URL original para a memória
     resp = requests.get(url_original)
     img_array = np.frombuffer(resp.content, np.uint8)

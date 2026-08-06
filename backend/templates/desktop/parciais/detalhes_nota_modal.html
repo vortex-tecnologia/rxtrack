@@ -168,14 +168,6 @@
                                         </span>
                                     {% endif %}
                                 </div>
-                                {% if baixa.comprovante_original_url and baixa.comprovante_original_url != baixa.comprovante_foto_url %}
-                                    <div class="mt-2">
-                                        <label class="text-muted" style="font-size: 0.6rem; display: block;">FOTO ORIGINAL (BACKUP)</label>
-                                        <a href="{{ baixa.comprovante_original_url }}" target="_blank" class="d-inline-block opacity-75">
-                                            <img src="{{ baixa.comprovante_original_url }}" class="img-fluid rounded border" style="max-height: 80px; filter: grayscale(50%);">
-                                        </a>
-                                    </div>
-                                {% endif %}
                             {% else %}
                                 <div class="py-4 px-3 bg-white border border-dashed rounded text-muted">
                                     <i class="bi bi-camera-off d-block fs-3 mb-2 opacity-50"></i>
