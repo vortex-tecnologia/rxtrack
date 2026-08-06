@@ -1676,8 +1676,9 @@ function executarDeletarOcorrencia(notaId) {
         socketSac.onmessage = function(e) {
             try {
                 const data = JSON.parse(e.data);
-                if (data.type === 'atualizar_cargas') {
-                    console.log("⚡ [WS SAC] Atualização recebida! Recarregando dados em tempo real...");
+                const tiposValidos = ['atualizar_cargas', 'status_motorista', 'manifesto_update', 'nova_baixa', 'novo_manifesto', 'atualizar_painel'];
+                if (tiposValidos.includes(data.type) || data.data) {
+                    console.log("⚡ [WS SAC] Evento recebido:", data.type, "-> Recarregando dados ao vivo...");
                     if (typeof carregarCargasFretesResumo === 'function') {
                         carregarCargasFretesResumo(true);
                     }
@@ -1689,9 +1690,15 @@ function executarDeletarOcorrencia(notaId) {
 
         socketSac.onclose = function() {
             if (badgeWs) {
-                badgeWs.className = 'badge bg-secondary rounded-pill';
-                badgeWs.innerHTML = '<i class="bi bi-circle-fill me-1" style="font-size: 8px;"></i>DESCONECTADO';
+                badgeWs.className = 'badge bg-warning text-dark rounded-pill';
+                badgeWs.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>RECONECTANDO...';
             }
+            setTimeout(() => {
+                const abaSalva = localStorage.getItem('abaAtivaNfePage');
+                if (abaSalva === 'tab-cargas-fretes') {
+                    conectarWSSAC();
+                }
+            }, 3000);
         };
     }
 
