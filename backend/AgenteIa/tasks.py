@@ -110,9 +110,10 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
         return finalizar_fluxo_tms(baixa)
     
     script_path = os.path.join(settings.BASE_DIR, 'AgenteIa', 'run_ia.py')
-    skip_ocr = "skip_ocr" if not config.processar_ocr else ""
-    print(f"Iniciando YOLO Externo para Baixa {baixa.id}... (OCR: {'ON' if config.processar_ocr else 'OFF'})")
-    run_result = subprocess.run(['python', script_path, img_path, watermark_text, nfe_num, skip_ocr], capture_output=True, text=True)
+    skip_ocr = "skip_ocr" if not config.processar_ocr else "with_ocr"
+    codigo_oc_passar = cod_tms or cod_ref or ("01" if somente_comprovante else "1")
+    print(f"Iniciando YOLO Externo para Baixa #{baixa.id} (Ocorrência: '{codigo_oc_passar}', OCR: {'ON' if config.processar_ocr else 'OFF'})...")
+    run_result = subprocess.run(['python', script_path, img_path, watermark_text, nfe_num, skip_ocr, codigo_oc_passar], capture_output=True, text=True)
     out = run_result.stdout.strip()
     err = run_result.stderr.strip()
     

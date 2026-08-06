@@ -3,8 +3,8 @@ import os
 import cv2
 import numpy as np
 
-def run_ml(img_path, watermark_text="", expected_nfe="", skip_ocr=False):
-    print("CHECKPOINT: Iniciando importacoes...", flush=True)
+def run_ml(img_path, watermark_text="", expected_nfe="", skip_ocr=False, codigo_ocorrencia="01"):
+    print(f"CHECKPOINT: Iniciando importacoes para Ocorrência {codigo_ocorrencia}...", flush=True)
     import cv2
     import numpy as np
     from ultralytics import YOLO
@@ -255,4 +255,5 @@ if __name__ == "__main__":
         wm_text = sys.argv[2] if len(sys.argv) > 2 else ""
         nfe_val = sys.argv[3] if len(sys.argv) > 3 else ""
         skip_ocr_flag = (sys.argv[4] == "skip_ocr") if len(sys.argv) > 4 else False
-        run_ml(img_p, wm_text, nfe_val, skip_ocr=skip_ocr_flag)
+        codigo_oc = sys.argv[5] if len(sys.argv) > 5 else "01"
+        run_ml(img_p, wm_text, nfe_val, skip_ocr=skip_ocr_flag, codigo_ocorrencia=codigo_oc)
