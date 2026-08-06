@@ -26,18 +26,23 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
     if not url_original:
         return finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
 
-    # 1.1 O YOLO/OCR só deve rodar se a ocorrência for 01 ou 02 (Entrega/Coleta Realizada)
+    # 1.1 O YOLO/OCR é acionado se a ocorrência estiver na lista de códigos ativadores (ex: 01, 02, 1, 2) ou se for um recadastro de comprovante
+    from configuracao.utils import get_config
+    config = get_config()
+
     cod_ref = str(getattr(baixa.ocorrencia, 'codigo_referencia', '') or '').strip()
     cod_tms = str(getattr(baixa.ocorrencia, 'codigo_tms', '') or '').strip()
+    codigos_permitidos = config.get_codigos_yolo_list()
     
-    is_codigo_01_02 = (
-        cod_ref in ['01', '02', '1', '2'] or
-        cod_tms in ['01', '02', '1', '2'] or
-        baixa.tipo == 'ENTREGA'
+    is_yolo_habilitado = (
+        cod_ref in codigos_permitidos or
+        cod_tms in codigos_permitidos or
+        baixa.tipo == 'ENTREGA' or
+        somente_comprovante is True
     )
 
-    if not is_codigo_01_02:
-        print(f"Ocorrência (TMS:{cod_tms}/Ref:{cod_ref}) não é 01 ou 02. Pulando YOLO/OCR e enviando foto diretamente ao TMS.")
+    if not is_yolo_habilitado:
+        print(f"Ocorrência (TMS:{cod_tms}/Ref:{cod_ref}) não está em {codigos_permitidos}. Pulando YOLO/OCR e enviando foto diretamente ao TMS.")
         baixa.ia_yolo_status = False
         baixa.ia_ocr_status = False
         baixa.save(update_fields=['ia_yolo_status', 'ia_ocr_status'])
