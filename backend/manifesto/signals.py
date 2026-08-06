@@ -1,4 +1,4 @@
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db import transaction
 from manifesto.models import BaixaNF , Manifesto , NotaFiscal
@@ -145,4 +145,44 @@ def registrar_log_importacao_erro(sender, instance, **kwargs):
                     mensagem=instance.mensagem_erro[:500] if instance.mensagem_erro else "Erro na importação",
                     filial=filial,
                 )
-        transaction.on_commit(criar_log_erro)
+        transaction.on_commit(criar_log_erro)
+
+
+@receiver(post_save, sender=Manifesto)
+@receiver(post_delete, sender=Manifesto)
+def notificar_ws_cargas_manifesto(sender, instance, **kwargs):
+    def disparar():
+        try:
+            from manifesto.services import notificar_atualizacao_cargas_fretes
+            notificar_atualizacao_cargas_fretes(instance.filial)
+        except Exception as e:
+            print(f"❌ Erro no signal WS Manifesto: {e}")
+    transaction.on_commit(disparar)
+
+
+@receiver(post_save, sender=NotaFiscal)
+@receiver(post_delete, sender=NotaFiscal)
+def notificar_ws_cargas_notafiscal(sender, instance, **kwargs):
+    def disparar():
+        try:
+            from manifesto.services import notificar_atualizacao_cargas_fretes
+            filial = instance.manifesto.filial if (instance.manifesto and hasattr(instance.manifesto, 'filial')) else None
+            notificar_atualizacao_cargas_fretes(filial)
+        except Exception as e:
+            print(f"❌ Erro no signal WS NotaFiscal: {e}")
+    transaction.on_commit(disparar)
+
+
+@receiver(post_save, sender=BaixaNF)
+@receiver(post_delete, sender=BaixaNF)
+def notificar_ws_cargas_baixanf(sender, instance, **kwargs):
+    def disparar():
+        try:
+            from manifesto.services import notificar_atualizacao_cargas_fretes
+            filial = None
+            if instance.nota_fiscal and instance.nota_fiscal.manifesto:
+                filial = instance.nota_fiscal.manifesto.filial
+            notificar_atualizacao_cargas_fretes(filial)
+        except Exception as e:
+            print(f"❌ Erro no signal WS BaixaNF: {e}")
+    transaction.on_commit(disparar)

@@ -80,19 +80,28 @@ def notificar_atualizacao_cargas_fretes(filial=None):
     if not clayer:
         return
 
-    nome_filial = filial.nome if (filial and hasattr(filial, 'nome')) else "todas"
-    grupo_filial = f"painel_cargas_fretes_{slugify(str(nome_filial))}"
+    filial_id_str = str(filial.id) if (filial and hasattr(filial, 'id') and filial.id) else "todas"
+    nome_filial_slug = slugify(str(filial.nome)) if (filial and hasattr(filial, 'nome') and filial.nome) else "todas"
 
     payload = {
         "type": "atualizar_cargas",
         "data": {
-            "timestamp": timezone.now().isoformat()
+            "timestamp": timezone.now().isoformat(),
+            "filial_id": filial_id_str
         }
     }
 
-    try:
-        async_to_sync(clayer.group_send)(grupo_filial, payload)
-        if grupo_filial != "painel_cargas_fretes_todas":
-            async_to_sync(clayer.group_send)("painel_cargas_fretes_todas", payload)
-    except Exception as e:
-        print(f"❌ Erro ao transmitir WS cargas/fretes: {e}")
+    # Transmite para todas as variações de grupo possíveis para garantir recepção 100% ao vivo
+    grupos = set([
+        "painel_cargas_fretes_todas",
+        f"painel_cargas_fretes_{filial_id_str}",
+        f"painel_cargas_fretes_{nome_filial_slug}",
+        "painel_monitoramento_todas",
+        f"painel_monitoramento_{filial_id_str}"
+    ])
+
+    for g in grupos:
+        try:
+            async_to_sync(clayer.group_send)(g, payload)
+        except Exception as e:
+            print(f"❌ Erro ao transmitir WS cargas/fretes ({g}): {e}")
