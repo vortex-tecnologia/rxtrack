@@ -294,6 +294,12 @@ class RegistrarBaixaView(APIView):
 
                 nf.status = 'BAIXADA' if is_sucesso else 'OCORRENCIA'
                 nf.save()
+
+                try:
+                    from manifesto.services import notificar_atualizacao_cargas_fretes
+                    notificar_atualizacao_cargas_fretes(manifesto.filial if manifesto else None)
+                except Exception as ws_err:
+                    logger.error(f"Erro ao notificar WS cargas/fretes: {ws_err}")
                 
                 # --- DISPARO DA TASK CORRETA (O CÉREBRO) ---
                 from configuracao.utils import get_config

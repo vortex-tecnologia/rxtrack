@@ -59,3 +59,34 @@ def enviar_painel(manifesto):
             "painel_monitoramento_todas",
             payload
         )
+
+
+def notificar_atualizacao_cargas_fretes(filial=None):
+    """
+    Transmite um evento WebSocket para atualizar em tempo real o painel Cargas / Fretes (SAC).
+    """
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+    from django.utils.text import slugify
+    from django.utils import timezone
+
+    clayer = get_channel_layer()
+    if not clayer:
+        return
+
+    nome_filial = filial.nome if (filial and hasattr(filial, 'nome')) else "todas"
+    grupo_filial = f"painel_cargas_fretes_{slugify(str(nome_filial))}"
+
+    payload = {
+        "type": "atualizar_cargas",
+        "data": {
+            "timestamp": timezone.now().isoformat()
+        }
+    }
+
+    try:
+        async_to_sync(clayer.group_send)(grupo_filial, payload)
+        if grupo_filial != "painel_cargas_fretes_todas":
+            async_to_sync(clayer.group_send)("painel_cargas_fretes_todas", payload)
+    except Exception as e:
+        print(f"❌ Erro ao transmitir WS cargas/fretes: {e}")

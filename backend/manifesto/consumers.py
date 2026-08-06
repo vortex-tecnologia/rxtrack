@@ -170,3 +170,24 @@ class MonitoramentoConsumer(AsyncWebsocketConsumer):
             "type": "status_motorista",
             "dados": event["data"]
         }))
+
+
+class CargasFretesConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        if 'filial_id' in self.scope['url_route']['kwargs'] and self.scope['url_route']['kwargs']['filial_id']:
+            self.filial_id = self.scope['url_route']['kwargs']['filial_id']
+        else:
+            self.filial_id = 'todas'
+            
+        self.group_name = f"painel_cargas_fretes_{self.filial_id}"
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    async def atualizar_cargas(self, event):
+        await self.send(text_data=json.dumps({
+            "type": "atualizar_cargas",
+            "data": event.get("data", {})
+        }))
