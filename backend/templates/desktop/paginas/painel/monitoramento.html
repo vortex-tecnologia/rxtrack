@@ -229,6 +229,25 @@
             box-shadow: 0 0 0 rgba(0, 0, 0, 0);
         }
     }
+
+    .card-warning-pulse {
+        animation: warning-pulse 2s infinite;
+    }
+
+    @keyframes warning-pulse {
+        0% {
+            background-color: white;
+            box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+        }
+        50% {
+            background-color: rgba(255, 193, 7, 0.1);
+            box-shadow: 0 0 15px rgba(255, 193, 7, 0.3);
+        }
+        100% {
+            background-color: white;
+            box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+        }
+    }
 </style>
 <script>
     // Passagem da variável de filial ativa para o WS (slugificada no backend)

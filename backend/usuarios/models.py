@@ -133,7 +133,7 @@ class Motorista(models.Model):
         mod = (self.modelo_aparelho or '').lower()
         if any(x in mod for x in ['iphone', 'ipad', 'ios', 'apple']):
             return '<i class="bi bi-apple text-dark ms-1" style="font-size: 1.1rem;" title="iPhone (iOS)"></i>'
-        return '<i class="bi bi-globe text-secondary ms-1" style="font-size: 0.95rem;" title="Navegador Web (PWA)"></i>'
+        return '<img src="/static/desktop/img/pwa-icon.svg" class="ms-1" style="width: 1.1rem; height: 1.1rem; vertical-align: middle;" title="Navegador Web (PWA)">'
 
     @property
     def badge_dispositivo_html(self):
@@ -145,7 +145,7 @@ class Motorista(models.Model):
         mod = (self.modelo_aparelho or '').lower()
         if any(x in mod for x in ['iphone', 'ipad', 'ios', 'apple']):
             return '<span class="badge bg-dark-subtle text-dark border border-secondary ms-1" title="iPhone (iOS)"><i class="bi bi-apple me-1"></i>iOS</span>'
-        return '<span class="badge bg-secondary-subtle text-secondary border border-secondary ms-1" title="Navegador Web (PWA)"><i class="bi bi-globe me-1"></i>PWA</span>'
+        return '<span class="badge bg-secondary-subtle text-secondary border border-secondary ms-1" title="Navegador Web (PWA)"><img src="/static/desktop/img/pwa-icon.svg" style="width: 0.85rem; height: 0.85rem; vertical-align: middle;" class="me-1">PWA</span>'
 
     def __str__(self):
         return self.nome_completo

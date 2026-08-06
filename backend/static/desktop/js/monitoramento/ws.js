@@ -199,7 +199,10 @@ function conectarWebSocket() {
                                     }
                                 </div>
                                 <div class="ms-3">
-                                    <h6 class="mb-0 fw-bold">${d.motorista_nome || 'Desconhecido'}</h6>
+                                    <h6 class="mb-0 fw-bold d-flex align-items-center gap-1">
+                                        <span>${d.motorista_nome || 'Desconhecido'}</span>
+                                        ${d.icone_dispositivo || ''}
+                                    </h6>
                                     <small class="text-muted">Manifesto: #${d.manifesto_id}</small>
                                     <small class="text-muted d-block mt-1" style="font-size: 9px;" id="data-registro-${d.manifesto_id}">
                                         <i class="bi bi-clock pe-1"></i>${d.data_registro || ''}
@@ -383,15 +386,29 @@ function atualizarUltimoSinalTorre() {
                 const criacaoDate = new Date(dataCriacaoIso);
                 const diffCriacaoHours = (now - criacaoDate) / (1000 * 60 * 60);
                 
-                // Se o manifesto foi criado há mais de 24 horas, exibimos um alerta
-                if (diffCriacaoHours > 24) {
+                // Pulsação do CARD baseada na idade do manifesto (não do login do motorista)
+                // >= 24h: pulsa vermelho | >= 12h: pulsa amarelo | < 12h: sem pulsação
+                card.classList.remove('card-danger-pulse', 'card-warning-pulse');
+                if (diffCriacaoHours >= 24) {
+                    card.classList.add('card-danger-pulse');
                     alertaContainer.innerHTML = `
-                        <i class="fas fa-exclamation-triangle text-warning fs-3" 
+                        <i class="fas fa-exclamation-triangle text-danger fs-3" 
                            title="Manifesto criado há ${Math.floor(diffCriacaoHours/24)} dia(s) e não finalizado" 
                            data-bs-toggle="tooltip" 
                            style="cursor: help; animation: pulse 2s infinite;"></i>
                     `;
-                    // Inicializa tooltip se o bootstrap estiver disponível
+                    if (typeof bootstrap !== 'undefined' && !alertaContainer.hasAttribute('data-tooltip-init')) {
+                        new bootstrap.Tooltip(alertaContainer.querySelector('[data-bs-toggle="tooltip"]'));
+                        alertaContainer.setAttribute('data-tooltip-init', 'true');
+                    }
+                } else if (diffCriacaoHours >= 12) {
+                    card.classList.add('card-warning-pulse');
+                    alertaContainer.innerHTML = `
+                        <i class="fas fa-exclamation-triangle text-warning fs-3" 
+                           title="Manifesto aberto há ${Math.floor(diffCriacaoHours)}h sem finalizar" 
+                           data-bs-toggle="tooltip" 
+                           style="cursor: help; animation: pulse 2s infinite;"></i>
+                    `;
                     if (typeof bootstrap !== 'undefined' && !alertaContainer.hasAttribute('data-tooltip-init')) {
                         new bootstrap.Tooltip(alertaContainer.querySelector('[data-bs-toggle="tooltip"]'));
                         alertaContainer.setAttribute('data-tooltip-init', 'true');
@@ -414,7 +431,7 @@ function atualizarUltimoSinalTorre() {
                     Sem sinal
                 </div>
             `;
-            card.classList.remove('card-danger-pulse');
+            card.classList.remove('card-danger-pulse', 'card-warning-pulse');
             return;
         }
         
@@ -429,7 +446,6 @@ function atualizarUltimoSinalTorre() {
             
             let bgColor = '';
             let textColor = '';
-            let isRedPulsing = false;
             
             if (diffHours <= 1.5 || diffMs < 0) { // < 0 caso horário do celular esteja à frente do servidor
                 bgColor = 'rgba(25, 135, 84, 0.1)'; // green soft
@@ -440,9 +456,6 @@ function atualizarUltimoSinalTorre() {
             } else {
                 bgColor = 'rgba(220, 53, 69, 0.1)'; // red soft
                 textColor = '#dc3545';
-                if (diffHours > 24) {
-                    isRedPulsing = true;
-                }
             }
             
             const textDiff = diffMs < 0 ? 'Sinal agora' : formatTimeDiff(diffMs);
@@ -457,11 +470,7 @@ function atualizarUltimoSinalTorre() {
                 </div>
             `;
             
-            if (isRedPulsing) {
-                card.classList.add('card-danger-pulse');
-            } else {
-                card.classList.remove('card-danger-pulse');
-            }
+            // Pulsação do card controlada apenas pela idade do manifesto (bloco acima)
         } catch(e) {
             console.error('Erro na data Torre', e);
         }
