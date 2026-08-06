@@ -1894,21 +1894,27 @@ def api_cargas_fretes_resumo(request):
     else:
         data_busca = hoje
 
+    # 📌 Regra SAC Live:
+    # 1. Manifestos ativos (em rota na rua): possuem pelo menos 1 nota PENDENTE e status aberto (criados hoje ou em dias anteriores)
+    manifestos_em_rota = Manifesto.objects.filter(
+        finalizado=False
+    ).exclude(
+        status='FINALIZADO'
+    ).filter(
+        notas_fiscais__status='PENDENTE'
+    ).values_list('id', flat=True)
+
+    # 2. Manifestos do dia (criados hoje ou finalizados hoje): continuam visíveis até às 23:59:59 de hoje!
+    manifestos_hoje = Manifesto.objects.filter(
+        Q(data_criacao__date=data_busca) |
+        Q(data_finalizacao__date=data_busca)
+    ).values_list('id', flat=True)
+
+    manifestos_sac_ids = set(manifestos_em_rota).union(set(manifestos_hoje))
+
     notas_qs = NotaFiscal.objects.select_related(
         'manifesto', 'manifesto__motorista', 'manifesto__filial', 'frete'
-    ).filter(manifesto__isnull=False)
-
-    # 📌 Regra SAC Live:
-    # 1. Manifestos ativos (em transporte/abertos): mostram sempre, independente de quando foram criados
-    # 2. Manifestos finalizados: continuam visíveis até às 23:59 do dia em que foram finalizados!
-    filtro_sac = (
-        Q(manifesto__finalizado=False) |
-        ~Q(manifesto__status='FINALIZADO') |
-        Q(manifesto__data_finalizacao__date__gte=data_busca) |
-        Q(manifesto__finalizado=True, manifesto__data_finalizacao__isnull=True, manifesto__data_criacao__date__gte=data_busca)
-    )
-
-    notas_qs = notas_qs.filter(filtro_sac)
+    ).filter(manifesto_id__in=manifestos_sac_ids)
 
     if filial_param and filial_param != 'todas':
         notas_qs = notas_qs.filter(manifesto__filial_id=filial_param)
@@ -2009,18 +2015,24 @@ def api_cargas_fretes_detalhes(request):
     else:
         data_busca = hoje
 
+    manifestos_em_rota = Manifesto.objects.filter(
+        finalizado=False
+    ).exclude(
+        status='FINALIZADO'
+    ).filter(
+        notas_fiscais__status='PENDENTE'
+    ).values_list('id', flat=True)
+
+    manifestos_hoje = Manifesto.objects.filter(
+        Q(data_criacao__date=data_busca) |
+        Q(data_finalizacao__date=data_busca)
+    ).values_list('id', flat=True)
+
+    manifestos_sac_ids = set(manifestos_em_rota).union(set(manifestos_hoje))
+
     notas_qs = NotaFiscal.objects.select_related(
         'manifesto', 'manifesto__motorista', 'manifesto__filial', 'frete'
-    ).filter(manifesto__isnull=False)
-
-    filtro_sac = (
-        Q(manifesto__finalizado=False) |
-        ~Q(manifesto__status='FINALIZADO') |
-        Q(manifesto__data_finalizacao__date__gte=data_busca) |
-        Q(manifesto__finalizado=True, manifesto__data_finalizacao__isnull=True, manifesto__data_criacao__date__gte=data_busca)
-    )
-
-    notas_qs = notas_qs.filter(filtro_sac)
+    ).filter(manifesto_id__in=manifestos_sac_ids)
 
     if filial_param and filial_param != 'todas':
         notas_qs = notas_qs.filter(manifesto__filial_id=filial_param)
