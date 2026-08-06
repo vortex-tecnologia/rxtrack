@@ -2155,7 +2155,7 @@ def atualizar_foto_baixa_view(request, baixa_id):
         baixa.comprovante_original_url = url_final_foto
         baixa.processado_tms = False
         baixa.integrado_tms = False
-        baixa.log_erro_tms = "Iniciando processamento da nova foto via IA / TMS..."
+        baixa.log_erro_tms = None
         baixa.save()
 
         # Se YOLO estiver ativo, passa pelo agente IA primeiro

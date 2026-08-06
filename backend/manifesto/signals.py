@@ -90,25 +90,28 @@ def registrar_log_baixa_nfe(sender, instance, created, **kwargs):
             transaction.on_commit(criar_log_integracao_sucesso)
 
         elif not instance.integrado_tms and instance.log_erro_tms:
-            # Erro na integração TMS
-            def criar_log_integracao_erro():
-                from django.utils import timezone
-                import datetime
-                recente = LogBaixaNfe.objects.filter(
-                    nota_fiscal=nf,
-                    tipo='INTEGRACAO_ERRO',
-                    criado_em__gte=timezone.now() - datetime.timedelta(minutes=2)
-                ).exists()
-                if not recente:
-                    LogBaixaNfe.objects.create(
+            log_msg = str(instance.log_erro_tms).strip()
+            # Ignora mensagens informativas/progresso para não disparar alerta de falso erro
+            is_falso_erro = any(log_msg.startswith(p) for p in ["Sucesso", "Iniciando", "Aviso IA", "Info"])
+            if not is_falso_erro:
+                def criar_log_integracao_erro():
+                    from django.utils import timezone
+                    import datetime
+                    recente = LogBaixaNfe.objects.filter(
                         nota_fiscal=nf,
-                        manifesto_numero=manifesto.numero_manifesto if manifesto else '',
-                        numero_nota=nf.numero_nota,
                         tipo='INTEGRACAO_ERRO',
-                        mensagem=instance.log_erro_tms[:500] if instance.log_erro_tms else "Erro na integração TMS",
-                        filial=filial,
-                    )
-            transaction.on_commit(criar_log_integracao_erro)
+                        criado_em__gte=timezone.now() - datetime.timedelta(minutes=2)
+                    ).exists()
+                    if not recente:
+                        LogBaixaNfe.objects.create(
+                            nota_fiscal=nf,
+                            manifesto_numero=manifesto.numero_manifesto if manifesto else '',
+                            numero_nota=nf.numero_nota,
+                            tipo='INTEGRACAO_ERRO',
+                            mensagem=log_msg[:500],
+                            filial=filial,
+                        )
+                transaction.on_commit(criar_log_integracao_erro)
 
 
 from manifesto.models import ManifestoBuscaLog

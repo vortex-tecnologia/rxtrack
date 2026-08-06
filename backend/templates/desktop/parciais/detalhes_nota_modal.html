@@ -92,10 +92,17 @@
                             {% endif %}
 
                             {% if baixa.log_erro_tms %}
-                                <div class="mt-3 p-2.5 rounded bg-danger-subtle text-danger small border border-danger border-opacity-25 shadow-sm">
-                                    <div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Log de Envio de Comprovante / TMS:</div>
-                                    <div style="word-break: break-all; font-family: monospace; font-size: 0.75rem;" class="bg-white bg-opacity-50 p-2 rounded border border-danger border-opacity-10">{{ baixa.log_erro_tms }}</div>
-                                </div>
+                                {% if "Aviso IA" in baixa.log_erro_tms or "Info" in baixa.log_erro_tms or "Sucesso" in baixa.log_erro_tms %}
+                                    <div class="mt-3 p-2.5 rounded bg-info-subtle text-info-emphasis small border border-info border-opacity-25 shadow-sm">
+                                        <div class="fw-bold mb-1"><i class="bi bi-info-circle-fill me-1"></i>Informação do Processamento de Foto:</div>
+                                        <div style="word-break: break-all; font-family: monospace; font-size: 0.75rem;" class="bg-white bg-opacity-50 p-2 rounded border border-info border-opacity-10">{{ baixa.log_erro_tms }}</div>
+                                    </div>
+                                {% else %}
+                                    <div class="mt-3 p-2.5 rounded bg-danger-subtle text-danger small border border-danger border-opacity-25 shadow-sm">
+                                        <div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Log de Envio de Comprovante / TMS:</div>
+                                        <div style="word-break: break-all; font-family: monospace; font-size: 0.75rem;" class="bg-white bg-opacity-50 p-2 rounded border border-danger border-opacity-10">{{ baixa.log_erro_tms }}</div>
+                                    </div>
+                                {% endif %}
                             {% endif %}
 
                             {% if baixa %}
