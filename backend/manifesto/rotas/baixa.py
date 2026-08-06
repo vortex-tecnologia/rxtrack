@@ -1,4 +1,5 @@
 # manifesto/rotas/baixa.py
+import logging
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -11,6 +12,8 @@ from manifesto.tasks import enviar_baixa_esl_task, enviar_baixa_minuta_task
 from ftplib import FTP
 from io import BytesIO
 from django.conf import settings # Importe para usar as chaves do settings
+
+logger = logging.getLogger(__name__)
 
 def upload_via_ftp(imagem_bytes, nome_arquivo):
     try:
