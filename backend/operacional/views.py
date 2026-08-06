@@ -2031,7 +2031,7 @@ def api_cargas_fretes_detalhes(request):
     manifestos_sac_ids = set(manifestos_em_rota).union(set(manifestos_hoje))
 
     notas_qs = NotaFiscal.objects.select_related(
-        'manifesto', 'manifesto__motorista', 'manifesto__filial', 'frete'
+        'manifesto', 'manifesto__motorista', 'manifesto__filial', 'frete', 'baixanf', 'baixanf__ocorrencia'
     ).filter(manifesto_id__in=manifestos_sac_ids)
 
     if filial_param and filial_param != 'todas':
@@ -2078,18 +2078,34 @@ def api_cargas_fretes_detalhes(request):
             }
 
         st = n.status.upper() if n.status else 'PENDENTE'
+
+        # Recupera data da baixa se existir
+        data_baixa_str = ''
+        ocorrencia_desc = ''
+        try:
+            if hasattr(n, 'baixanf') and n.baixanf:
+                data_b = n.baixanf.data_baixa
+                if data_b:
+                    data_baixa_str = timezone.localtime(data_b).strftime('%d/%m %H:%M')
+                if n.baixanf.ocorrencia:
+                    ocorrencia_desc = n.baixanf.ocorrencia.descricao or ''
+        except Exception:
+            pass
+
         manifestos_dict[mf.id]['notas'].append({
             'id': n.id,
             'numero_nota': n.numero_nota,
             'chave_acesso': n.chave_acesso or '',
+            'numero_cte': n.numero_cte or '',
             'destinatario': n.destinatario or '',
             'status': st,
             'tipo_operacao': n.tipo_operacao or 'ENTREGA',
-            'remetente': rem_nome
+            'remetente': rem_nome,
+            'data_baixa': data_baixa_str,
+            'ocorrencia_desc': ocorrencia_desc
         })
 
     manifestos_lista = list(manifestos_dict.values())
     manifestos_lista.sort(key=lambda x: x['numero_manifesto'], reverse=True)
 
     return JsonResponse({'status': 'sucesso', 'manifestos': manifestos_lista})
-    return JsonResponse({'status': 'sucesso'})

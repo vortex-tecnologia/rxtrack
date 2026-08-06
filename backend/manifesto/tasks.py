@@ -303,6 +303,13 @@ def processar_webhook_manifesto_task(self, event_id):
             except Exception as push_err:
                 logger.error(f"⚠️ Erro ao disparar Notificação Push Webhook para MFT {num_mani}: {push_err}")
 
+            # ⚡ Notifica Torre de Controle + SAC Live em tempo real
+            try:
+                from manifesto.services import enviar_painel
+                transaction.on_commit(lambda: enviar_painel(manifesto_obj))
+            except Exception as ws_err:
+                logger.warning(f"⚠️ Erro ao notificar painel via webhook_task: {ws_err}")
+
             return f"Manifesto {num_mani} (Motorista: {nome_mot}) processado com sucesso. {count_notas} notas."
 
 
@@ -489,6 +496,13 @@ def processar_soap_task(self, evento_id):
         evento.status = 'PROCESSADO'
         evento.processed_at = timezone.now()
         evento.save()
+
+        # ⚡ Notifica Torre de Controle + SAC Live em tempo real
+        try:
+            from manifesto.services import enviar_painel
+            enviar_painel(manifesto_obj)
+        except Exception as ws_err:
+            logger.warning(f"⚠️ Erro ao notificar painel via soap_task: {ws_err}")
 
         return f"Manifesto SOAP {numero_rota} processado com sucesso. {count_notas} notas."
 

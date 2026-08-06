@@ -1528,8 +1528,9 @@ function executarDeletarOcorrencia(notaId) {
                                         </small>
                                         <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
                                             <small class="text-muted" style="font-size: 0.7rem;">Operação: ${n.tipo_operacao}</small>
-                                            <span class="text-primary small fw-bold"><i class="bi bi-eye me-1"></i>Ver Detalhes</span>
+                                            ${n.data_baixa ? `<small class="text-success fw-bold" style="font-size:0.7rem;"><i class="bi bi-clock-history me-1"></i>${n.data_baixa}</small>` : `<span class="text-primary small fw-bold"><i class="bi bi-eye me-1"></i>Ver Detalhes</span>`}
                                         </div>
+                                        ${n.ocorrencia_desc && n.status === 'OCORRENCIA' ? `<div class="mt-1 pt-1"><small class="text-danger" style="font-size:0.65rem;"><i class="bi bi-exclamation-circle me-1"></i>${n.ocorrencia_desc}</small></div>` : ''}
                                     </div>
                                 </div>
                             </div>
