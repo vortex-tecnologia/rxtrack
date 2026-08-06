@@ -2031,7 +2031,9 @@ def api_cargas_fretes_detalhes(request):
     manifestos_sac_ids = set(manifestos_em_rota).union(set(manifestos_hoje))
 
     notas_qs = NotaFiscal.objects.select_related(
-        'manifesto', 'manifesto__motorista', 'manifesto__filial', 'frete', 'baixanf', 'baixanf__ocorrencia'
+        'manifesto', 'manifesto__motorista', 'manifesto__filial', 'frete'
+    ).prefetch_related(
+        'baixa_info__ocorrencia'
     ).filter(manifesto_id__in=manifestos_sac_ids)
 
     if filial_param and filial_param != 'todas':
@@ -2083,12 +2085,13 @@ def api_cargas_fretes_detalhes(request):
         data_baixa_str = ''
         ocorrencia_desc = ''
         try:
-            if hasattr(n, 'baixanf') and n.baixanf:
-                data_b = n.baixanf.data_baixa
+            baixa_obj = n.baixa_info.first() if hasattr(n, 'baixa_info') else None
+            if baixa_obj:
+                data_b = baixa_obj.data_baixa
                 if data_b:
                     data_baixa_str = timezone.localtime(data_b).strftime('%d/%m %H:%M')
-                if n.baixanf.ocorrencia:
-                    ocorrencia_desc = n.baixanf.ocorrencia.descricao or ''
+                if baixa_obj.ocorrencia:
+                    ocorrencia_desc = baixa_obj.ocorrencia.descricao or ''
         except Exception:
             pass
 
