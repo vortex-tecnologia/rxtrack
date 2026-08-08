@@ -71,7 +71,7 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
         if baixa.nota_fiscal.manifesto and baixa.nota_fiscal.manifesto.motorista:
             motorista_nome = getattr(baixa.nota_fiscal.manifesto.motorista, 'nome_completo', '') or getattr(baixa.nota_fiscal.manifesto.motorista, 'nome_motorista', '')
 
-    watermark_text = f"Aplicativo - {data_str} {lat}, {lng} {motorista_nome} NFE {nfe_num}".replace("  ", " ").strip()
+    watermark_text = f"RXTrack - {data_str} {lat}, {lng} {motorista_nome} NFE {nfe_num}".replace("  ", " ").strip()
     
     # 4. Salva a imagem original num arquivo temporario para o script externo ler
     import tempfile

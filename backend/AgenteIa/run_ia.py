@@ -159,6 +159,74 @@ def run_ml(img_path, watermark_text="", expected_nfe="", skip_ocr=False, codigo_
         print(f"SUCESSO:{crop_path}", flush=True)
         return
             
+    # --- FALLBACK FLORENCE: Quando YOLO não detecta canhoto, Florence processa a foto inteira ---
+    if not skip_ocr and skip_ocr != "skip_ocr":
+        try:
+            import subprocess
+            
+            print("INFO:YOLO_FALHOU - Ativando fallback Florence na foto inteira...", flush=True)
+            
+            BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            florence_script = os.path.join(BASE_DIR, 'AgenteIa', 'run_florence.py')
+            
+            # Salva a foto original num temp para o Florence analisar e rotacionar
+            temp_full_path = img_path.replace(".jpg", "_temp_full.jpg")
+            cv2.imwrite(temp_full_path, img_original, [cv2.IMWRITE_JPEG_QUALITY, 90])
+            
+            florence_res = subprocess.run(
+                [sys.executable, florence_script, temp_full_path, str(expected_nfe or '')],
+                capture_output=True, text=True, timeout=120  # Timeout maior para foto inteira
+            )
+            fl_out = florence_res.stdout.strip()
+            
+            if "FLORENCE_SUCESSO" in fl_out:
+                print("FLORENCE_FALLBACK:SIM", flush=True)
+                # Re-imprime saídas do Florence para o tasks.py capturar
+                for line in fl_out.split('\n'):
+                    if line.startswith("FLORENCE_"):
+                        print(line, flush=True)
+                
+                # Recarrega a imagem (já rotacionada pelo Florence)
+                if os.path.exists(temp_full_path):
+                    img_corrigida = cv2.imread(temp_full_path)
+                    if img_corrigida is not None:
+                        img_original = img_corrigida
+                    os.remove(temp_full_path)
+                
+                # Adiciona Tarja Preta (Watermark) na foto corrigida
+                if watermark_text:
+                    h_final, w_final = img_original.shape[:2]
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    
+                    text_scale = 1.0
+                    text_size = cv2.getTextSize(watermark_text, font, text_scale, 1)[0]
+                    if text_size[0] > (w_final - 40):
+                        text_scale = (w_final - 40) / text_size[0]
+                    
+                    text_scale = max(0.4, text_scale)
+                    thickness = max(1, int(text_scale * 2))
+                    text_size = cv2.getTextSize(watermark_text, font, text_scale, thickness)[0]
+                    
+                    bar_height = text_size[1] + 30
+                    black_bar = np.zeros((bar_height, w_final, 3), dtype=np.uint8)
+                    
+                    text_color = (0, 255, 255)  # Amarelo
+                    cv2.putText(black_bar, watermark_text, (20, bar_height - 15), font, text_scale, text_color, thickness, cv2.LINE_AA)
+                    
+                    img_original = cv2.vconcat([img_original, black_bar])
+                
+                # Salva resultado final (foto inteira corrigida + tarja)
+                crop_path = img_path.replace(".jpg", "_crop.jpg")
+                cv2.imwrite(crop_path, img_original, [cv2.IMWRITE_JPEG_QUALITY, 90])
+                print(f"SUCESSO:{crop_path}", flush=True)
+                return
+            else:
+                print(f"INFO:FLORENCE_FALLBACK_AVISO ({fl_out[:100]})", flush=True)
+                if os.path.exists(temp_full_path):
+                    os.remove(temp_full_path)
+        except Exception as e_fallback:
+            print(f"INFO:FLORENCE_FALLBACK_ERRO ({str(e_fallback)})", flush=True)
+    
     print("FALHA:Nao encontrou canhoto", flush=True)
 
 if __name__ == "__main__":
