@@ -49,7 +49,8 @@ RUN pip uninstall -y nvidia-cublas-cu12 nvidia-cuda-cupti-cu12 nvidia-cuda-nvrtc
     nvidia-cusolver-cu12 nvidia-cusparse-cu12 nvidia-nccl2 nvidia-nvtx-cu12 \
     nvidia-nvjitlink-cu12 triton 2>/dev/null || true
 
-# Pre-download e cache do modelo Florence-2-base na imagem Docker
+# Limpa cache antigo e pre-download do modelo Florence-2-base na imagem Docker
+RUN rm -rf /root/.cache/huggingface/modules/transformers_modules/microsoft/Florence* 2>/dev/null || true
 RUN python -c "from transformers import AutoProcessor, AutoModelForCausalLM; AutoProcessor.from_pretrained('microsoft/Florence-2-base', trust_remote_code=True); AutoModelForCausalLM.from_pretrained('microsoft/Florence-2-base', trust_remote_code=True)" || true
 
 # Copia o código da aplicação
