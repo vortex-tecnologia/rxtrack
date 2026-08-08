@@ -758,10 +758,22 @@
         }
     }
 
-    // Inicializa polling de notificações
+    // Inicializa polling de notificações e correção global de backdrops
     document.addEventListener('DOMContentLoaded', function() {
         setTimeout(verificarNotificacoesErros, 2000);
         setInterval(verificarNotificacoesErros, 15000);
+
+        // Prevenção global contra tela escura / backdrops órfãos do Bootstrap
+        document.addEventListener('hidden.bs.modal', function () {
+            setTimeout(function() {
+                if (!document.querySelector('.modal.show')) {
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                    document.body.classList.remove('modal-open');
+                    document.body.style.removeProperty('overflow');
+                    document.body.style.removeProperty('padding-right');
+                }
+            }, 100);
+        });
     });
 </script>
 

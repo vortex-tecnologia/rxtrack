@@ -766,7 +766,7 @@
 
 <script>
     function sincronizarTMS(notaId) {
-    const modalSync = new bootstrap.Modal(document.getElementById('modalSincronizar'));
+    const modalSync = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalSincronizar'));
     const stepConf = document.getElementById('sync-confirmacao');
     const stepLoad = document.getElementById('sync-loading');
     const stepRes = document.getElementById('sync-resultado');
@@ -833,8 +833,8 @@ function abrirDetalhes(notaId) {
     const modalElement = document.getElementById('modalNota');
     const container = document.getElementById('conteudoModal');
     
-    // Inicia o Modal do Bootstrap
-    const bsModal = new bootstrap.Modal(modalElement);
+    // Inicia ou recupera a instância existente do Modal do Bootstrap
+    const bsModal = bootstrap.Modal.getOrCreateInstance(modalElement);
     
     // Mostra estado de carregamento profissional
     container.innerHTML = `
@@ -965,7 +965,7 @@ function abrirModalBaixa(notaId, numeroNfe) {
     document.getElementById('baixaLoading').classList.add('d-none');
     document.getElementById('baixaFeedback').classList.add('d-none');
     
-    const modal = new bootstrap.Modal(document.getElementById('modalRegistrarBaixa'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalRegistrarBaixa'));
     modal.show();
 }
 
@@ -1028,7 +1028,7 @@ function enviarBaixaManual() {
  * Funções para Deletar Nota Fiscal Pendente
  */
 function confirmarDeletarNota(notaId, numeroNfe) {
-    const modal = new bootstrap.Modal(document.getElementById('modalDeletarNota'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDeletarNota'));
     
     // Reseta estado do modal
     document.getElementById('deletar-confirmacao').style.display = 'block';
@@ -1094,7 +1094,7 @@ function executarDeletarNota(notaId) {
  * Funções para Deletar Ocorrência Registrada (Reverte nota para Pendente)
  */
 function confirmarDeletarOcorrencia(notaId, numeroNfe, descricaoOcorrencia, jaIntegrado) {
-    const modal = new bootstrap.Modal(document.getElementById('modalDeletarOcorrencia'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDeletarOcorrencia'));
     
     // Reseta estado do modal
     document.getElementById('deloc-confirmacao').style.display = 'block';
@@ -1219,7 +1219,7 @@ function executarDeletarOcorrencia(notaId) {
 <script>
     function abrirModalHistoricoBaixas() {
         const modalElement = document.getElementById('modalHistoricoBaixas');
-        const modal = new bootstrap.Modal(modalElement);
+        const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
         const tbody = document.querySelector('#tabelaHistoricoBaixas tbody');
         
         tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4"><div class="spinner-border spinner-border-sm me-2"></div>Carregando histórico...</td></tr>';
@@ -1381,7 +1381,7 @@ function executarDeletarOcorrencia(notaId) {
         tbody.innerHTML = '';
         loading.classList.remove('d-none');
         
-        const modal = new bootstrap.Modal(document.getElementById('modalFreteNotas'));
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalFreteNotas'));
         modal.show();
 
         fetch(`/api/fretes/${freteId}/notas/`)
