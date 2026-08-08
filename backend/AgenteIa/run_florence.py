@@ -16,15 +16,27 @@ def process_florence(crop_path, expected_nfe=""):
 
     try:
         from transformers import AutoProcessor, AutoModelForCausalLM
+        from transformers.dynamic_module_utils import get_imports
+        from unittest.mock import patch
     except ImportError:
         print("FLORENCE_ERRO:transformers nao instalado", flush=True)
         return
+
+    # Patch: Remove flash_attn da checagem de imports (flash_attn é CUDA-only, impossível em CPU)
+    def _fixed_get_imports(filename):
+        imports = get_imports(filename)
+        if "flash_attn" in imports:
+            imports.remove("flash_attn")
+        return imports
 
     # Carrega processador e modelo Florence-2-base
     model_id = 'microsoft/Florence-2-base'
     try:
         processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
-        model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True)
+        with patch("transformers.dynamic_module_utils.get_imports", _fixed_get_imports):
+            model = AutoModelForCausalLM.from_pretrained(
+                model_id, trust_remote_code=True, attn_implementation="sdpa"
+            )
         model.eval()
     except Exception as e:
         print(f"FLORENCE_ERRO:Falha ao carregar modelo ({str(e)})", flush=True)

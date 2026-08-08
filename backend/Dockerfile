@@ -51,7 +51,16 @@ RUN pip uninstall -y nvidia-cublas-cu12 nvidia-cuda-cupti-cu12 nvidia-cuda-nvrtc
 
 # Limpa cache COMPLETO do HuggingFace e re-download do modelo Florence-2-base
 RUN rm -rf /root/.cache/huggingface 2>/dev/null || true
-RUN python -c "from transformers import AutoProcessor, AutoModelForCausalLM; AutoProcessor.from_pretrained('microsoft/Florence-2-base', trust_remote_code=True); AutoModelForCausalLM.from_pretrained('microsoft/Florence-2-base', trust_remote_code=True)" || true
+RUN python -c "\
+from unittest.mock import patch; \
+from transformers.dynamic_module_utils import get_imports; \
+from transformers import AutoProcessor, AutoModelForCausalLM; \
+fix = lambda f: [x for x in get_imports(f) if x != 'flash_attn']; \
+AutoProcessor.from_pretrained('microsoft/Florence-2-base', trust_remote_code=True); \
+p = patch('transformers.dynamic_module_utils.get_imports', fix); p.start(); \
+AutoModelForCausalLM.from_pretrained('microsoft/Florence-2-base', trust_remote_code=True, attn_implementation='sdpa'); \
+p.stop(); \
+print('Florence-2 cached OK')" || true
 
 # Copia o código da aplicação
 COPY . /transportadora_backend/
