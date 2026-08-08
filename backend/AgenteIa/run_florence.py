@@ -66,29 +66,40 @@ def process_florence(crop_path, expected_nfe=""):
         text = text.replace("<OCR>", "").strip()
         return text
 
-    # --- 1. DETECÇÃO DE ORIENTAÇÃO / ROTAÇÃO (0°, 90°, 180°, 270°) ---
-    rotations = [0, 90, 180, 270]
+    # --- 1. FASE 1: GARANTIR ORIENTAÇÃO HORIZONTAL ---
+    # Canhoto é SEMPRE horizontal. Se a imagem chegou vertical (altura > largura), deita primeiro.
+    h_orig, w_orig = img_bgr.shape[:2]
+    rotacao_pre = False
+    if h_orig > w_orig:
+        img_bgr = cv2.rotate(img_bgr, cv2.ROTATE_90_CLOCKWISE)
+        rotacao_pre = True
+
+    # --- 2. FASE 2: TESTAR APENAS 0° vs 180° (certo vs de cabeça pra baixo) ---
+    # Palavras-chave que indicam que o texto está na orientação correta de um canhoto
+    KEYWORDS_CANHOTO = ['SERIE', 'SÉRIE', 'NF-E', 'NFE', 'N°', 'RECEBEDOR', 'RECEBIMENTO',
+                        'ASSINATURA', 'DATA', 'NOTA', 'FISCAL', 'ESTAB', 'DECLARO']
+
+    rotations = [0, 180]
     best_angle = 0
     best_score = -1
     best_text = ""
-    texts_per_angle = {}
 
     for angle in rotations:
         if angle == 0:
             rotated = img_bgr
-        elif angle == 90:
-            rotated = cv2.rotate(img_bgr, cv2.ROTATE_90_CLOCKWISE)
         elif angle == 180:
             rotated = cv2.rotate(img_bgr, cv2.ROTATE_180)
-        elif angle == 270:
-            rotated = cv2.rotate(img_bgr, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
         pil_img = Image.fromarray(cv2.cvtColor(rotated, cv2.COLOR_BGR2RGB))
         txt = run_ocr_on_pil(pil_img)
-        texts_per_angle[angle] = txt
 
-        # Pontuação: Contagem de caracteres alfanuméricos legíveis
+        # Pontuação base: caracteres alfanuméricos legíveis
         score = sum(c.isalnum() for c in txt)
+
+        # Bônus por palavras-chave de canhoto encontradas (indica orientação correta)
+        txt_upper = txt.upper()
+        keywords_found = sum(1 for kw in KEYWORDS_CANHOTO if kw in txt_upper)
+        score += keywords_found * 500
 
         # Bônus gigante se encontrar o número exato da NF-e nesta rotação
         if expected_nfe and len(expected_nfe) >= 3 and expected_nfe in txt:
@@ -99,21 +110,9 @@ def process_florence(crop_path, expected_nfe=""):
             best_angle = angle
             best_text = txt
 
-    # --- 2. ROTAÇÃO DA IMAGEM ---
-    if best_angle != 0:
-        if best_angle == 90:
-            img_bgr = cv2.rotate(img_bgr, cv2.ROTATE_90_CLOCKWISE)
-        elif best_angle == 180:
-            img_bgr = cv2.rotate(img_bgr, cv2.ROTATE_180)
-        elif best_angle == 270:
-            img_bgr = cv2.rotate(img_bgr, cv2.ROTATE_90_COUNTERCLOCKWISE)
-
-    # --- 2.1 FORÇAR ORIENTAÇÃO HORIZONTAL (REGRA ABSOLUTA) ---
-    # Comprovante/canhoto NUNCA pode ficar na vertical. Se após a rotação
-    # a imagem ficou em pé (altura > largura), força 90° para deitar.
-    h_img, w_img = img_bgr.shape[:2]
-    if h_img > w_img:
-        img_bgr = cv2.rotate(img_bgr, cv2.ROTATE_90_CLOCKWISE)
+    # --- 3. APLICAR ROTAÇÃO FINAL ---
+    if best_angle == 180:
+        img_bgr = cv2.rotate(img_bgr, cv2.ROTATE_180)
 
     # Salva imagem corrigida de volta
     cv2.imwrite(crop_path, img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 90])
