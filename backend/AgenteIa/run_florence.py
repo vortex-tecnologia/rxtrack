@@ -107,8 +107,16 @@ def process_florence(crop_path, expected_nfe=""):
             img_bgr = cv2.rotate(img_bgr, cv2.ROTATE_180)
         elif best_angle == 270:
             img_bgr = cv2.rotate(img_bgr, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        # Salva imagem corrigida de volta
-        cv2.imwrite(crop_path, img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 90])
+
+    # --- 2.1 FORÇAR ORIENTAÇÃO HORIZONTAL (REGRA ABSOLUTA) ---
+    # Comprovante/canhoto NUNCA pode ficar na vertical. Se após a rotação
+    # a imagem ficou em pé (altura > largura), força 90° para deitar.
+    h_img, w_img = img_bgr.shape[:2]
+    if h_img > w_img:
+        img_bgr = cv2.rotate(img_bgr, cv2.ROTATE_90_CLOCKWISE)
+
+    # Salva imagem corrigida de volta
+    cv2.imwrite(crop_path, img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 90])
 
     # --- 3. AVALIAÇÃO DE QUALIDADE ---
     # Se menos de 15 caracteres legíveis forem encontrados em todas as rotações, imagem é ruim/ilegível
