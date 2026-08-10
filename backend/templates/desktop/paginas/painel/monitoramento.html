@@ -30,9 +30,11 @@
                         <div class="d-flex align-items-center">
                             <div class="flex-shrink-0">
                                 {% if m.motorista.foto_perfil %}
-                                <img src="{{ m.motorista.foto_perfil.url }}" class="rounded-circle" style="width: 48px; height: 48px; object-fit: cover; border: 2px solid #0d6efd;">
+                                <img src="{{ m.motorista.foto_perfil.url }}" class="rounded-circle"
+                                    style="width: 48px; height: 48px; object-fit: cover; border: 2px solid #0d6efd;">
                                 {% else %}
-                                <div class="bg-soft-primary p-3 rounded-circle d-flex justify-content-center align-items-center" style="width: 48px; height: 48px;">
+                                <div class="bg-soft-primary p-3 rounded-circle d-flex justify-content-center align-items-center"
+                                    style="width: 48px; height: 48px;">
                                     <i class="fas fa-truck-moving text-primary"></i>
                                 </div>
                                 {% endif %}
@@ -44,25 +46,25 @@
                                 </h6>
                                 <small class="text-muted">Manifesto: #{{ m.numero_manifesto }}</small>
 
-                                <small class="text-muted d-block mt-1" style="font-size: 9px;" id="data-registro-{{ m.numero_manifesto }}">
+                                <small class="text-muted d-block mt-1" style="font-size: 9px;"
+                                    id="data-registro-{{ m.numero_manifesto }}">
                                     <i class="bi bi-clock pe-1"></i>{{ m.data_criacao|date:"d/m/Y H:i" }}
                                 </small>
                             </div>
                         </div>
-                        
+
                         <!-- Ícone de Alerta para Manifesto Antigo (Renderizado Nativo pelo Backend e JS) -->
                         <div id="alerta-antigo-{{ m.numero_manifesto }}" class="align-self-center px-2">
                             {% if m.is_antigo %}
-                            <i class="bi bi-exclamation-triangle-fill text-warning fs-3" 
-                               title="Manifesto criado há {{ m.dias_criado }} dia(s) e não finalizado" 
-                               data-bs-toggle="tooltip" 
-                               style="cursor: help; animation: pulse 2s infinite;"></i>
+                            <i class="bi bi-exclamation-triangle-fill text-warning fs-3"
+                                title="Manifesto criado há {{ m.dias_criado }} dia(s) e não finalizado"
+                                data-bs-toggle="tooltip" style="cursor: help; animation: pulse 2s infinite;"></i>
                             {% endif %}
                         </div>
 
-                        <div id="sinal-torre-{{ m.numero_manifesto }}" class="last-seen-torre" 
-                             data-iso="{% if m.ultimo_acesso %}{{ m.ultimo_acesso|date:'c' }}{% endif %}"
-                             data-criacao="{{ m.data_criacao|date:'c' }}">
+                        <div id="sinal-torre-{{ m.numero_manifesto }}" class="last-seen-torre"
+                            data-iso="{% if m.ultimo_acesso %}{{ m.ultimo_acesso|date:'c' }}{% endif %}"
+                            data-criacao="{{ m.data_criacao|date:'c' }}">
                             <!-- JS will render this -->
                         </div>
                     </div>
@@ -86,8 +88,9 @@
                         </div>
                         <div class="d-flex gap-1">
                             <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
-                                onclick="abrirDetalhesManifestoTorre('{{ m.numero_manifesto }}')" title="Ver Notas / Itens do Manifesto">
-                                <i class="bi bi-card-list"></i> Notas
+                                onclick="abrirDetalhesManifestoTorre('{{ m.numero_manifesto }}')"
+                                title="Ver Notas / Itens do Manifesto">
+                                <i class="bi bi-card-list"></i> Manifesto
                             </button>
                             <button class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
                                 onclick="abrirRastreio('{{ m.numero_manifesto }}', '{{ m.motorista.nome_completo }}', '{{ m.baixadas }}', '{{ m.total_nfe }}')">
@@ -153,309 +156,314 @@
                 <small class="text-muted me-auto">
                     <span class="live-dot" style="width: 8px; height: 8px;"></span> Última atualização em tempo real
                 </small>
-                <button type="button" class="btn btn-secondary" data-bs-modal="modal">Fechar</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
             </div>
         </div>
+    </div>
 </div>
 
 <!-- Modal Detalhes do Manifesto na Torre de Controle Live -->
 <div class="modal fade" id="modalDetalhesManifestoTorre" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content border-0 shadow" id="conteudoModalDetalhesTorre" style="border-radius: 20px; overflow: hidden;">
+        <div class="modal-content border-0 shadow" id="conteudoModalDetalhesTorre" style="border-radius: 20px; overflow: hidden; background-color: #fff;">
             <!-- Carregado dinamicamente via AJAX -->
         </div>
     </div>
 </div>
 
-<style>
-    .bg-soft-primary {
-        background-color: rgba(13, 110, 253, 0.1);
-    }
-
-    .animate-pulse {
-        animation: pulse-red 2s infinite;
-    }
-
-    @keyframes pulse-red {
-        0% {
-            opacity: 1;
+    <style>
+        .bg-soft-primary {
+            background-color: rgba(13, 110, 253, 0.1);
         }
 
-        50% {
-            opacity: 0.4;
+        .animate-pulse {
+            animation: pulse-red 2s infinite;
         }
 
-        100% {
-            opacity: 1;
-        }
-    }
-
-    .card-update-flash {
-        animation: flash-update 1.2s ease;
-    }
-
-    @keyframes flash-update {
-        0% {
-            transform: scale(1);
-            box-shadow: 0 0 0 rgba(0, 0, 0, 0);
-            background-color: white;
-        }
-
-        30% {
-            transform: scale(1.02);
-            box-shadow: 0 0 20px rgba(25, 135, 84, 0.5);
-            background-color: rgba(25, 135, 84, 0.15);
-        }
-
-        100% {
-            transform: scale(1);
-            box-shadow: none;
-            background-color: white;
-        }
-    }
-
-    .fade-out {
-        animation: fadeOutScale 0.6s ease forwards;
-    }
-
-    @keyframes fadeOutScale {
-        to {
-            opacity: 0;
-            transform: scale(0.9);
-        }
-    }
-
-    .card-danger-pulse {
-        animation: danger-pulse 2s infinite;
-    }
-
-    @keyframes danger-pulse {
-        0% {
-            background-color: white;
-            box-shadow: 0 0 0 rgba(0, 0, 0, 0);
-        }
-        50% {
-            background-color: rgba(220, 53, 69, 0.1);
-            box-shadow: 0 0 15px rgba(220, 53, 69, 0.3);
-        }
-        100% {
-            background-color: white;
-            box-shadow: 0 0 0 rgba(0, 0, 0, 0);
-        }
-    }
-
-    .card-warning-pulse {
-        animation: warning-pulse 2s infinite;
-    }
-
-    @keyframes warning-pulse {
-        0% {
-            background-color: white;
-            box-shadow: 0 0 0 rgba(0, 0, 0, 0);
-        }
-        50% {
-            background-color: rgba(255, 193, 7, 0.1);
-            box-shadow: 0 0 15px rgba(255, 193, 7, 0.3);
-        }
-        100% {
-            background-color: white;
-            box-shadow: 0 0 0 rgba(0, 0, 0, 0);
-        }
-    }
-</style>
-<script>
-    // Passagem da variável de filial ativa para o WS (slugificada no backend)
-    window.FILIAL_ATIVA = "{{ filial_selecionada|default:'todas' }}";
-</script>
-<script src="{% static 'desktop/js/monitoramento/ws.js' %}?v=7"></script>
-<script>
-    let mapaEntrega = null;
-
-    // Inicializa os badges logo que carregar a página
-    document.addEventListener("DOMContentLoaded", function() {
-        if (typeof atualizarUltimoSinalTorre === "function") {
-            atualizarUltimoSinalTorre();
-            setInterval(atualizarUltimoSinalTorre, 60000); // Atualiza a cada 1 min
-        }
-    });
-
-    function abrirRastreio(manifestoId, nomeMotorista, progresso, totalNfs) {
-        document.getElementById('rastreio_numero').innerText = manifestoId;
-        document.getElementById('rastreio_motorista').innerText = nomeMotorista;
-        document.getElementById('rastreio_progresso_texto').innerText = `${progresso}/${totalNfs} NFs`;
-
-        let calculoProgresso = (parseInt(progresso) / parseInt(totalNfs)) * 100;
-        document.getElementById('rastreio_progresso_barra').style.width = (calculoProgresso || 0) + '%';
-
-        // Conecta ao sistema de atualização em tempo real do ws.js
-        monitorandoManifestoId = manifestoId.toString();
-
-        const modalElement = document.getElementById('modalRastreio');
-        const modal = new bootstrap.Modal(modalElement);
-        modal.show();
-
-        modalElement.addEventListener('shown.bs.modal', function () {
-            if (mapaEntrega) {
-                mapaEntrega.remove();
-                mapaEntrega = null;
+        @keyframes pulse-red {
+            0% {
+                opacity: 1;
             }
 
-            const latFilial = -22.7873755;
-            const lngFilial = -43.2886202;
+            50% {
+                opacity: 0.4;
+            }
 
-            mapaEntrega = L.map('mapaRastreio').setView([latFilial, lngFilial], 13);
+            100% {
+                opacity: 1;
+            }
+        }
 
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; CARTO',
-                subdomains: 'abcd',
-                maxZoom: 20
-            }).addTo(mapaEntrega);
+        .card-update-flash {
+            animation: flash-update 1.2s ease;
+        }
 
-            setTimeout(() => { mapaEntrega.invalidateSize(); }, 200);
+        @keyframes flash-update {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+                background-color: white;
+            }
 
-            // Ícones
-            const iconEntregue = L.divIcon({
-                html: '<i class="bi bi-box-seam-fill text-success" style="font-size: 18px;"></i>',
-                className: 'custom-div-icon',
-                iconSize: [20, 20]
-            });
+            30% {
+                transform: scale(1.02);
+                box-shadow: 0 0 20px rgba(25, 135, 84, 0.5);
+                background-color: rgba(25, 135, 84, 0.15);
+            }
 
-            const iconOcorrencia = L.divIcon({
-                html: '<i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 18px;"></i>',
-                className: 'custom-div-icon',
-                iconSize: [20, 20]
-            });
+            100% {
+                transform: scale(1);
+                box-shadow: none;
+                background-color: white;
+            }
+        }
 
-            // ÍCONE DO VEÍCULO (posição real-time)
-            const iconCaminhao = L.divIcon({
-                html: '<div style="background: #007bff; border: 2px solid white; border-radius: 50%; padding: 5px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0,0,0,0.3);">' +
-                    '<i class="bi bi-truck text-white" style="font-size: 20px;"></i>' +
-                    '</div>',
-                className: 'custom-div-icon',
-                iconSize: [35, 35],
-                iconAnchor: [17, 17]
-            });
+        .fade-out {
+            animation: fadeOutScale 0.6s ease forwards;
+        }
 
-            fetch(`/api/rastreio/${manifestoId}/`)
-                .then(res => {
-                    if (!res.ok) throw new Error(`Erro HTTP: ${res.status}`);
-                    return res.json();
-                })
-                .then(data => {
-                    let pontosParaRota = [`${lngFilial},${latFilial}`];
+        @keyframes fadeOutScale {
+            to {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+        }
 
-                    L.marker([latFilial, lngFilial]).bindPopup("<b>Filial RDexpresso</b>").addTo(mapaEntrega);
+        .card-danger-pulse {
+            animation: danger-pulse 2s infinite;
+        }
 
-                    // Plotar pontos de entrega (notas baixadas)
-                    if (data.pontos && data.pontos.length > 0) {
-                        data.pontos.forEach((ponto) => {
-                            const latLng = [ponto.lat, ponto.lng];
-                            pontosParaRota.push(`${ponto.lng},${ponto.lat}`);
+        @keyframes danger-pulse {
+            0% {
+                background-color: white;
+                box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+            }
 
-                            const iconChoice = (ponto.status === 'BAIXADA') ? iconEntregue : iconOcorrencia;
+            50% {
+                background-color: rgba(220, 53, 69, 0.1);
+                box-shadow: 0 0 15px rgba(220, 53, 69, 0.3);
+            }
 
-                            L.marker(latLng, { icon: iconChoice })
-                                .bindPopup(`<b>Nota: ${ponto.nota}</b><br>Hora: ${ponto.horario}`)
+            100% {
+                background-color: white;
+                box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+            }
+        }
+
+        .card-warning-pulse {
+            animation: warning-pulse 2s infinite;
+        }
+
+        @keyframes warning-pulse {
+            0% {
+                background-color: white;
+                box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+            }
+
+            50% {
+                background-color: rgba(255, 193, 7, 0.1);
+                box-shadow: 0 0 15px rgba(255, 193, 7, 0.3);
+            }
+
+            100% {
+                background-color: white;
+                box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+            }
+        }
+    </style>
+    <script>
+        // Passagem da variável de filial ativa para o WS (slugificada no backend)
+        window.FILIAL_ATIVA = "{{ filial_selecionada|default:'todas' }}";
+    </script>
+    <script src="{% static 'desktop/js/monitoramento/ws.js' %}?v=7"></script>
+    <script>
+        let mapaEntrega = null;
+
+        // Inicializa os badges logo que carregar a página
+        document.addEventListener("DOMContentLoaded", function () {
+            if (typeof atualizarUltimoSinalTorre === "function") {
+                atualizarUltimoSinalTorre();
+                setInterval(atualizarUltimoSinalTorre, 60000); // Atualiza a cada 1 min
+            }
+        });
+
+        function abrirRastreio(manifestoId, nomeMotorista, progresso, totalNfs) {
+            document.getElementById('rastreio_numero').innerText = manifestoId;
+            document.getElementById('rastreio_motorista').innerText = nomeMotorista;
+            document.getElementById('rastreio_progresso_texto').innerText = `${progresso}/${totalNfs} NFs`;
+
+            let calculoProgresso = (parseInt(progresso) / parseInt(totalNfs)) * 100;
+            document.getElementById('rastreio_progresso_barra').style.width = (calculoProgresso || 0) + '%';
+
+            // Conecta ao sistema de atualização em tempo real do ws.js
+            monitorandoManifestoId = manifestoId.toString();
+
+            const modalElement = document.getElementById('modalRastreio');
+            const modal = new bootstrap.Modal(modalElement);
+            modal.show();
+
+            modalElement.addEventListener('shown.bs.modal', function () {
+                if (mapaEntrega) {
+                    mapaEntrega.remove();
+                    mapaEntrega = null;
+                }
+
+                const latFilial = -22.7873755;
+                const lngFilial = -43.2886202;
+
+                mapaEntrega = L.map('mapaRastreio').setView([latFilial, lngFilial], 13);
+
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; CARTO',
+                    subdomains: 'abcd',
+                    maxZoom: 20
+                }).addTo(mapaEntrega);
+
+                setTimeout(() => { mapaEntrega.invalidateSize(); }, 200);
+
+                // Ícones
+                const iconEntregue = L.divIcon({
+                    html: '<i class="bi bi-box-seam-fill text-success" style="font-size: 18px;"></i>',
+                    className: 'custom-div-icon',
+                    iconSize: [20, 20]
+                });
+
+                const iconOcorrencia = L.divIcon({
+                    html: '<i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 18px;"></i>',
+                    className: 'custom-div-icon',
+                    iconSize: [20, 20]
+                });
+
+                // ÍCONE DO VEÍCULO (posição real-time)
+                const iconCaminhao = L.divIcon({
+                    html: '<div style="background: #007bff; border: 2px solid white; border-radius: 50%; padding: 5px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0,0,0,0.3);">' +
+                        '<i class="bi bi-truck text-white" style="font-size: 20px;"></i>' +
+                        '</div>',
+                    className: 'custom-div-icon',
+                    iconSize: [35, 35],
+                    iconAnchor: [17, 17]
+                });
+
+                fetch(`/api/rastreio/${manifestoId}/`)
+                    .then(res => {
+                        if (!res.ok) throw new Error(`Erro HTTP: ${res.status}`);
+                        return res.json();
+                    })
+                    .then(data => {
+                        let pontosParaRota = [`${lngFilial},${latFilial}`];
+
+                        L.marker([latFilial, lngFilial]).bindPopup("<b>Filial RDexpresso</b>").addTo(mapaEntrega);
+
+                        // Plotar pontos de entrega (notas baixadas)
+                        if (data.pontos && data.pontos.length > 0) {
+                            data.pontos.forEach((ponto) => {
+                                const latLng = [ponto.lat, ponto.lng];
+                                pontosParaRota.push(`${ponto.lng},${ponto.lat}`);
+
+                                const iconChoice = (ponto.status === 'BAIXADA') ? iconEntregue : iconOcorrencia;
+
+                                L.marker(latLng, { icon: iconChoice })
+                                    .bindPopup(`<b>Nota: ${ponto.nota}</b><br>Hora: ${ponto.horario}`)
+                                    .addTo(mapaEntrega);
+                            });
+                        }
+
+                        // POSIÇÃO ATUAL DO CAMINHÃO (GPS Nativo Java)
+                        if (data.posicao_atual) {
+                            const pos = data.posicao_atual;
+                            const caminhaoLatLng = [pos.lat, pos.lng];
+                            pontosParaRota.push(`${pos.lng},${pos.lat}`);
+
+                            const lastSeenStr = pos.last_seen ? (pos.last_seen.includes(':') && pos.last_seen.length <= 5 ? pos.last_seen : new Date(pos.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })) : '--';
+                            // Cria o marcador do caminhão e salva globalmente para updates via WS
+                            marcadorMotorista = L.marker(caminhaoLatLng, { icon: iconCaminhao })
+                                .bindTooltip(`⏱️ <b>Último Sinal: ${lastSeenStr}</b>`, { direction: 'top', offset: [0, -15] })
+                                .bindPopup(`<b>📡 Posição Atual</b><br>🔋 Bateria: ${pos.battery || '--'}%<br>📶 Rede: ${pos.network || '--'}<br>🕐 Último Sinal: ${lastSeenStr}`)
                                 .addTo(mapaEntrega);
-                        });
-                    }
 
-                    // POSIÇÃO ATUAL DO CAMINHÃO (GPS Nativo Java)
-                    if (data.posicao_atual) {
-                        const pos = data.posicao_atual;
-                        const caminhaoLatLng = [pos.lat, pos.lng];
-                        pontosParaRota.push(`${pos.lng},${pos.lat}`);
+                            // Centraliza o mapa no caminhão
+                            mapaEntrega.setView(caminhaoLatLng, 15);
+                        } else {
+                            // Sem posição GPS conhecida — mostra mensagem no centro
+                            L.popup()
+                                .setLatLng([latFilial, lngFilial])
+                                .setContent('<b>Aguardando primeiro sinal de GPS...</b>')
+                                .openOn(mapaEntrega);
+                        }
 
-                        const lastSeenStr = pos.last_seen ? (pos.last_seen.includes(':') && pos.last_seen.length <= 5 ? pos.last_seen : new Date(pos.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })) : '--';
-                        // Cria o marcador do caminhão e salva globalmente para updates via WS
-                        marcadorMotorista = L.marker(caminhaoLatLng, { icon: iconCaminhao })
-                            .bindTooltip(`⏱️ <b>Último Sinal: ${lastSeenStr}</b>`, { direction: 'top', offset: [0, -15] })
-                            .bindPopup(`<b>📡 Posição Atual</b><br>🔋 Bateria: ${pos.battery || '--'}%<br>📶 Rede: ${pos.network || '--'}<br>🕐 Último Sinal: ${lastSeenStr}`)
-                            .addTo(mapaEntrega);
+                        // Desenhar rota (se houver pontos suficientes)
+                        if (pontosParaRota.length > 1) {
+                            const coordenadasString = pontosParaRota.join(';');
+                            const urlOSRM = `https://router.project-osrm.org/route/v1/driving/${coordenadasString}?overview=full&geometries=geojson`;
 
-                        // Centraliza o mapa no caminhão
-                        mapaEntrega.setView(caminhaoLatLng, 15);
-                    } else {
-                        // Sem posição GPS conhecida — mostra mensagem no centro
-                        L.popup()
-                            .setLatLng([latFilial, lngFilial])
-                            .setContent('<b>Aguardando primeiro sinal de GPS...</b>')
-                            .openOn(mapaEntrega);
-                    }
+                            fetch(urlOSRM)
+                                .then(response => response.json())
+                                .then(result => {
+                                    if (result.routes && result.routes.length > 0) {
+                                        const rotaRua = result.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
 
-                    // Desenhar rota (se houver pontos suficientes)
-                    if (pontosParaRota.length > 1) {
-                        const coordenadasString = pontosParaRota.join(';');
-                        const urlOSRM = `https://router.project-osrm.org/route/v1/driving/${coordenadasString}?overview=full&geometries=geojson`;
+                                        L.polyline(rotaRua, {
+                                            color: '#007bff',
+                                            weight: 6,
+                                            opacity: 0.8,
+                                            lineJoin: 'round'
+                                        }).addTo(mapaEntrega);
+                                    }
+                                }).catch(() => { });
+                        }
+                    })
+                    .catch(err => console.error('Erro ao carregar rastro:', err));
 
-                        fetch(urlOSRM)
-                            .then(response => response.json())
-                            .then(result => {
-                                if (result.routes && result.routes.length > 0) {
-                                    const rotaRua = result.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+            }, { once: true });
 
-                                    L.polyline(rotaRua, {
-                                        color: '#007bff',
-                                        weight: 6,
-                                        opacity: 0.8,
-                                        lineJoin: 'round'
-                                    }).addTo(mapaEntrega);
-                                }
-                            }).catch(() => {});
-                    }
-                })
-                .catch(err => console.error('Erro ao carregar rastro:', err));
+            // Limpeza ao fechar o modal
+            modalElement.addEventListener('hidden.bs.modal', function () {
+                monitorandoManifestoId = null;
+                marcadorMotorista = null;
+                // O mapa será destruído na próxima abertura
+            }, { once: true });
+        }
 
-        }, { once: true });
+        // =====================================================
+        // MODAL DE DETALHES / GESTÃO DO MANIFESTO (TORRE LIVE)
+        // =====================================================
+        let manifestoAbertoDetalhesId = null;
 
-        // Limpeza ao fechar o modal
-        modalElement.addEventListener('hidden.bs.modal', function () {
-            monitorandoManifestoId = null;
-            marcadorMotorista = null;
-            // O mapa será destruído na próxima abertura
-        }, { once: true });
-    }
+        function abrirDetalhesManifestoTorre(manifestoId) {
+            manifestoAbertoDetalhesId = manifestoId.toString();
+            const modalEl = document.getElementById('modalDetalhesManifestoTorre');
+            const modalConteudo = document.getElementById('conteudoModalDetalhesTorre');
+            const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
 
-    // =====================================================
-    // MODAL DE DETALHES / GESTÃO DO MANIFESTO (TORRE LIVE)
-    // =====================================================
-    let manifestoAbertoDetalhesId = null;
-
-    function abrirDetalhesManifestoTorre(manifestoId) {
-        manifestoAbertoDetalhesId = manifestoId.toString();
-        const modalEl = document.getElementById('modalDetalhesManifestoTorre');
-        const modalConteudo = document.getElementById('conteudoModalDetalhesTorre');
-        const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
-
-        // 1. Loading inicial elegante
-        modalConteudo.innerHTML = `
+            // 1. Loading inicial elegante
+            modalConteudo.innerHTML = `
             <div class="modal-body text-center p-5">
                 <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
                 <h6 class="mt-3 text-muted fw-bold">Carregando itens do manifesto #${manifestoId}...</h6>
                 <p class="small text-secondary mb-0">Sincronizando notas em tempo real.</p>
             </div>
         `;
-        modalInstance.show();
+            modalInstance.show();
 
-        // 2. Busca o conteúdo HTML do modal
-        carregarConteudoModalDetalhes(manifestoId);
-    }
+            // 2. Busca o conteúdo HTML do modal
+            carregarConteudoModalDetalhes(manifestoId);
+        }
 
-    function carregarConteudoModalDetalhes(manifestoId, silencioso = false) {
-        const modalConteudo = document.getElementById('conteudoModalDetalhesTorre');
-        if (!modalConteudo) return;
+        function carregarConteudoModalDetalhes(manifestoId, silencioso = false) {
+            const modalConteudo = document.getElementById('conteudoModalDetalhesTorre');
+            if (!modalConteudo) return;
 
-        fetch(`/api/manifesto/detalhes-modal/${manifestoId}/`)
-            .then(response => {
-                if (!response.ok) throw new Error(`Erro ${response.status}: Falha ao buscar dados.`);
-                return response.text();
-            })
-            .then(html => {
-                modalConteudo.innerHTML = html;
-            })
-            .catch(err => {
-                if (!silencioso) {
-                    modalConteudo.innerHTML = `
+            fetch(`/api/manifesto/detalhes-modal/${manifestoId}/`)
+                .then(response => {
+                    if (!response.ok) throw new Error(`Erro ${response.status}: Falha ao buscar dados.`);
+                    return response.text();
+                })
+                .then(html => {
+                    modalConteudo.innerHTML = html;
+                })
+                .catch(err => {
+                    if (!silencioso) {
+                        modalConteudo.innerHTML = `
                         <div class="modal-header bg-danger text-white border-0">
                             <h5 class="modal-title fw-bold">Ops! Algo deu errado</h5>
                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -467,25 +475,25 @@
                             <button class="btn btn-secondary mt-2" data-bs-dismiss="modal">Fechar</button>
                         </div>
                     `;
-                }
-            });
-    }
-
-    function verDetalhesNF(chaveAcesso) {
-        if (chaveAcesso) {
-            window.open(`/notas-fiscais/?q=${chaveAcesso}`, '_blank');
+                    }
+                });
         }
-    }
 
-    document.addEventListener("DOMContentLoaded", function() {
-        const modalDetEl = document.getElementById('modalDetalhesManifestoTorre');
-        if (modalDetEl) {
-            modalDetEl.addEventListener('hidden.bs.modal', function () {
-                manifestoAbertoDetalhesId = null;
-            });
+        function verDetalhesNF(chaveAcesso) {
+            if (chaveAcesso) {
+                window.open(`/notas-fiscais/?q=${chaveAcesso}`, '_blank');
+            }
         }
-    });
-</script>
+
+        document.addEventListener("DOMContentLoaded", function () {
+            const modalDetEl = document.getElementById('modalDetalhesManifestoTorre');
+            if (modalDetEl) {
+                modalDetEl.addEventListener('hidden.bs.modal', function () {
+                    manifestoAbertoDetalhesId = null;
+                });
+            }
+        });
+    </script>
 
 
-{% endblock %}
+    {% endblock %}
