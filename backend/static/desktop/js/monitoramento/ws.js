@@ -12,7 +12,7 @@ function conectarWebSocket() {
     console.log("🔌 Tentando conectar WebSocket em:", ws_url);
     socket = new WebSocket(ws_url);
 
-    socket.onopen = function() {
+    socket.onopen = function () {
         console.log("✅ WS Conectado!");
         const status = document.getElementById('status-ws');
         if (status) {
@@ -21,16 +21,16 @@ function conectarWebSocket() {
         }
     };
 
-    socket.onmessage = function(e) {
+    socket.onmessage = function (e) {
         try {
             console.log("📩 WS Mensagem recebida:", e.data);
             const data = JSON.parse(e.data);
-            
+
             // 1. TRATAR STATUS DO MOTORISTA (HEARTBEAT)
             if (data.type === 'status_motorista') {
                 const status = data.dados;
                 const mID = status.manifesto_id ? status.manifesto_id.toString().trim() : null;
-                
+
                 if (!mID) return;
 
                 console.log("💓 Status recebido para:", mID, status);
@@ -77,8 +77,8 @@ function conectarWebSocket() {
                     if (redeEl) redeEl.innerText = status.network || '--';
                     if (vistoEl && status.last_seen) {
                         try {
-                            vistoEl.innerText = new Date(status.last_seen).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-                        } catch(e) {}
+                            vistoEl.innerText = new Date(status.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        } catch (e) { }
                     }
                 }
                 return;
@@ -88,7 +88,7 @@ function conectarWebSocket() {
             if (data.dados && data.type !== 'status_motorista') {
                 const d = data.dados;
                 const mID = d.manifesto_id;
-                
+
                 if (d.remover) {
                     const card = document.getElementById(`card-mft-${mID}`);
                     if (card) {
@@ -111,7 +111,7 @@ function conectarWebSocket() {
                 // Atualiza a barrinha azul
                 const progressBar = document.getElementById(`progress-bar-${mID}`);
                 if (progressBar) progressBar.style.width = (d.porcentagem || 0) + '%';
-                
+
                 // Atualiza os números
                 const baixadasEl = document.getElementById(`baixadas-${mID}`);
                 if (baixadasEl) {
@@ -127,7 +127,7 @@ function conectarWebSocket() {
 
                 const percentEl = document.getElementById(`percent-${mID}`);
                 if (percentEl) percentEl.innerText = d.porcentagem;
-                
+
                 // Atualiza a hora do sinal na torre
                 if (d.ultimo_acesso_iso) {
                     const elTorre = document.getElementById(`sinal-torre-${mID}`);
@@ -140,7 +140,7 @@ function conectarWebSocket() {
                 if (d.is_antigo !== undefined) {
                     const alertaContainer = document.getElementById(`alerta-antigo-${mID}`);
                     if (alertaContainer) {
-                        alertaContainer.innerHTML = d.is_antigo ? 
+                        alertaContainer.innerHTML = d.is_antigo ?
                             `<i class="fas fa-exclamation-triangle text-warning fs-3" 
                                title="Manifesto criado há ${d.dias_criado} dia(s) e não finalizado" 
                                data-bs-toggle="tooltip" 
@@ -157,7 +157,7 @@ function conectarWebSocket() {
                         innerCard.classList.add('card-update-flash');
                     }
                 }
-                
+
                 // Re-avalia o último sinal para o card atualizado
                 if (typeof atualizarUltimoSinalTorre === 'function') {
                     atualizarUltimoSinalTorre();
@@ -197,20 +197,28 @@ function conectarWebSocket() {
                         <div class="d-flex justify-content-between align-items-start mb-3">
                             <div class="d-flex align-items-center">
                                 <div class="flex-shrink-0">
-                                    ${d.foto_motorista ? 
-                                    `<img src="${d.foto_motorista}" class="rounded-circle" style="width: 48px; height: 48px; object-fit: cover; border: 2px solid #0d6efd;">` 
-                                    : 
-                                    `<div class="bg-soft-primary p-3 rounded-circle d-flex justify-content-center align-items-center" style="width: 48px; height: 48px;">
+                                    ${d.foto_motorista ?
+                `<img src="${d.foto_motorista}" class="rounded-circle" style="width: 48px; height: 48px; object-fit: cover; border: 2px solid #0d6efd;">`
+                :
+                `<div class="bg-soft-primary p-3 rounded-circle d-flex justify-content-center align-items-center" style="width: 48px; height: 48px;">
                                         <i class="fas fa-truck-moving text-primary"></i>
                                     </div>`
-                                    }
+            }
                                 </div>
                                 <div class="ms-3">
                                     <h6 class="mb-0 fw-bold d-flex align-items-center gap-1">
                                         <span>${d.motorista_nome || 'Desconhecido'}</span>
                                         ${d.icone_dispositivo || ''}
                                     </h6>
-                                    <small class="text-muted">Manifesto: #${d.manifesto_id}</small>
+                                    <div class="d-flex align-items-center gap-1 mt-0">
+                                        <small class="text-muted">Manifesto: #${d.manifesto_id}</small>
+                                        ${d.motorista_categoria === 'AGREGADO' ?
+                `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-1 py-0 ms-1" style="font-size: 0.65rem; font-weight: 700;">AGREGADO</span>` :
+                d.motorista_categoria === 'DEDICADO' ?
+                    `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-1 py-0 ms-1" style="font-size: 0.65rem; font-weight: 700;">DEDICADO</span>` :
+                    `<span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle px-1 py-0 ms-1" style="font-size: 0.65rem; font-weight: 700;">EMPRESA</span>`
+            }
+                                    </div>
                                     <small class="text-muted d-block mt-1" style="font-size: 9px;" id="data-registro-${d.manifesto_id}">
                                         <i class="bi bi-clock pe-1"></i>${d.data_registro || ''}
                                     </small>
@@ -219,8 +227,8 @@ function conectarWebSocket() {
                             
                             <!-- Ícone de Alerta para Manifesto Antigo (Renderizado via JS e Servidor) -->
                             <div id="alerta-antigo-${d.manifesto_id}" class="align-self-center px-2">
-                                ${d.is_antigo ? 
-                                `<i class="fas fa-exclamation-triangle text-warning fs-3" 
+                                ${d.is_antigo ?
+                `<i class="fas fa-exclamation-triangle text-warning fs-3" 
                                    title="Manifesto criado há ${d.dias_criado} dia(s) e não finalizado" 
                                    data-bs-toggle="tooltip" 
                                    style="cursor: help; animation: pulse 2s infinite;"></i>` : ''}
@@ -253,7 +261,7 @@ function conectarWebSocket() {
                             <div class="d-flex gap-1">
                                 <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
                                     onclick="abrirDetalhesManifestoTorre('${d.manifesto_id}')" title="Ver Notas / Itens do Manifesto">
-                                    <i class="bi bi-card-list"></i> Notas
+                                    <i class="bi bi-card-list"></i> Manifesto
                                 </button>
                                 <button class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
                                     onclick="abrirRastreio('${d.manifesto_id}', '${d.motorista_nome || ''}', '${d.baixadas || 0}', '${d.total || 0}')">
@@ -313,7 +321,7 @@ function conectarWebSocket() {
         const el = document.getElementById(`network-mft-${mID}`);
         if (!el) return;
         el.innerText = (network && network !== 'unknown') ? network.toUpperCase() : '--';
-        
+
         // Adiciona uma corzinha dependendo do sinal
         if (network === '4g' || network === 'wifi') el.className = 'badge bg-success text-white border-0 mt-1';
         else if (network === '3g') el.className = 'badge bg-info text-white border-0 mt-1';
@@ -331,17 +339,17 @@ function conectarWebSocket() {
                 console.error("Erro data:", e);
             }
         }
-        
+
         const elTorre = document.getElementById(`sinal-torre-${mID}`);
         if (elTorre) {
             elTorre.setAttribute('data-iso', isoDate);
-                    if (typeof atualizarUltimoSinalTorre === 'function') {
+            if (typeof atualizarUltimoSinalTorre === 'function') {
                 atualizarUltimoSinalTorre();
             }
         }
     }
 
-    socket.onclose = function() {
+    socket.onclose = function () {
         console.log("WS desconectado. Reconectando em 5s...");
         const status = document.getElementById('status-ws');
         if (status) {
@@ -351,7 +359,7 @@ function conectarWebSocket() {
         setTimeout(conectarWebSocket, 5000);
     };
 
-    socket.onerror = function(error) {
+    socket.onerror = function (error) {
         console.error("❌ Erro WS:", error);
     };
 }
@@ -361,7 +369,7 @@ function formatTimeDiff(ms) {
     const mins = Math.floor(ms / 60000);
     const hours = Math.floor(mins / 60);
     const days = Math.floor(hours / 24);
-    
+
     if (mins < 60) {
         if (mins <= 5) return 'Sinal agora';
         return `Há ${mins}m`;
@@ -378,12 +386,12 @@ function atualizarUltimoSinalTorre() {
         const mID = card.id.replace('card-mft-', '');
         const elSinal = document.getElementById(`sinal-torre-${mID}`);
         if (!elSinal) return;
-        
+
         const now = new Date();
-        
+
         // --- LÓGICA DE ALERTA DE MANIFESTO ANTIGO ---
         let alertaContainer = document.getElementById(`alerta-antigo-${mID}`);
-        
+
         // Resiliência: se o HTML estiver em cache e a div não existir, cria ela dinamicamente
         if (!alertaContainer) {
             alertaContainer = document.createElement('div');
@@ -393,12 +401,12 @@ function atualizarUltimoSinalTorre() {
         }
 
         const dataCriacaoIso = elSinal.getAttribute('data-criacao');
-        
+
         if (dataCriacaoIso) {
             try {
                 const criacaoDate = new Date(dataCriacaoIso);
                 const diffCriacaoHours = (now - criacaoDate) / (1000 * 60 * 60);
-                
+
                 // Pulsação do CARD baseada na idade do manifesto (não do login do motorista)
                 // >= 24h: pulsa vermelho | >= 12h: pulsa amarelo | < 12h: sem pulsação
                 card.classList.remove('card-danger-pulse', 'card-warning-pulse');
@@ -406,7 +414,7 @@ function atualizarUltimoSinalTorre() {
                     card.classList.add('card-danger-pulse');
                     alertaContainer.innerHTML = `
                         <i class="bi bi-exclamation-triangle-fill text-danger fs-3" 
-                           title="Manifesto criado há ${Math.floor(diffCriacaoHours/24)} dia(s) e não finalizado" 
+                           title="Manifesto criado há ${Math.floor(diffCriacaoHours / 24)} dia(s) e não finalizado" 
                            data-bs-toggle="tooltip" 
                            style="cursor: help; animation: pulse 2s infinite;"></i>
                     `;
@@ -429,11 +437,11 @@ function atualizarUltimoSinalTorre() {
                 } else {
                     alertaContainer.innerHTML = '';
                 }
-            } catch(e) {
+            } catch (e) {
                 console.error('Erro na data de criação', e);
             }
         }
-        
+
         const isoDate = elSinal.getAttribute('data-iso');
         if (!isoDate || isoDate.trim() === '') {
             elSinal.innerHTML = `
@@ -447,19 +455,19 @@ function atualizarUltimoSinalTorre() {
             card.classList.remove('card-danger-pulse', 'card-warning-pulse');
             return;
         }
-        
+
         try {
             const date = new Date(isoDate);
             const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            
+
             const now = new Date();
             const diffMs = now - date;
-            
+
             const diffHours = diffMs / (1000 * 60 * 60);
-            
+
             let bgColor = '';
             let textColor = '';
-            
+
             if (diffHours <= 1.5 || diffMs < 0) { // < 0 caso horário do celular esteja à frente do servidor
                 bgColor = 'rgba(25, 135, 84, 0.1)'; // green soft
                 textColor = '#198754';
@@ -470,9 +478,9 @@ function atualizarUltimoSinalTorre() {
                 bgColor = 'rgba(220, 53, 69, 0.1)'; // red soft
                 textColor = '#dc3545';
             }
-            
+
             const textDiff = diffMs < 0 ? 'Sinal agora' : formatTimeDiff(diffMs);
-            
+
             elSinal.innerHTML = `
                 <div style="border: 1px solid ${textColor}; background-color: ${bgColor}; border-radius: 20px; padding: 2px 10px; display: inline-block; min-width: 80px; text-align: center;">
                     <i class="fas fa-circle" style="color: ${textColor}; font-size: 8px; vertical-align: middle; margin-right: 4px;"></i>
@@ -482,9 +490,9 @@ function atualizarUltimoSinalTorre() {
                     ${textDiff}
                 </div>
             `;
-            
+
             // Pulsação do card controlada apenas pela idade do manifesto (bloco acima)
-        } catch(e) {
+        } catch (e) {
             console.error('Erro na data Torre', e);
         }
     });
@@ -498,8 +506,8 @@ function atualizarTooltipEPopupMarcador(motoristaNome, lastSeen, battery, networ
     let timeStr = '--';
     if (lastSeen) {
         try {
-            timeStr = (typeof lastSeen === 'string' && lastSeen.includes(':') && lastSeen.length <= 5) 
-                ? lastSeen 
+            timeStr = (typeof lastSeen === 'string' && lastSeen.includes(':') && lastSeen.length <= 5)
+                ? lastSeen
                 : new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             if (timeStr === 'Invalid Date') timeStr = lastSeen;
         } catch (e) {
@@ -591,8 +599,8 @@ function abrirRastreamentoRealTime(manifestoId, motoristaNome, initialLat, initi
                 let timeStr = '--';
                 if (lastSeen) {
                     try {
-                        timeStr = (typeof lastSeen === 'string' && lastSeen.includes(':') && lastSeen.length <= 5) 
-                            ? lastSeen 
+                        timeStr = (typeof lastSeen === 'string' && lastSeen.includes(':') && lastSeen.length <= 5)
+                            ? lastSeen
                             : new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                         if (timeStr === 'Invalid Date') timeStr = lastSeen;
                     } catch (e) {
@@ -657,7 +665,7 @@ function initMapaRastreamento(lat, lng) {
     });
 
     marcadorMotorista = L.marker([defaultLat, defaultLng], { icon: iconTruck }).addTo(mapaRastreamento);
-    
+
     if (isNaN(parsedLat) || isNaN(parsedLng)) {
         marcadorMotorista.bindPopup("<b>Aguardando primeiro sinal de GPS...</b>").openPopup();
         marcadorMotorista.bindTooltip("Aguardando sinal de GPS...", { direction: 'top', offset: [0, -20] });
@@ -674,7 +682,7 @@ function atualizarPosicaoMapa(dados) {
     // Atualiza Overlay do Mapa
     document.getElementById('mapa-status-bat').innerText = dados.battery ? dados.battery + '%' : '--%';
     document.getElementById('mapa-status-rede').innerText = dados.network || '--';
-    
+
     let timeStr = '--';
     if (dados.last_seen) {
         try {

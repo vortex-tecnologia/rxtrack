@@ -44,7 +44,22 @@
                                     <span>{{ m.motorista.nome_completo|default:m.motorista.user.username }}</span>
                                     {{ m.motorista.icone_dispositivo_html|safe }}
                                 </h6>
-                                <small class="text-muted">Manifesto: #{{ m.numero_manifesto }}</small>
+                                <div class="d-flex align-items-center gap-1 mt-0">
+                                    <small class="text-muted">Manifesto: #{{ m.numero_manifesto }}</small>
+                                    {% if m.motorista.categoria == 'AGREGADO' %}
+                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-1 py-0 ms-1" style="font-size: 0.65rem; font-weight: 700;">
+                                            AGREGADO
+                                        </span>
+                                    {% elif m.motorista.categoria == 'DEDICADO' %}
+                                        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-1 py-0 ms-1" style="font-size: 0.65rem; font-weight: 700;">
+                                            DEDICADO
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle px-1 py-0 ms-1" style="font-size: 0.65rem; font-weight: 700;">
+                                            EMPRESA
+                                        </span>
+                                    {% endif %}
+                                </div>
 
                                 <small class="text-muted d-block mt-1" style="font-size: 9px;"
                                     id="data-registro-{{ m.numero_manifesto }}">
