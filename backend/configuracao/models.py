@@ -172,3 +172,33 @@ class ConfiguracaoSistema(models.Model):
     def get_emails_notificacao_list(self):
         """Retorna a lista de e-mails de notificação como array limpo"""
         return [e.strip() for e in self.emails_notificacao.split(',') if e.strip()]
+
+
+class AtualizacaoSistema(models.Model):
+    """
+    Registra os patch notes / novidades e atualizações da plataforma.
+    Exibido na dashboard em banner compacto com modal interativo de histórico navegável.
+    """
+    versao = models.CharField(max_length=50, verbose_name="Versão / Patch", help_text="Ex: v2.4.0 ou Patch 10/08")
+    titulo = models.CharField(max_length=200, verbose_name="Título da Novidade", help_text="Ex: Guardião de Canhotos & Nova Leitura IA")
+    resumo = models.CharField(max_length=300, verbose_name="Resumo (Linha Única)", help_text="Texto curto que aparece no banner da dashboard")
+    conteudo = models.TextField(verbose_name="Descrição Completa (Texto/HTML)", help_text="Detalhes completos das novidades e melhorias para o modal")
+    data_lancamento = models.DateTimeField(auto_now_add=True, verbose_name="Data de Lançamento")
+    ativo = models.BooleanField(default=True, verbose_name="Visível aos Usuários")
+    destaque = models.BooleanField(default=False, verbose_name="Fixar como Destaque Principal")
+
+    CATEGORIA_CHOICES = [
+        ('NOVIDADE', '🚀 Nova Funcionalidade'),
+        ('MELHORIA', '⚡ Melhoria de Desempenho'),
+        ('CORRECAO', '🛠️ Correção de Erros'),
+        ('AVISO', '📢 Comunicado Importante'),
+    ]
+    categoria = models.CharField(max_length=20, choices=CATEGORIA_CHOICES, default='NOVIDADE', verbose_name="Categoria")
+
+    class Meta:
+        verbose_name = "Atualização / Patch Note"
+        verbose_name_plural = "Atualizações do Sistema (Patch Notes)"
+        ordering = ['-data_lancamento', '-id']
+
+    def __str__(self):
+        return f"{self.versao} - {self.titulo}"

@@ -70,3 +70,14 @@ class ConfiguracaoSistemaAdmin(admin.ModelAdmin):
             return redirect(f'/admin/configuracao/configuracaosistema/{obj.pk}/change/')
         except Exception:
             return super().changelist_view(request, extra_context=extra_context)
+
+
+from .models import AtualizacaoSistema
+
+@admin.register(AtualizacaoSistema)
+class AtualizacaoSistemaAdmin(admin.ModelAdmin):
+    list_display = ('versao', 'titulo', 'categoria', 'data_lancamento', 'ativo', 'destaque')
+    list_filter = ('categoria', 'ativo', 'destaque', 'data_lancamento')
+    search_fields = ('versao', 'titulo', 'resumo', 'conteudo')
+    list_editable = ('ativo', 'destaque')
+    ordering = ('-data_lancamento',)

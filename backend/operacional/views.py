@@ -126,6 +126,30 @@ class DashboardView(TemplateView):
         # Recupera parâmetro de filtro da URL
         filial_param = self.request.GET.get('filial')
 
+        # --- 0. PATCH NOTES / NOVIDADES DA PLATAFORMA ---
+        from configuracao.models import AtualizacaoSistema
+        import json
+        try:
+            novidades_qs = AtualizacaoSistema.objects.filter(ativo=True).order_by('-data_lancamento', '-id')
+            novidades_lista = []
+            for nov in novidades_qs:
+                novidades_lista.append({
+                    'id': nov.id,
+                    'versao': nov.versao,
+                    'titulo': nov.titulo,
+                    'resumo': nov.resumo,
+                    'conteudo': nov.conteudo,
+                    'categoria': nov.categoria,
+                    'categoria_display': nov.get_categoria_display(),
+                    'data': timezone.localtime(nov.data_lancamento).strftime('%d/%m/%Y'),
+                    'destaque': nov.destaque
+                })
+            context['ultima_novidade'] = novidades_lista[0] if novidades_lista else None
+            context['novidades_json'] = json.dumps(novidades_lista)
+        except Exception as e:
+            context['ultima_novidade'] = None
+            context['novidades_json'] = '[]'
+
         # --- 1. CARDS DE RESUMO ---
         # 1. Busca os manifestos do dia
         manifestos_do_dia = Manifesto.objects.filter(data_criacao__range=(hoje_inicio, hoje_fim)).exclude(numero_manifesto__startswith='SAC-')
