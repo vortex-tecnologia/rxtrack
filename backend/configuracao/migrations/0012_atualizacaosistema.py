@@ -40,13 +40,13 @@ def popular_patch_notes_iniciais(apps, schema_editor):
 
     AtualizacaoSistema.objects.create(
         versao="v2.3.0",
-        titulo="Motor de IA Visual Florence-2 (LLM Vision)",
-        resumo="Fim das notas de cabeça para baixo! Desviramento automático e extração de recebedor e documento.",
-        conteudo="""<h5>🤖 Inteligência Artificial Visual:</h5>
+        titulo="Novo Motor de Inteligência Artificial para Verificação e Leitura de Canhotos",
+        resumo="Fim das notas de cabeça para baixo! Desviramento automático de fotos e leitura inteligente de recebedor.",
+        conteudo="""<h5>🤖 Inteligência Artificial no Reconhecimento de Fotos:</h5>
 <ul>
     <li><b>Desviramento Automático 180°:</b> A IA detecta se a foto foi tirada invertida e corrige a rotação instantaneamente.</li>
-    <li><b>Extração de Dados do Recebedor:</b> Leitura automática de nome, CPF e RG preenchidos no canhoto caso o motorista não digite.</li>
-    <li><b>Aceleração no Processamento:</b> Fila dedicada no Celery Worker (ai_queue) sem concorrência com o tráfego web.</li>
+    <li><b>Leitura Inteligente do Recebedor:</b> Preenchimento automático de nome e documento caso o motorista não digite.</li>
+    <li><b>Aceleração no Processamento:</b> Fila de processamento ultra-rápida sem impacto na navegação do painel.</li>
 </ul>""",
         categoria="NOVIDADE",
         destaque=False,
