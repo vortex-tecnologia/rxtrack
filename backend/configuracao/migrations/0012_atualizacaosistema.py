@@ -1,3 +1,6 @@
+from django.db import migrations, models
+
+
 def popular_patch_notes_iniciais(apps, schema_editor):
     AtualizacaoSistema = apps.get_model('configuracao', 'AtualizacaoSistema')
     if AtualizacaoSistema.objects.exists():
