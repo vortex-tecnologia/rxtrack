@@ -6,7 +6,7 @@ import json
 from .models import (
     Manifesto, NotaFiscal, Ocorrencia, BaixaNF, 
     HistoricoOcorrencia, ManifestoBuscaLog, WebhookEventoManifestoESL, WebhookTokenControl,
-    LogBaixaNfe, Frete
+    LogBaixaNfe, Frete, Veiculo
 )
 from manifesto.tasks import enviar_baixa_esl_task
 
@@ -111,10 +111,15 @@ class WebhookEventoManifestoESLAdmin(admin.ModelAdmin):
     marcar_como_erro.short_description = "Marcar como ERRO"
 @admin.register(Manifesto)
 class ManifestoAdmin(ModelAdmin):
-    # 'veiculo' foi removido pois não existe no seu model Manifesto
-    list_display = ("numero_manifesto", "motorista", "status", "data_criacao")
-    list_filter = ("status", "finalizado")
-    search_fields = ("numero_manifesto", "motorista__nome_completo")
+    list_display = ("numero_manifesto", "motorista", "status", "status_tms", "veiculo", "data_criacao")
+    list_filter = ("status", "status_tms", "finalizado")
+    search_fields = ("numero_manifesto", "motorista__nome_completo", "veiculo__placa")
+
+@admin.register(Veiculo)
+class VeiculoAdmin(ModelAdmin):
+    list_display = ("placa", "tipo", "criado_em")
+    list_filter = ("tipo",)
+    search_fields = ("placa",)
 
 @admin.register(Frete)
 class FreteAdmin(ModelAdmin):

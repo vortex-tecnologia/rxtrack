@@ -155,6 +155,32 @@ class RegistrarBaixaView(APIView):
                         id_err = nota_id or chave_acesso or numero_nota or nota_id_tms
                         raise NotaFiscal.DoesNotExist(f"Documento {id_err} não localizado.")
 
+                # ======= BLOQUEIO POR STATUS TMS (PENDENTE/FINALIZADO) =======
+                manifesto_da_nota = nf.manifesto
+                if manifesto_da_nota:
+                    status_tms_atual = getattr(manifesto_da_nota, 'status_tms', 'in_transit')
+                    if status_tms_atual == 'pending':
+                        # Busca dados da filial para o botão WhatsApp
+                        whatsapp_op = None
+                        nome_filial = None
+                        if manifesto_da_nota.filial:
+                            whatsapp_op = manifesto_da_nota.filial.whatsapp_operacional_completo
+                            nome_filial = manifesto_da_nota.filial.nome
+                        logger.warning(f"⚠️ Baixa BLOQUEADA: Manifesto {numero_mft} está PENDENTE no TMS.")
+                        return Response({
+                            'erro': 'manifesto_pendente_tms',
+                            'mensagem': 'Este manifesto está PENDENTE no TMS. Entre em contato com o operacional para colocá-lo em trânsito.',
+                            'whatsapp_operacional': whatsapp_op,
+                            'nome_filial': nome_filial,
+                            'numero_manifesto': manifesto_da_nota.numero_manifesto,
+                        }, status=409)
+                    elif status_tms_atual == 'closed':
+                        logger.warning(f"🚫 Baixa BLOQUEADA: Manifesto {numero_mft} está FINALIZADO no TMS.")
+                        return Response({
+                            'erro': 'manifesto_finalizado_tms',
+                            'mensagem': 'Este manifesto já foi finalizado no TMS. Não é possível registrar baixas.',
+                        }, status=409)
+
                 # ======= TRACE LOG: PIPELINE DE BAIXA =======
                 import logging
                 _trace_logger = logging.getLogger('baixa_trace')

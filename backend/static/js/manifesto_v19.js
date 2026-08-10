@@ -463,8 +463,16 @@ async function atualizarListaViva(numeroManifesto) {
         const response = await authFetch(`${API_BASE}manifesto/notas/?numero_manifesto=${numeroManifesto}`);
         if (!response || response.status !== 200) return;
 
-        const notas = await response.json();
+        const responseData = await response.json();
+        // Nova estrutura: {notas: [...], manifesto: {...}}
+        const notas = responseData.notas || responseData;
         window.notasGerais = notas;
+        // Metadados do manifesto (status TMS, WhatsApp operacional, placa)
+        const metaManifesto = responseData.manifesto || {};
+        window.manifestoStatusTms = metaManifesto.status_tms || 'in_transit';
+        window.manifestoWhatsappOperacional = metaManifesto.whatsapp_operacional || null;
+        window.manifestoNomeFilial = metaManifesto.nome_filial || null;
+        window.manifestoPlacaVeiculo = metaManifesto.placa_veiculo || null;
         const areaDinamica = document.getElementById('area-lista-dinamica');
         const contador = document.getElementById('contador-notas');
 
@@ -1098,6 +1106,13 @@ async function salvarRegistro() {
             atualizarListaViva(manifestoAtual); // Atualiza a lista para refletir a baixa (opcional, pois o polling já cuida disso)
 
         } else {
+            if (response.status === 409 && data.erro === 'manifesto_pendente_tms') {
+                window.manifestoStatusTms = 'pending';
+                if (data.whatsapp_operacional) window.manifestoWhatsappOperacional = data.whatsapp_operacional;
+                if (data.nome_filial) window.manifestoNomeFilial = data.nome_filial;
+                mostrarModalPendenteTms();
+                return;
+            }
             // Se o servidor retornar erro controlado (ex: 400 - Validação)
             if (data.status_integracao === 'erro_tms') {
                 atualizarStatusUI('warning', '⚠️ Salvo com Alerta', `O canhoto foi salvo no App, mas houve um erro na ESL: ${data.erro}`);
@@ -1290,6 +1305,16 @@ function selecionarTipoMassa(tipo) {
 }
 
 function abrirModalBaixaMassa() {
+    // === BLOQUEIO POR STATUS TMS ===
+    if (window.manifestoStatusTms === 'pending') {
+        mostrarModalPendenteTms();
+        return;
+    }
+    if (window.manifestoStatusTms === 'closed') {
+        alert('⛔ Este manifesto já foi finalizado no TMS. Não é possível registrar baixas.');
+        return;
+    }
+
     if (notasSelecionadas.size === 0) return;
 
     // Atualiza contadores
@@ -1476,6 +1501,16 @@ function processarSumiçoNotaSilencioso(numeroNF) {
 // Abre o modal de baixa com os dados da nota e configurações específicas
 // =========================================================================
 function abrirModalBaixa(numeroNota, chaveAcesso, tipo) {
+    // === BLOQUEIO POR STATUS TMS ===
+    if (window.manifestoStatusTms === 'pending') {
+        mostrarModalPendenteTms();
+        return;
+    }
+    if (window.manifestoStatusTms === 'closed') {
+        alert('⛔ Este manifesto já foi finalizado no TMS. Não é possível registrar baixas.');
+        return;
+    }
+
     const tituloEl = document.getElementById('modal-titulo-nf');
     const inputChave = document.getElementById('hidden-chave-nf');
     const inputNumero = document.getElementById('hidden-numero-nf');
@@ -1994,6 +2029,16 @@ function limparBusca() {
 
 // Função para registrar a chegada de todas as transferências de uma vez
 async function registrarChegadaColetiva(manifestoId) {
+    // === BLOQUEIO POR STATUS TMS ===
+    if (window.manifestoStatusTms === 'pending') {
+        mostrarModalPendenteTms();
+        return;
+    }
+    if (window.manifestoStatusTms === 'closed') {
+        alert('⛔ Este manifesto já foi finalizado no TMS. Não é possível registrar transferências.');
+        return;
+    }
+
     // 1. Criamos o modal de confirmação dinâmico (Para evitar o 'confirm' do navegador)
     const modalConfirmHTML = `
     <div class="modal fade" id="modalConfirmMassa" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
@@ -2062,6 +2107,16 @@ async function registrarChegadaColetiva(manifestoId) {
 // Função para abrir o modal de pergunta operacional (Despacho ou Retirada)
 
 function abrirModalPerguntaOperacional(numeroNota, chave, tipo) {
+    // === BLOQUEIO POR STATUS TMS ===
+    if (window.manifestoStatusTms === 'pending') {
+        mostrarModalPendenteTms();
+        return;
+    }
+    if (window.manifestoStatusTms === 'closed') {
+        alert('⛔ Este manifesto já foi finalizado no TMS. Não é possível registrar baixas.');
+        return;
+    }
+
     const titulo = tipo === 'DESPACHO' ? "Confirmar Despacho" : "Confirmar Retirada";
     const pergunta = tipo === 'DESPACHO' ? "O embarque foi completo?" : "A retirada foi completa?";
 
@@ -2233,6 +2288,16 @@ async function carregarMotivosColeta() {
 }
 
 function abrirModalColeta(numero, pickId, tipo) {
+    // === BLOQUEIO POR STATUS TMS ===
+    if (window.manifestoStatusTms === 'pending') {
+        mostrarModalPendenteTms();
+        return;
+    }
+    if (window.manifestoStatusTms === 'closed') {
+        alert('⛔ Este manifesto já foi finalizado no TMS. Não é possível registrar coletas.');
+        return;
+    }
+
     console.log("📦 Abrindo modal de Coleta:", numero);
     const modalColeta = new bootstrap.Modal(document.getElementById('modalColeta'));
     const btnSim = document.getElementById('btn-coleta-sim');
@@ -2486,4 +2551,135 @@ document.addEventListener('visibilitychange', () => {
         atualizarIconeNuvem();
     }
 });
+
+
+// =====================================================
+// 4. CONTROLE DE STATUS DO MANIFESTO NO TMS (PENDENTE / LIBERADO)
+// =====================================================
+
+function mostrarModalPendenteTms() {
+    const modalEl = document.getElementById('modalManifestoPendenteTms');
+    if (!modalEl) {
+        alert('⚠️ Este manifesto está PENDENTE no TMS. Entre em contato com o operacional para colocá-lo em trânsito antes de realizar baixas.');
+        return;
+    }
+
+    const numMft = manifestoAtual || localStorage.getItem('manifesto_ativo') || '';
+    const elNum = document.getElementById('pendente-tms-num-manifesto');
+    if (elNum) elNum.innerText = numMft ? `#${numMft}` : '';
+
+    const elFilialNome = document.getElementById('pendente-tms-filial-nome');
+    if (elFilialNome) elFilialNome.innerText = window.manifestoNomeFilial || 'Matriz / Operacional';
+
+    const feedbackEl = document.getElementById('pendente-tms-feedback');
+    if (feedbackEl) {
+        feedbackEl.className = 'd-none alert py-2 px-3 small rounded-3 mb-3';
+        feedbackEl.innerText = '';
+    }
+
+    const loadingEl = document.getElementById('pendente-tms-loading');
+    if (loadingEl) loadingEl.classList.add('d-none');
+
+    const acoesEl = document.getElementById('pendente-tms-acoes');
+    if (acoesEl) acoesEl.classList.remove('d-none');
+
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+}
+
+function abrirWhatsAppOperacional() {
+    const numMft = manifestoAtual || localStorage.getItem('manifesto_ativo') || '';
+    const filial = window.manifestoNomeFilial || 'Operacional';
+    const numeroWhats = window.manifestoWhatsappOperacional;
+
+    // Mensagem pré-montada amigável e profissional
+    let texto = `Olá, equipe operacional ${filial}!\n\nO manifesto nº *${numMft}* está com status *PENDENTE* no TMS e preciso que coloquem em *TRÂNSITO* para liberar as baixas no aplicativo RXTrack.\n\nPoderiam verificar, por favor? Obrigado!`;
+    const textoCodificado = encodeURIComponent(texto);
+
+    if (numeroWhats) {
+        // Remove caracteres não numéricos
+        const numLimpo = String(numeroWhats).replace(/\D/g, '');
+        // Link direto wa.me
+        const urlWhats = `https://wa.me/${numLimpo}?text=${textoCodificado}`;
+        window.open(urlWhats, '_blank');
+    } else {
+        // Fallback se não tiver número de WhatsApp cadastrado na filial
+        const urlFallback = `https://wa.me/?text=${textoCodificado}`;
+        window.open(urlFallback, '_blank');
+    }
+}
+
+async function verificarNovamenteStatusTms() {
+    const numMft = manifestoAtual || localStorage.getItem('manifesto_ativo') || '';
+    if (!numMft) return;
+
+    const loadingEl = document.getElementById('pendente-tms-loading');
+    const feedbackEl = document.getElementById('pendente-tms-feedback');
+    const btnReverificar = document.getElementById('btn-pendente-reverificar');
+
+    if (loadingEl) loadingEl.classList.remove('d-none');
+    if (feedbackEl) feedbackEl.classList.add('d-none');
+    if (btnReverificar) btnReverificar.disabled = true;
+
+    try {
+        const res = await authFetch(`${API_BASE}manifesto/verificar-status-tms/?numero_manifesto=${numMft}`);
+        if (loadingEl) loadingEl.classList.add('d-none');
+        if (btnReverificar) btnReverificar.disabled = false;
+
+        if (res.ok) {
+            const data = await res.json();
+            const statusAtual = (data.status_tms || '').toLowerCase();
+
+            if (data.whatsapp_operacional) {
+                window.manifestoWhatsappOperacional = data.whatsapp_operacional;
+            }
+            if (data.nome_filial) {
+                window.manifestoNomeFilial = data.nome_filial;
+            }
+
+            if (statusAtual === 'in_transit') {
+                window.manifestoStatusTms = 'in_transit';
+                if (feedbackEl) {
+                    feedbackEl.className = 'alert alert-success py-2 px-3 small rounded-3 mb-3 d-block animate__animated animate__fadeIn';
+                    feedbackEl.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> <strong>Liberado!</strong> Manifesto colocado em trânsito no TMS. Baixas liberadas!';
+                }
+
+                setTimeout(() => {
+                    const modalEl = document.getElementById('modalManifestoPendenteTms');
+                    if (modalEl) {
+                        const modal = bootstrap.Modal.getInstance(modalEl);
+                        if (modal) modal.hide();
+                    }
+                    // Atualiza a lista viva
+                    atualizarListaViva(numMft);
+                }, 1500);
+            } else if (statusAtual === 'closed') {
+                window.manifestoStatusTms = 'closed';
+                if (feedbackEl) {
+                    feedbackEl.className = 'alert alert-danger py-2 px-3 small rounded-3 mb-3 d-block';
+                    feedbackEl.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> <strong>Finalizado:</strong> Este manifesto consta como finalizado no TMS.';
+                }
+            } else {
+                // Continua pending
+                window.manifestoStatusTms = 'pending';
+                if (feedbackEl) {
+                    feedbackEl.className = 'alert alert-warning py-2 px-3 small rounded-3 mb-3 d-block animate__animated animate__shakeX';
+                    feedbackEl.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> <strong>Ainda Pendente:</strong> O manifesto ainda não foi alterado no TMS pela equipe operacional. Envie uma mensagem pelo WhatsApp.';
+                }
+            }
+        } else {
+            if (feedbackEl) {
+                feedbackEl.className = 'alert alert-secondary py-2 px-3 small rounded-3 mb-3 d-block';
+                feedbackEl.innerHTML = '<i class="bi bi-exclamation-circle me-1"></i> Não foi possível consultar o TMS no momento. Tente novamente em instantes.';
+            }
+        }
+    } catch (e) {
+        if (loadingEl) loadingEl.classList.add('d-none');
+        if (btnReverificar) btnReverificar.disabled = false;
+        if (feedbackEl) {
+            feedbackEl.className = 'alert alert-danger py-2 px-3 small rounded-3 mb-3 d-block';
+            feedbackEl.innerHTML = '<i class="bi bi-wifi-off me-1"></i> Erro de conexão ao consultar TMS.';
+        }
+    }
+}
 

@@ -122,7 +122,29 @@ class Ocorrencia(models.Model):
         verbose_name_plural = "Códigos de Ocorrências"
 
 
-# 2. Manifesto de Carga
+# 2. Veículo (Placa vinculada ao Manifesto)
+class Veiculo(models.Model):
+    placa = models.CharField(max_length=10, unique=True, verbose_name="Placa")
+    TIPO_CHOICES = [
+        ('CAVALO', 'Cavalo Mecânico'),
+        ('CARRETA', 'Carreta'),
+        ('TRUCK', 'Truck'),
+        ('VAN', 'Van'),
+        ('UTILITARIO', 'Utilitário'),
+        ('OUTRO', 'Outro'),
+    ]
+    tipo = models.CharField(max_length=15, choices=TIPO_CHOICES, default='CAVALO', verbose_name="Tipo")
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.placa} ({self.get_tipo_display()})"
+
+    class Meta:
+        verbose_name = "Veículo"
+        verbose_name_plural = "Veículos"
+
+
+# 3. Frete / CT-e
 class Frete(models.Model):
     freight_id_tms = models.CharField(max_length=50, unique=True, verbose_name="ID do Frete na ESL (sequence_code)")
     numero_cte = models.CharField(max_length=50, null=True, blank=True, verbose_name="Número do CT-e")
@@ -154,6 +176,12 @@ class Manifesto(models.Model):
         ('EM_TRANSPORTE', 'Em Transporte'),
         ('FINALIZADO', 'Finalizado'),
         ('CANCELADO', 'Cancelado'),
+    ]
+
+    STATUS_TMS_CHOICES = [
+        ('pending', 'Pendente no TMS'),
+        ('in_transit', 'Em Trânsito no TMS'),
+        ('closed', 'Finalizado no TMS'),
     ]
 
     numero_manifesto = models.CharField(
@@ -192,6 +220,20 @@ class Manifesto(models.Model):
         max_length=20,
         choices=STATUS_CHOICES,
         default='EM_TRANSPORTE'
+    )
+    status_tms = models.CharField(
+        max_length=20,
+        choices=STATUS_TMS_CHOICES,
+        default='in_transit',
+        verbose_name="Status no TMS"
+    )
+    veiculo = models.ForeignKey(
+        Veiculo,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='manifestos_veiculo',
+        verbose_name="Veículo"
     )
     qtd_transferencia = models.IntegerField(default=0, verbose_name="Qtd Transferência",null=True, blank=True)
     qtd_despacho = models.IntegerField(default=0, verbose_name="Qtd Despacho", null=True, blank=True)

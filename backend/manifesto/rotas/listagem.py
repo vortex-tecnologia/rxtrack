@@ -19,7 +19,7 @@ class ListarNotasManifestoView(APIView):
         from django.utils import timezone
         from manifesto.models import Manifesto
         try:
-            mft = Manifesto.objects.filter(numero_manifesto=numero).first()
+            mft = Manifesto.objects.select_related('filial', 'veiculo').filter(numero_manifesto=numero).first()
             if mft:
                 mft.ultimo_acesso = timezone.now()
                 # Se o app mandar bateria/lat/lng no header ou query, pegamos aqui
@@ -118,4 +118,20 @@ class ListarNotasManifestoView(APIView):
                 'ja_baixada': baixa is not None, 
                 'dados_baixa': dados_baixa
             })
-        return Response(data)
+
+        # === METADADOS DO MANIFESTO (status TMS, WhatsApp, Veículo) ===
+        meta_manifesto = {}
+        if mft:
+            meta_manifesto['status_tms'] = getattr(mft, 'status_tms', 'in_transit')
+            meta_manifesto['placa_veiculo'] = mft.veiculo.placa if mft.veiculo else None
+            if mft.filial:
+                meta_manifesto['whatsapp_operacional'] = mft.filial.whatsapp_operacional_completo
+                meta_manifesto['nome_filial'] = mft.filial.nome
+            else:
+                meta_manifesto['whatsapp_operacional'] = None
+                meta_manifesto['nome_filial'] = None
+
+        return Response({
+            'notas': data,
+            'manifesto': meta_manifesto,
+        })

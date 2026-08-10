@@ -51,5 +51,9 @@ class NotificacaoPushLogAdmin(admin.ModelAdmin):
     readonly_fields = ('criado_em', 'response_message_id', 'erro_detalhes')
 
 
-admin.site.register(Filial)
+@admin.register(Filial)
+class FilialAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'id_filial_tms', 'whatsapp_operacional', 'whatsapp_sac', 'horario_rebusca_esl')
+    list_editable = ('whatsapp_operacional', 'whatsapp_sac')
+    search_fields = ('nome', 'id_filial_tms')
 

@@ -423,6 +423,30 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 log.save()
                 return
 
+            # === VALIDAÇÃO DO STATUS DO MANIFESTO NO TMS ===
+            status_tms = str(info_tms.get('status', '')).strip().lower()
+            logger.info(f"[STATUS_TMS] Manifesto {numero_visual}: status no TMS = '{status_tms}'")
+
+            if status_tms == 'closed':
+                log.status = 'ERRO'
+                log.mensagem_erro = "Este manifesto já foi finalizado no TMS. Não é possível carregar um manifesto ativo."
+                log.save()
+                logger.warning(f"🚫 Manifesto {numero_visual} BLOQUEADO: status 'closed' no TMS.")
+                return
+
+            # === VEÍCULO (PLACA) ===
+            from manifesto.models import Veiculo
+            veiculo_obj = None
+            placa_tms = info_tms.get('mft_vie_license_plate')
+            if placa_tms:
+                placa_limpa = str(placa_tms).strip().upper().replace(' ', '').replace('-', '')
+                if placa_limpa:
+                    veiculo_obj, _ = Veiculo.objects.get_or_create(
+                        placa=placa_limpa,
+                        defaults={'tipo': 'CAVALO'}
+                    )
+                    logger.info(f"🚛 Veículo {placa_limpa} vinculado ao manifesto {numero_visual}")
+
             nome_filial_tms = info_tms.get('mft_crn_psn_nickname')
             if not nome_filial_tms:
                 nome_filial_tms = 'MATRIZ'
@@ -443,7 +467,9 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     'motorista': motorista, 
                     'filial': filial_obj,
                     'status': 'EM_TRANSPORTE',
+                    'status_tms': status_tms if status_tms in ('pending', 'in_transit') else 'in_transit',
                     'manifesto_id_tms': info_tms.get('id'), 
+                    'veiculo': veiculo_obj,
                     'qtd_transferencia': int(info_tms.get('transfer_manifest_items_count', 0)),
                     'qtd_entrega': int(info_tms.get('dispatch_draft_manifest_items_count', 0)),
                     'qtd_retirada': int(info_tms.get('pick_manifest_items_count', 0)),

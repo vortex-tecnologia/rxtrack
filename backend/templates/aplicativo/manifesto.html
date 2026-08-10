@@ -1832,6 +1832,60 @@
         </div>
     </div>
 
+    <!-- ===================================================== -->
+    <!-- MODAL DE AVISO / BLOQUEIO: MANIFESTO PENDENTE NO TMS    -->
+    <!-- ===================================================== -->
+    <div class="modal fade" id="modalManifestoPendenteTms" tabindex="-1" aria-labelledby="modalManifestoPendenteTmsLabel" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg border-0" style="border-radius: 20px; overflow: hidden;">
+                <div class="modal-header bg-warning bg-opacity-10 border-0 pt-4 pb-2 px-4 d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="d-inline-flex align-items-center justify-content-center bg-warning bg-opacity-25 rounded-circle p-2" style="width: 44px; height: 44px;">
+                            <i class="bi bi-exclamation-triangle-fill text-warning fs-4"></i>
+                        </div>
+                        <h5 class="modal-title fw-bold text-dark mb-0" id="modalManifestoPendenteTmsLabel">Manifesto Pendente</h5>
+                    </div>
+                    <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 text-center">
+                    <div class="mb-3">
+                        <span id="pendente-tms-filial-badge" class="badge bg-secondary-subtle text-dark border px-3 py-2 rounded-pill fs-7">
+                            <i class="bi bi-building me-1"></i> <span id="pendente-tms-filial-nome">Filial</span>
+                        </span>
+                    </div>
+
+                    <h6 class="fw-bold text-dark mb-2">Bloqueio Operacional Temporário</h6>
+                    <p class="text-muted small mb-3">
+                        O manifesto <strong id="pendente-tms-num-manifesto"></strong> consta como <strong class="text-warning">PENDENTE</strong> no TMS.
+                        Para realizar baixas e registros de entregas, entre em contato com a equipe operacional para colocar o manifesto em <strong>TRÂNSITO</strong>.
+                    </p>
+
+                    <!-- Container de Feedback Dinâmico -->
+                    <div id="pendente-tms-feedback" class="d-none alert py-2 px-3 small rounded-3 mb-3"></div>
+
+                    <!-- Container de Loading -->
+                    <div id="pendente-tms-loading" class="d-none py-3 text-center">
+                        <div class="spinner-border text-primary spinner-border-sm me-2" role="status"></div>
+                        <span class="small fw-semibold text-muted">Consultando TMS em tempo real...</span>
+                    </div>
+
+                    <!-- Ações -->
+                    <div class="d-grid gap-2 mt-3" id="pendente-tms-acoes">
+                        <button type="button" class="btn btn-success btn-lg fw-bold py-2 rounded-pill shadow-sm d-flex align-items-center justify-content-center gap-2" id="btn-pendente-whatsapp" onclick="abrirWhatsAppOperacional()">
+                            <i class="bi bi-whatsapp fs-5"></i> Falar com Operacional
+                        </button>
+                        <button type="button" class="btn btn-outline-primary py-2 rounded-pill fw-semibold d-flex align-items-center justify-content-center gap-2" id="btn-pendente-reverificar" onclick="verificarNovamenteStatusTms()">
+                            <i class="bi bi-arrow-repeat fs-5"></i> Verificar se foi Liberado
+                        </button>
+                        <button type="button" class="btn btn-light py-2 rounded-pill text-secondary small" data-bs-dismiss="modal">
+                            Voltar para Lista
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <script src="{% static 'js/serviceworker.js' %}?v=1.38"></script>
     <script src="/static/js/login_motorista/authFetch.js"></script>

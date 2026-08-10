@@ -299,6 +299,30 @@ class Filial(models.Model):
     nome = models.CharField(max_length=100)
     id_filial_tms = models.CharField(max_length=50, blank=True, null=True)
     horario_rebusca_esl = models.TimeField(null=True, blank=True, verbose_name="Horário da Rebusca Automática (ESL)")
+    
+    # WhatsApp — Informar a partir do DDD (ex: 21999999999). O sistema adiciona o 55 automaticamente.
+    whatsapp_operacional = models.CharField(
+        max_length=20, blank=True, null=True,
+        verbose_name="WhatsApp Operacional",
+        help_text="Número do WhatsApp do operacional da filial. Informe a partir do DDD (ex: 21999999999)."
+    )
+    whatsapp_sac = models.CharField(
+        max_length=20, blank=True, null=True,
+        verbose_name="WhatsApp SAC",
+        help_text="Número do WhatsApp do SAC da filial. Informe a partir do DDD (ex: 21999999999)."
+    )
+
+    @property
+    def whatsapp_operacional_completo(self):
+        """Retorna o número com prefixo 55 para uso no link wa.me"""
+        if self.whatsapp_operacional:
+            import re
+            nums = re.sub(r'\D', '', str(self.whatsapp_operacional))
+            if nums:
+                if nums.startswith('55') and len(nums) >= 12:
+                    return nums
+                return f"55{nums}"
+        return None
 
     def __str__(self):
         return self.nome

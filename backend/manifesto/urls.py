@@ -21,6 +21,7 @@ from manifesto.rotas.webhook import webhook_tms
 from manifesto.rotas.listagemocorrencias import ListarOcorrenciasView
 from manifesto.rotas.views_painel import painel_monitoramento
 from manifesto.rotas.tracking import TrackingHeartbeatView
+from manifesto.rotas.verificar_status_tms import VerificarStatusTmsView
 
 urlpatterns = [
     path('manifesto/busca/', BuscarManifestoView.as_view()),
@@ -43,5 +44,6 @@ urlpatterns = [
     path('manifesto/importar-logs/', ListarTodosLogsView.as_view(), name='listar_todos_logs'),
     path('painel/monitoramento/', painel_monitoramento, name='painel_monitoramento'),
     path('manifesto/app/tracking-heartbeat/', TrackingHeartbeatView.as_view(), name='app_tracking_heartbeat'),
+    path('manifesto/verificar-status-tms/', VerificarStatusTmsView.as_view(), name='verificar_status_tms'),
 ]
 
