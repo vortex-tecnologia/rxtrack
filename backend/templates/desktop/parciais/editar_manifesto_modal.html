@@ -13,12 +13,29 @@
             </div>
 
             <div class="col-md-6">
-                <label class="form-label small fw-bold">Status Atual</label>
+                <label class="form-label small fw-bold">Status Atual (Sistema)</label>
                 <select name="status" class="form-select">
                     {% for val, label in manifesto.STATUS_CHOICES %}
                     <option value="{{ val }}" {% if manifesto.status == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label small fw-bold text-muted">Status no TMS</label>
+                <div class="input-group">
+                    <input type="text" class="form-control bg-light fw-bold {% if manifesto.status_tms == 'in_transit' %}text-success{% elif manifesto.status_tms == 'pending' %}text-warning{% elif manifesto.status_tms == 'closed' %}text-danger{% else %}text-secondary{% endif %}" 
+                           value="{% if manifesto.status_tms == 'in_transit' %}Em Trânsito (in_transit){% elif manifesto.status_tms == 'pending' %}Pendente (pending){% elif manifesto.status_tms == 'closed' %}Finalizado (closed){% else %}{{ manifesto.get_status_tms_display|default:'Em Trânsito' }}{% endif %}" 
+                           readonly title="Status sincronizado automaticamente com o TMS. Não editável manualmente.">
+                    <span class="input-group-text bg-light text-muted" title="Sincronizado automaticamente via TMS">
+                        <i class="bi bi-shield-lock-fill"></i>
+                    </span>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label small fw-bold text-muted">Veículo / Placa</label>
+                <input type="text" class="form-control bg-light" value="{{ manifesto.veiculo.placa|default:'Não informada' }}" readonly title="Placa sincronizada do TMS">
             </div>
 
             <div class="col-md-12">
