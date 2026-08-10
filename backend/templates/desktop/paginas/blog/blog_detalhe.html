@@ -1,0 +1,171 @@
+{% extends "desktop/base.html" %}
+{% load static %}
+
+{% block title %}[{{ post.versao }}] {{ post.titulo }} | Blog QuickTrack{% endblock %}
+{% block usuario %}{{ usuario_nome }}{% endblock %}
+
+{% block content %}
+<style>
+.article-header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    border-radius: 20px;
+    color: #ffffff;
+}
+.article-body {
+    background: #ffffff;
+    border-radius: 20px;
+    border: 1px solid #f1f5f9;
+}
+.article-body h5, .article-body h4 {
+    font-weight: 700;
+    color: #0f172a;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+}
+.article-body ul li {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    color: #334155;
+    line-height: 1.6;
+}
+.nav-patch-card {
+    border-radius: 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    color: inherit;
+}
+.nav-patch-card:hover {
+    background: #ffffff;
+    border-color: #ea580c;
+    box-shadow: 0 6px 16px rgba(234, 88, 12, 0.12);
+    transform: translateY(-2px);
+}
+</style>
+
+<div class="container-fluid px-0">
+
+    <!-- BREADCRUMBS -->
+    <div class="d-flex align-items-center gap-2 mb-3 small text-muted">
+        <a href="{% url 'operacional:dashboard' %}" class="text-decoration-none text-muted">
+            <i class="bi bi-house me-1"></i>Início
+        </a>
+        <span>/</span>
+        <a href="{% url 'blog:lista' %}" class="text-decoration-none text-muted">
+            Central de Lançamentos
+        </a>
+        <span>/</span>
+        <span class="text-dark fw-bold text-truncate" style="max-width: 300px;">{{ post.versao }} - {{ post.titulo }}</span>
+    </div>
+
+    <!-- CABEÇALHO DO ARTIGO -->
+    <div class="article-header p-4 p-md-5 mb-4 shadow-sm">
+        <div class="row align-items-center g-4">
+            <div class="col-lg-9">
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                    <span class="badge bg-warning text-dark fw-bold px-3 py-2" style="font-size: 0.85rem; border-radius: 8px;">
+                        <i class="bi bi-tag-fill me-1"></i>{{ post.versao }}
+                    </span>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2" style="font-size: 0.8rem; border-radius: 8px;">
+                        {{ post.get_categoria_display }}
+                    </span>
+                    {% if post.destaque %}
+                    <span class="badge bg-danger text-white px-3 py-2" style="font-size: 0.8rem; border-radius: 8px;">
+                        ⭐ DESTAQUE
+                    </span>
+                    {% endif %}
+                </div>
+
+                <h1 class="display-6 fw-bold text-white mb-3">{{ post.titulo }}</h1>
+                <p class="lead text-light opacity-75 mb-3 fs-6">{{ post.resumo }}</p>
+
+                <div class="d-flex flex-wrap align-items-center gap-4 text-light opacity-75 small">
+                    <div>
+                        <i class="bi bi-person-circle me-1"></i>{{ post.autor }}
+                    </div>
+                    <div>
+                        <i class="bi bi-calendar-event me-1"></i>{{ post.data_publicacao|date:"d/m/Y \à\s H:i" }}
+                    </div>
+                    <div>
+                        <i class="bi bi-eye me-1"></i>{{ post.visualizacoes }} visualizações
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 text-center d-none d-lg-block">
+                <img src="{{ post.get_imagem_exibicao }}" alt="{{ post.titulo }}" class="img-fluid" style="max-height: 140px; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.4));">
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTEÚDO PRINCIPAL DO PATCH -->
+    <div class="row g-4 mb-5">
+        <div class="col-lg-8">
+            <div class="card article-body border-0 shadow-sm p-4 p-md-5">
+                <div class="article-content text-secondary lh-lg fs-6">
+                    {{ post.conteudo|safe }}
+                </div>
+
+                <hr class="my-4 text-muted opacity-25">
+
+                <!-- TAGS -->
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-4">
+                    <span class="small fw-bold text-muted me-2"><i class="bi bi-tags me-1"></i>Tags:</span>
+                    {% for tag in post.get_tags_list %}
+                    <a href="{% url 'blog:lista' %}?q={{ tag }}" class="badge bg-light text-dark border text-decoration-none px-3 py-2 rounded-pill">
+                        #{{ tag }}
+                    </a>
+                    {% endfor %}
+                </div>
+
+                <!-- NAVEGAÇÃO ENTRE VERSÕES (ANTERIOR / PRÓXIMO) -->
+                <div class="row g-3 pt-2">
+                    <div class="col-md-6">
+                        {% if post_anterior %}
+                        <a href="{% url 'blog:detalhe' slug=post_anterior.slug|default:post_anterior.id %}" class="card nav-patch-card p-3 h-100 d-block">
+                            <div class="small text-muted mb-1"><i class="bi bi-arrow-left me-1"></i>Versão Anterior</div>
+                            <div class="fw-bold text-dark text-truncate">[{{ post_anterior.versao }}] {{ post_anterior.titulo }}</div>
+                        </a>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        {% if post_proximo %}
+                        <a href="{% url 'blog:detalhe' slug=post_proximo.slug|default:post_proximo.id %}" class="card nav-patch-card p-3 h-100 d-block">
+                            <div class="small text-muted mb-1">Próxima Versão <i class="bi bi-arrow-right ms-1"></i></div>
+                            <div class="fw-bold text-dark text-truncate">[{{ post_proximo.versao }}] {{ post_proximo.titulo }}</div>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SIDEBAR DE OUTROS LANÇAMENTOS -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm p-4 mb-4" style="border-radius: 16px;">
+                <h6 class="fw-bold text-dark mb-3 d-flex align-items-center gap-2">
+                    <i class="bi bi-clock-history text-warning"></i>
+                    <span>Outros Lançamentos</span>
+                </h6>
+                <div class="d-flex flex-column gap-3">
+                    {% for rel in posts_relacionados %}
+                    <a href="{% url 'blog:detalhe' slug=rel.slug|default:rel.id %}" class="text-decoration-none p-2 rounded-3 hover-bg-light transition">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="badge bg-warning text-dark font-monospace" style="font-size: 0.7rem;">{{ rel.versao }}</span>
+                            <small class="text-muted" style="font-size: 0.75rem;">{{ rel.data_publicacao|date:"d/m/Y" }}</small>
+                        </div>
+                        <div class="fw-bold text-dark small text-truncate">{{ rel.titulo }}</div>
+                    </a>
+                    {% endfor %}
+                </div>
+                <div class="border-top pt-3 mt-3">
+                    <a href="{% url 'blog:lista' %}" class="btn btn-outline-warning text-dark fw-bold btn-sm w-100 rounded-pill">
+                        Ver Todas as Atualizações
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

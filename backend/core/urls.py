@@ -52,6 +52,8 @@ urlpatterns = [
     path('ia/', include(('AgenteIa.urls', 'AgenteIa'), namespace='AgenteIa')),
     path('suporte/', include('suporte.urls')),
     path('auditoria/', include('auditoria.urls', namespace='auditoria')),
+    path('blog/', include(('blog.urls', 'blog'), namespace='blog')),
+    path('novidades/', include(('blog.urls', 'novidades'), namespace='novidades')),
     path('', include('pwa.urls')),
     # Gestao de Usuarios
     path('gestao/', include('usuarios.gestao_urls')),

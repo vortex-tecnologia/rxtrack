@@ -1,0 +1,224 @@
+{% extends "desktop/base.html" %}
+{% load static %}
+
+{% block title %}Blog de Lançamentos & Novidades | QuickTrack{% endblock %}
+{% block usuario %}{{ usuario_nome }}{% endblock %}
+
+{% block content %}
+<style>
+.blog-hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    border-radius: 20px;
+    color: #ffffff;
+    position: relative;
+    overflow: hidden;
+}
+.blog-hero::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, rgba(234, 88, 12, 0.25) 0%, rgba(0,0,0,0) 70%);
+    border-radius: 50%;
+}
+.blog-card {
+    border-radius: 16px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    background: #ffffff;
+    border: 1px solid #f1f5f9;
+}
+.blog-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px -10px rgba(0,0,0,0.1) !important;
+    border-color: #cbd5e1;
+}
+.badge-version {
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 0.35rem 0.75rem;
+    border-radius: 8px;
+}
+.category-pill {
+    transition: all 0.2s ease;
+    border-radius: 30px;
+    padding: 0.4rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    color: #475569;
+}
+.category-pill:hover, .category-pill.active {
+    background: #ea580c;
+    color: #ffffff;
+    border-color: #ea580c;
+    box-shadow: 0 4px 12px rgba(234, 88, 12, 0.25);
+}
+</style>
+
+<div class="container-fluid px-0">
+
+    <!-- HERO HEADER -->
+    <div class="blog-hero p-4 p-md-5 mb-4 shadow-sm">
+        <div class="row align-items-center position-relative" style="z-index: 2;">
+            <div class="col-lg-8">
+                <div class="d-inline-flex align-items-center gap-2 px-3 py-1 rounded-pill bg-warning-subtle text-warning border border-warning-subtle mb-3">
+                    <i class="bi bi-stars"></i>
+                    <span class="small fw-bold text-dark">Changelog & Atualizações Oficiais</span>
+                </div>
+                <h1 class="display-6 fw-bold mb-2">Central de Lançamentos & Novidades</h1>
+                <p class="lead text-light opacity-75 mb-4 fs-6">
+                    Acompanhe tudo o que há de novo, melhorias contínuas, inteligência artificial e recursos adicionados à plataforma QuickTrack.
+                </p>
+
+                <!-- BARRA DE BUSCA -->
+                <form method="GET" action="{% url 'blog:lista' %}" class="row g-2 align-items-center">
+                    <div class="col-md-8 col-sm-12">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-0 ps-3">
+                                <i class="bi bi-search text-muted"></i>
+                            </span>
+                            <input type="text" name="q" value="{{ busca_ativa }}" class="form-control form-control-lg border-0 ps-2" placeholder="Buscar por recurso, versão ou novidade..." style="border-radius: 0 12px 12px 0;">
+                        </div>
+                    </div>
+                    <div class="col-md-4 col-sm-12">
+                        <button type="submit" class="btn btn-warning btn-lg w-100 fw-bold shadow-sm" style="border-radius: 12px;">
+                            Buscar Lançamentos
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="col-lg-4 text-center d-none d-lg-block">
+                <img src="{% static 'images/megafone_3d.png' %}" alt="Novidades QuickTrack" class="img-fluid" style="max-height: 180px; filter: drop-shadow(0 15px 25px rgba(0,0,0,0.4));">
+            </div>
+        </div>
+    </div>
+
+    <!-- FILTROS POR CATEGORIA -->
+    <div class="d-flex flex-wrap gap-2 mb-4 align-items-center pb-2">
+        <span class="text-muted small fw-bold me-2"><i class="bi bi-funnel me-1"></i>Filtrar:</span>
+        <a href="{% url 'blog:lista' %}" class="category-pill {% if not categoria_ativa %}active{% endif %}">
+            🌟 Todas as Versões
+        </a>
+        {% for cat_key, cat_label in categorias %}
+        <a href="{% url 'blog:lista' %}?categoria={{ cat_key }}{% if busca_ativa %}&q={{ busca_ativa }}{% endif %}" 
+           class="category-pill {% if categoria_ativa == cat_key %}active{% endif %}">
+            {{ cat_label }}
+        </a>
+        {% endfor %}
+    </div>
+
+    <!-- POST EM DESTAQUE (HERO CARD) -->
+    {% if post_destaque %}
+    <div class="card blog-card border-0 shadow-sm mb-5 overflow-hidden" style="background: linear-gradient(135deg, #ffffff 0%, #fffbf5 100%); border-left: 6px solid #ea580c !important;">
+        <div class="card-body p-4 p-md-5">
+            <div class="row align-items-center g-4">
+                <div class="col-md-2 text-center">
+                    <img src="{{ post_destaque.get_imagem_exibicao }}" alt="{{ post_destaque.titulo }}" class="img-fluid" style="max-height: 110px; object-fit: contain; filter: drop-shadow(0 6px 12px rgba(234, 88, 12, 0.25));">
+                </div>
+                <div class="col-md-10">
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                        <span class="badge bg-warning text-dark badge-version shadow-xs">
+                            <i class="bi bi-tag-fill me-1"></i>{{ post_destaque.versao }}
+                        </span>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                            {{ post_destaque.get_categoria_display }}
+                        </span>
+                        <span class="badge bg-danger text-white px-2 py-1">
+                            ⭐ ÚLTIMA VERSÃO
+                        </span>
+                        <small class="text-muted ms-auto">
+                            <i class="bi bi-calendar3 me-1"></i>{{ post_destaque.data_publicacao|date:"d/m/Y \à\s H:i" }}
+                        </small>
+                    </div>
+                    <h3 class="fw-bold text-dark mb-2">
+                        <a href="{% url 'blog:detalhe' slug=post_destaque.slug|default:post_destaque.id %}" class="text-decoration-none text-dark hover-primary">
+                            {{ post_destaque.titulo }}
+                        </a>
+                    </h3>
+                    <p class="text-secondary fs-6 mb-3 lh-base">
+                        {{ post_destaque.resumo }}
+                    </p>
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for tag in post_destaque.get_tags_list %}
+                            <span class="badge bg-light text-secondary border small">#{{ tag }}</span>
+                            {% endfor %}
+                        </div>
+                        <a href="{% url 'blog:detalhe' slug=post_destaque.slug|default:post_destaque.id %}" class="btn btn-warning text-dark fw-bold px-4 py-2 rounded-pill shadow-xs d-inline-flex align-items-center gap-2">
+                            <span>Ver Detalhes do Patch</span>
+                            <i class="bi bi-arrow-right"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- GRID DE CARDS DOS LANÇAMENTOS -->
+    <div class="row g-4 mb-5">
+        {% for post in posts %}
+        {% if post.id != post_destaque.id or categoria_ativa or busca_ativa %}
+        <div class="col-lg-4 col-md-6 col-sm-12">
+            <div class="card blog-card h-100 shadow-sm border-0 d-flex flex-column">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <span class="badge bg-warning text-dark badge-version">
+                            {{ post.versao }}
+                        </span>
+                        <small class="text-muted" style="font-size: 0.75rem;">
+                            <i class="bi bi-clock me-1"></i>{{ post.data_publicacao|date:"d/m/Y" }}
+                        </small>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.75rem;">
+                            {{ post.get_categoria_display }}
+                        </span>
+                    </div>
+
+                    <h5 class="fw-bold text-dark mb-2">
+                        <a href="{% url 'blog:detalhe' slug=post.slug|default:post.id %}" class="text-decoration-none text-dark hover-primary">
+                            {{ post.titulo }}
+                        </a>
+                    </h5>
+
+                    <p class="text-muted small lh-base mb-4 flex-grow-1">
+                        {{ post.resumo|truncatechars:140 }}
+                    </p>
+
+                    <div class="border-top pt-3 mt-auto d-flex align-items-center justify-content-between">
+                        <div class="d-flex gap-1 flex-wrap" style="max-width: 60%;">
+                            {% for tag in post.get_tags_list|slice:":2" %}
+                            <span class="badge bg-light text-secondary border" style="font-size: 0.65rem;">#{{ tag }}</span>
+                            {% endfor %}
+                        </div>
+                        <a href="{% url 'blog:detalhe' slug=post.slug|default:post.id %}" class="btn btn-sm btn-outline-warning text-dark fw-bold px-3 py-1 rounded-pill">
+                            Detalhes <i class="bi bi-chevron-right ms-1"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% empty %}
+        <div class="col-12 text-center py-5">
+            <div class="p-5 bg-light rounded-4">
+                <i class="bi bi-journal-x text-muted display-4"></i>
+                <h5 class="fw-bold text-dark mt-3">Nenhuma publicação encontrada</h5>
+                <p class="text-muted small">Tente limpar os filtros ou buscar por outro termo.</p>
+                <a href="{% url 'blog:lista' %}" class="btn btn-sm btn-warning fw-bold px-3 py-2 rounded-pill">
+                    Ver Todas as Novidades
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+{% endblock %}

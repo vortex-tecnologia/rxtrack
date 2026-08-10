@@ -334,6 +334,10 @@
             <i class="bi bi-play-circle"></i>
             <span class="menu-text">Treinamentos</span>
         </a>
+        <a href="{% url 'blog:lista' %}" class="nav-link {% if '/blog/' in request.path or '/novidades/' in request.path %}active-menu{% endif %}">
+            <i class="bi bi-stars text-warning"></i>
+            <span class="menu-text">Novidades & Lançamentos</span>
+        </a>
         <a href="{% url 'operacional:central_ajuda' %}" class="nav-link {% if '/central-ajuda/' in request.path %}active-menu{% endif %}">
             <i class="bi bi-question-circle"></i>
             <span class="menu-text">Central de Ajuda</span>

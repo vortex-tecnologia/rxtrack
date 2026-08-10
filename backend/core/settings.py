@@ -30,6 +30,7 @@ SHARED_APPS = [
     'django_tenants',          # 1º: Obrigatório primeiro para roteamento
     'tenants',                 # Novo app de gestão de clientes/domínios
     'tutoriais',               # Novo app de vídeos de treinamento compartilhados
+    'blog',                    # App compartilhado de blog e lançamentos da plataforma
     
     'daphne',                  # Daphne (ASGI)
     'channels',                # Camada de comunicação

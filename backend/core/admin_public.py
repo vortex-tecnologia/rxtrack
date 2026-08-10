@@ -9,6 +9,7 @@ from django.contrib.auth.admin import UserAdmin, GroupAdmin
 
 from tenants.models import Client, Domain
 from tutoriais.models import VideoTreinamento
+from blog.models import PostBlog
 
 
 class PublicAdminSite(AdminSite):
@@ -58,3 +59,15 @@ class PublicVideoTreinamentoAdmin(admin.ModelAdmin):
 
 
 public_admin_site.register(VideoTreinamento, PublicVideoTreinamentoAdmin)
+
+
+# --- Blog & Lançamentos (Compartilhados com todos os clientes) ---
+class PublicPostBlogAdmin(admin.ModelAdmin):
+    list_display = ('versao', 'titulo', 'categoria', 'autor', 'data_publicacao', 'destaque', 'ativo', 'visualizacoes')
+    list_filter = ('categoria', 'ativo', 'destaque', 'data_publicacao')
+    search_fields = ('versao', 'titulo', 'resumo', 'conteudo', 'tags')
+    list_editable = ('destaque', 'ativo')
+    prepopulated_fields = {'slug': ('versao', 'titulo')}
+
+
+public_admin_site.register(PostBlog, PublicPostBlogAdmin)

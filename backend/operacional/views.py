@@ -126,23 +126,25 @@ class DashboardView(TemplateView):
         # Recupera parâmetro de filtro da URL
         filial_param = self.request.GET.get('filial')
 
-        # --- 0. PATCH NOTES / NOVIDADES DA PLATAFORMA ---
-        from configuracao.models import AtualizacaoSistema
+        # --- 0. BLOG & LANÇAMENTOS DA PLATAFORMA (SHARED_APP) ---
+        from blog.models import PostBlog
         import json
         try:
-            novidades_qs = AtualizacaoSistema.objects.filter(ativo=True).order_by('-data_lancamento', '-id')
+            posts_qs = PostBlog.objects.filter(ativo=True).order_by('-destaque', '-data_publicacao', '-id')
             novidades_lista = []
-            for nov in novidades_qs:
+            for post in posts_qs:
                 novidades_lista.append({
-                    'id': nov.id,
-                    'versao': nov.versao,
-                    'titulo': nov.titulo,
-                    'resumo': nov.resumo,
-                    'conteudo': nov.conteudo,
-                    'categoria': nov.categoria,
-                    'categoria_display': nov.get_categoria_display(),
-                    'data': timezone.localtime(nov.data_lancamento).strftime('%d/%m/%Y'),
-                    'destaque': nov.destaque
+                    'id': post.id,
+                    'versao': post.versao,
+                    'titulo': post.titulo,
+                    'slug': post.slug,
+                    'resumo': post.resumo,
+                    'conteudo': post.conteudo,
+                    'categoria': post.categoria,
+                    'categoria_display': post.get_categoria_display(),
+                    'data': timezone.localtime(post.data_publicacao).strftime('%d/%m/%Y'),
+                    'destaque': post.destaque,
+                    'url': f"/blog/{post.slug}/" if post.slug else f"/blog/{post.id}/"
                 })
             context['ultima_novidade'] = novidades_lista[0] if novidades_lista else None
             context['novidades_json'] = json.dumps(novidades_lista)
