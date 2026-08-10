@@ -117,11 +117,33 @@ def process_florence(crop_path, expected_nfe=""):
     # Salva imagem corrigida de volta
     cv2.imwrite(crop_path, img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 90])
 
-    # --- 3. AVALIAÇÃO DE QUALIDADE ---
-    # Se menos de 15 caracteres legíveis forem encontrados em todas as rotações, imagem é ruim/ilegível
-    qualidade = "BOA" if best_score >= 15 else "RUIM"
+    # --- 4. AVALIAÇÃO DE NITIDEZ (LAPLACIAN VARIANCE) E QUALIDADE ---
+    try:
+        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+        score_nitidez = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    except Exception:
+        score_nitidez = 100.0
 
-    # --- 4. EXTRAÇÃO DE CAMPOS (RECEBEDOR, DOCUMENTO, NFE) ---
+    motivo_rejeicao = ""
+    # Se nitidez < 45.0, a foto está desfocada/borrada
+    if score_nitidez < 45.0:
+        qualidade = "DESFOCADA"
+        motivo_rejeicao = "BLUR_DESFOCADO"
+    else:
+        # Validação do conteúdo textual do OCR
+        txt_upper = best_text.upper()
+        keywords_count = sum(1 for kw in KEYWORDS_CANHOTO if kw in txt_upper)
+        tem_nfe = bool(expected_nfe and len(expected_nfe) >= 3 and expected_nfe in best_text)
+        caracteres_legiveis = sum(c.isalnum() for c in best_text)
+
+        # Se não achou NFE, não achou nenhuma palavra de canhoto e tem menos de 20 caracteres válidos
+        if not tem_nfe and keywords_count == 0 and caracteres_legiveis < 20:
+            qualidade = "ILEGIVEL"
+            motivo_rejeicao = "OCR_ILEGIVEL"
+        else:
+            qualidade = "BOA"
+
+    # --- 5. EXTRAÇÃO DE CAMPOS (RECEBEDOR, DOCUMENTO, NFE) ---
     nfe_encontrada = "SIM" if (expected_nfe and expected_nfe in best_text) else "NAO"
 
     recebedor = ""
@@ -152,7 +174,10 @@ def process_florence(crop_path, expected_nfe=""):
 
     # Saídas formatadas para o stdout
     print(f"FLORENCE_ANGULO:{best_angle}", flush=True)
+    print(f"FLORENCE_NITIDEZ:{score_nitidez:.2f}", flush=True)
     print(f"FLORENCE_QUALIDADE:{qualidade}", flush=True)
+    if motivo_rejeicao:
+        print(f"FLORENCE_MOTIVO:{motivo_rejeicao}", flush=True)
     print(f"FLORENCE_NFE:{nfe_encontrada}", flush=True)
     if recebedor:
         print(f"FLORENCE_RECEBEDOR:{recebedor}", flush=True)

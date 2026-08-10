@@ -47,12 +47,27 @@
             </thead>
             <tbody>
                 {% for nota in notas %}
+                {% with ultima_baixa=nota.baixa_info.all.last %}
                 <tr>
                     <td class="ps-3 fw-bold text-dark">{{ nota.numero_nota }}</td>
                     <td><span class="text-muted small">{{ nota.destinatario|truncatechars:35 }}</span></td>
                     <td class="text-center">
                         {% if nota.status == 'BAIXADA' %}
-                            <span class="badge rounded-pill bg-success-subtle text-success px-3">Entregue</span>
+                            {% if ultima_baixa.solicitar_nova_foto %}
+                                <span class="badge rounded-pill bg-danger text-white px-2 py-1 shadow-sm" title="Foto ilegível. Aguardando nova foto (Tentativa {{ ultima_baixa.tentativa_foto }}/3)">
+                                    <i class="bi bi-camera-fill me-1"></i>Foto Ilegível ({{ ultima_baixa.tentativa_foto }}/3)
+                                </span>
+                            {% elif ultima_baixa.qualidade_canhoto == 'REPROVADO_LIMITE_3X' %}
+                                <span class="badge rounded-pill bg-warning text-dark px-2 py-1" title="Enviado ao TMS após 3 tentativas reprovadas pela IA">
+                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>3x Ilegível
+                                </span>
+                            {% elif ultima_baixa.qualidade_canhoto == 'APROVADO_MANUAL' %}
+                                <span class="badge rounded-pill bg-info-subtle text-info px-2 py-1">
+                                    <i class="bi bi-check2-circle me-1"></i>Aprovado SAC
+                                </span>
+                            {% else %}
+                                <span class="badge rounded-pill bg-success-subtle text-success px-3">Entregue</span>
+                            {% endif %}
                         {% elif nota.status == 'OCORRENCIA' %}
                             <span class="badge rounded-pill bg-danger-subtle text-danger px-3">Ocorrência</span>
                         {% else %}
@@ -60,11 +75,17 @@
                         {% endif %}
                     </td>
                     <td class="text-end pe-3">
+                        {% if ultima_baixa and ultima_baixa.solicitar_nova_foto %}
+                            <button class="btn btn-sm btn-outline-success me-1 py-0 px-2" title="Aprovar Canhoto Manualmente" onclick="aprovarCanhotoManual('{{ ultima_baixa.id }}', '{{ manifesto.id }}')">
+                                <i class="bi bi-check-lg"></i>
+                            </button>
+                        {% endif %}
                         <button class="btn btn-sm btn-outline-secondary border-0" onclick="verDetalhesNF('{{ nota.chave_acesso }}')">
                             <i class="bi bi-chevron-right"></i>
                         </button>
                     </td>
                 </tr>
+                {% endwith %}
                 {% endfor %}
             </tbody>
         </table>
@@ -74,3 +95,25 @@
 <div class="modal-footer bg-light border-0">
     <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Fechar</button>
 </div>
+
+<script>
+function aprovarCanhotoManual(baixaId, manifestoId) {
+    if (!confirm("Deseja aprovar manualmente este canhoto e despachar para o TMS?")) return;
+    
+    fetch(`/api/operacional/baixa/${baixaId}/aprovar-manual/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(r => r.json())
+    .then(data => {
+        alert(data.message || 'Canhoto aprovado com sucesso!');
+        if (typeof carregarConteudoModalDetalhes === 'function') {
+            carregarConteudoModalDetalhes(manifestoId, false);
+        }
+    })
+    .catch(err => alert('Erro ao aprovar canhoto: ' + err));
+}
+</script>

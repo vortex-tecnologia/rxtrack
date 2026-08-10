@@ -2197,3 +2197,29 @@ def atualizar_foto_baixa_view(request, baixa_id):
         logger.error(f"Erro ao atualizar foto da baixa #{baixa_id}: {e}")
         return JsonResponse({'status': 'erro', 'message': f'Erro interno: {str(e)}'}, status=500)
 
+
+@login_required
+@require_POST
+def aprovar_canhoto_manual_view(request, baixa_id):
+    """Permite ao operador do SAC aprovar manualmente um canhoto reprovado pela IA e liberar o envio ao TMS."""
+    from manifesto.models import BaixaNF
+    baixa = get_object_or_404(BaixaNF, id=baixa_id)
+    baixa.qualidade_canhoto = 'APROVADO_MANUAL'
+    baixa.solicitar_nova_foto = False
+    baixa.save()
+
+    from AgenteIa.tasks import finalizar_fluxo_tms
+    finalizar_fluxo_tms(baixa, somente_comprovante=True)
+
+    if baixa.nota_fiscal and baixa.nota_fiscal.manifesto:
+        try:
+            from manifesto.services import enviar_painel
+            enviar_painel(baixa.nota_fiscal.manifesto)
+        except Exception:
+            pass
+
+    return JsonResponse({
+        'status': 'sucesso',
+        'message': f'Canhoto da NF {baixa.nota_fiscal.numero_nota} aprovado manualmente e despachado para o TMS!'
+    })
+

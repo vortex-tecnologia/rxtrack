@@ -416,6 +416,38 @@ class BaixaNF(models.Model):
     ia_yolo_status = models.BooleanField(default=False, verbose_name="YOLO: Canhoto Detectado")
     ia_ocr_status = models.BooleanField(default=False, verbose_name="OCR: Leitura Realizada")
 
+    # Campos de Auditoria e Qualidade do Canhoto (IA Guardião)
+    tentativa_foto = models.PositiveSmallIntegerField(default=1, verbose_name="Tentativa da Foto")
+    
+    QUALIDADE_CANHOTO_CHOICES = [
+        ('PENDENTE_ANALISE', 'Pendente de Análise'),
+        ('APROVADO', 'Aprovado pela IA'),
+        ('ILEGIVEL', 'Ilegível / Fora de Foco'),
+        ('REPROVADO_LIMITE_3X', 'Reprovado após 3 Tentativas'),
+        ('APROVADO_MANUAL', 'Aprovado Manualmente pelo SAC'),
+    ]
+    qualidade_canhoto = models.CharField(
+        max_length=30, 
+        choices=QUALIDADE_CANHOTO_CHOICES, 
+        default='PENDENTE_ANALISE', 
+        verbose_name="Qualidade do Canhoto"
+    )
+    
+    MOTIVO_REJEICAO_CHOICES = [
+        ('BLUR_DESFOCADO', 'Foto Desfocada / Embaçada'),
+        ('OCR_ILEGIVEL', 'Texto ou Dados Ilegíveis'),
+        ('SEM_CANHOTO', 'Canhoto Não Identificado'),
+    ]
+    motivo_rejeicao_ia = models.CharField(
+        max_length=50, 
+        choices=MOTIVO_REJEICAO_CHOICES, 
+        null=True, 
+        blank=True, 
+        verbose_name="Motivo de Rejeição IA"
+    )
+    score_nitidez = models.FloatField(null=True, blank=True, verbose_name="Score de Nitidez (OpenCV)")
+    solicitar_nova_foto = models.BooleanField(default=False, verbose_name="Solicitar Nova Foto ao Motorista")
+
     def save(self, *args, **kwargs):
         # Se temos uma URL de foto mas o backup original está vazio, 
         # significa que é o registro inicial. Salvamos o backup.

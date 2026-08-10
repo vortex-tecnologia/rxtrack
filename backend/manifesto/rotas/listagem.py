@@ -102,7 +102,11 @@ class ListarNotasManifestoView(APIView):
                     'foto_url': baixa.comprovante_foto_url if baixa.comprovante_foto_url else None,
                     'motivo_baixa': baixa.motivo_baixa,
                     'lat': safe_float(baixa.latitude),
-                    'lng': safe_float(baixa.longitude)
+                    'lng': safe_float(baixa.longitude),
+                    'solicitar_nova_foto': getattr(baixa, 'solicitar_nova_foto', False),
+                    'tentativa_foto': getattr(baixa, 'tentativa_foto', 1),
+                    'qualidade_canhoto': getattr(baixa, 'qualidade_canhoto', 'APROVADO'),
+                    'motivo_rejeicao_ia': getattr(baixa, 'motivo_rejeicao_ia', None),
                 }
 
             data.append({
@@ -115,7 +119,10 @@ class ListarNotasManifestoView(APIView):
                 'tipo_operacao': nf.tipo_operacao,
                 'id_tms': nf.freight_id_tms,
                 'numero_coleta': nf.numero_coleta,
-                'ja_baixada': baixa is not None, 
+                'ja_baixada': baixa is not None,
+                'solicitar_nova_foto': getattr(baixa, 'solicitar_nova_foto', False) if baixa else False,
+                'tentativa_foto': getattr(baixa, 'tentativa_foto', 1) if baixa else 1,
+                'qualidade_canhoto': getattr(baixa, 'qualidade_canhoto', 'PENDENTE_ANALISE') if baixa else 'PENDENTE_ANALISE',
                 'dados_baixa': dados_baixa
             })
 

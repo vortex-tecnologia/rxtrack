@@ -145,6 +145,26 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
     baixa.ia_yolo_status = "INFO:YOLO_SUCESSO" in out
     baixa.ia_ocr_status = "INFO:OCR_SUCESSO" in out or "FLORENCE_QUALIDADE:BOA" in out
 
+    # Extrai métricas e motivos do Florence-2
+    qualidade_ia = "BOA"
+    motivo_rejeicao = ""
+    score_nitidez_val = None
+
+    for line in out.split('\n'):
+        line = line.strip()
+        if line.startswith("FLORENCE_QUALIDADE:"):
+            qualidade_ia = line.split("FLORENCE_QUALIDADE:")[1].strip()
+        elif line.startswith("FLORENCE_MOTIVO:"):
+            motivo_rejeicao = line.split("FLORENCE_MOTIVO:")[1].strip()
+        elif line.startswith("FLORENCE_NITIDEZ:"):
+            try:
+                score_nitidez_val = float(line.split("FLORENCE_NITIDEZ:")[1].strip())
+            except Exception:
+                pass
+
+    baixa.score_nitidez = score_nitidez_val
+    baixa.motivo_rejeicao_ia = motivo_rejeicao if motivo_rejeicao else None
+
     # Extrai Recebedor e Documento lidos pelo Florence-2 caso o motorista não tenha informado
     if "FLORENCE_RECEBEDOR:" in out and not baixa.recebedor:
         for line in out.split('\n'):
@@ -162,23 +182,90 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
                     baixa.documento_recebedor = doc_val[:20]
                 break
 
-    baixa.save()
-            
     # Limpa arquivo temporario
     if os.path.exists(img_path):
         os.remove(img_path)
 
     # 6. CASO DE FALHA YOLO: Salva original na pasta de Erro para Treinamento futuro do modelo
-    #    NÃO grava em log_erro_tms para não disparar notificações de falso erro.
-    #    Os badges visuais (IA: Canhoto Falhou / IA: Leitura Falhou) no modal já informam isso.
     if not found_canhoto:
         print(f"[IA] YOLO não detectou canhoto na Baixa #{baixa.id}. Foto original será enviada ao TMS sem recorte. Out: {out[:200]}")
         caminho_erro = 'public_html/uploads/AgenteIA/ErroLeitura'
         _, buffer_err = cv2.imencode('.jpg', img_original)
         upload_via_ftp_agente(buffer_err.tobytes(), f"FALHA_{nome_arquivo}", caminho_erro)
 
-    # 7. Finaliza enviando para o TMS
-    finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
+    # --- 7. REGRAS DO GUARDIÃO DE CANHOTOS (OCORRÊNCIA 01 / LIMITE 3X / RETENÇÃO TMS) ---
+    is_ocorrencia_01 = (
+        cod_ref in ['01', '1'] or
+        cod_tms in ['01', '1'] or
+        (baixa.tipo == 'ENTREGA' and not baixa.ocorrencia)
+    )
+
+    if is_ocorrencia_01:
+        if qualidade_ia == "BOA":
+            baixa.qualidade_canhoto = 'APROVADO'
+            baixa.solicitar_nova_foto = False
+            baixa.save()
+            print(f"[IA-GUARDIÃO] Canhoto da Baixa #{baixa.id} (NF {nfe_num}) APROVADO! Enviando ao TMS.")
+            finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
+        else:
+            # Foto reprovada (desfocada ou ilegível)
+            if (baixa.tentativa_foto or 1) < 3:
+                baixa.qualidade_canhoto = 'ILEGIVEL'
+                baixa.solicitar_nova_foto = True
+                baixa.save()
+                print(f"[IA-GUARDIÃO] Canhoto da Baixa #{baixa.id} (NF {nfe_num}) REPROVADO ({qualidade_ia}/{motivo_rejeicao}). Tentativa {baixa.tentativa_foto}/3. Retendo envio ao TMS.")
+                disparar_notificacao_canhoto_reprovado(baixa)
+            else:
+                # 3ª Tentativa atingida: libera envio ao TMS para não travar a rotina
+                baixa.qualidade_canhoto = 'REPROVADO_LIMITE_3X'
+                baixa.solicitar_nova_foto = False
+                baixa.save()
+                print(f"[IA-GUARDIÃO] Baixa #{baixa.id} (NF {nfe_num}) atingiu o limite de 3 tentativas. Liberando envio ao TMS com auditoria.")
+                finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
+    else:
+        # Não é ocorrência 01 (ex: ressalvas, devoluções, coletas): segue fluxo normal
+        baixa.qualidade_canhoto = 'APROVADO' if qualidade_ia == "BOA" else 'PENDENTE_ANALISE'
+        baixa.solicitar_nova_foto = False
+        baixa.save()
+        finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
+
+
+def disparar_notificacao_canhoto_reprovado(baixa):
+    """Dispara Notificação Push Nativa (FCM para APK e WebPush para PWA) informando canhoto ilegível."""
+    try:
+        motorista = None
+        if baixa.nota_fiscal and baixa.nota_fiscal.manifesto:
+            motorista = baixa.nota_fiscal.manifesto.motorista
+        elif baixa.autor_baixa:
+            motorista = baixa.autor_baixa
+
+        nfe_num = baixa.nota_fiscal.numero_nota if baixa.nota_fiscal else ""
+        tentativa_atual = baixa.tentativa_foto or 1
+        titulo = "⚠️ RXTrack - Canhoto Ilegível"
+        mensagem = f"A foto do canhoto da NF #{nfe_num} ficou fora de foco ou ilegível (Tentativa {tentativa_atual}/3). Toque para tirar uma nova foto."
+        payload = {
+            'tipo': 'CANHOTO_ILEGIVEL',
+            'nota_fiscal': str(nfe_num),
+            'baixa_id': str(baixa.id),
+            'tentativa': str(tentativa_atual),
+            'chave_acesso': str(baixa.nota_fiscal.chave_acesso if baixa.nota_fiscal else '')
+        }
+
+        # 1. FCM Push para quem usa APK
+        if motorista and motorista.fcm_token:
+            from common.fcm_service import enviar_notificacao_push
+            enviar_notificacao_push(motorista, titulo, mensagem, tipo='ALERTA', dados_payload=payload)
+
+        # 2. WebPush para quem usa PWA instalado
+        if motorista and getattr(motorista, 'user', None):
+            from mobile.services.webpush_service import enviar_notificacao_usuario
+            enviar_notificacao_usuario(motorista.user, {
+                'title': titulo,
+                'body': mensagem,
+                'data': payload
+            })
+    except Exception as e:
+        print(f"[IA-GUARDIÃO] Aviso: Não foi possível disparar push de canhoto reprovado: {e}")
 
 
 def upload_via_ftp_agente(imagem_bytes, nome_arquivo, caminho_destino):

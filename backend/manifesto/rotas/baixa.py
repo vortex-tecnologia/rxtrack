@@ -297,6 +297,8 @@ class RegistrarBaixaView(APIView):
                     'ENTREGUE' in desc_upper
                 )
 
+                nova_tentativa = (baixa_existente.tentativa_foto + 1) if (baixa_existente and baixa_existente.tentativa_foto) else 1
+
                 baixa, created = BaixaNF.objects.update_or_create(
                     nota_fiscal=nf,
                     defaults={
@@ -308,11 +310,14 @@ class RegistrarBaixaView(APIView):
                         'latitude': lat,
                         'longitude': lng,
                         'observacao': observacao_app if is_retida else request.data.get('observacao', ''),
-                        'data_baixa': data_final_baixa
+                        'data_baixa': data_final_baixa,
+                        'tentativa_foto': nova_tentativa,
+                        'solicitar_nova_foto': False,
+                        'qualidade_canhoto': 'PENDENTE_ANALISE'
                     }
                 )
                 
-                _trace.append(f"[BAIXA_SALVA] ID={baixa.id}, created={created}, tipo='{baixa.tipo}', ocorrencia_tms='{ocorrencia.codigo_tms}', is_sucesso={is_sucesso}")
+                _trace.append(f"[BAIXA_SALVA] ID={baixa.id}, created={created}, tentativa={baixa.tentativa_foto}, tipo='{baixa.tipo}', ocorrencia_tms='{ocorrencia.codigo_tms}', is_sucesso={is_sucesso}")
                 
                 # Se foi UPDATE (motorista refez a baixa), restaura o backup original 
                 # para não perder a foto verdadeiramente original 

@@ -536,6 +536,7 @@ async function atualizarListaViva(numeroManifesto) {
             // INJEÇÃO DA BUSCA (MANTIDO ORIGINAL)
             if (!document.getElementById('input-busca-nfe')) {
                 areaDinamica.innerHTML = `
+                    <div id="container-alertas-canhotos"></div>
                     <div class="search-box mb-4">
                         <div class="input-group shadow-sm position-relative" style="border-radius: 15px; overflow: hidden;">
                             <span class="input-group-text bg-white border-0"><i class="bi bi-search text-muted"></i></span>
@@ -553,6 +554,9 @@ async function atualizarListaViva(numeroManifesto) {
                     </div>
                 `;
             }
+
+            // Renderiza alertas de canhotos reprovados pela IA
+            renderizarAlertasCanhotos(notas);
 
             const containerNotas = document.getElementById('lista-notas-container');
             const containerConcluidos = document.getElementById('container-concluidos-cards');
@@ -2524,35 +2528,112 @@ setInterval(() => {
 }, 5 * 60 * 1000); // 5 minutos em milissegundos
 
 // =====================================================
+// 2.5 GUARDIÃO DE CANHOTOS (ALERTAS DE FOTO ILEGÍVEL)
+// =====================================================
+function renderizarAlertasCanhotos(notas) {
+    const containerAlertas = document.getElementById('container-alertas-canhotos');
+    if (!containerAlertas) return;
+
+    if (!Array.isArray(notas)) {
+        containerAlertas.innerHTML = '';
+        return;
+    }
+
+    const notasComFotoRuim = notas.filter(n => n.solicitar_nova_foto === true || (n.dados_baixa && n.dados_baixa.solicitar_nova_foto === true));
+    
+    if (notasComFotoRuim.length > 0) {
+        let html = '';
+        notasComFotoRuim.forEach(nf => {
+            const numNota = nf.numero_nota || (nf.dados_baixa ? nf.dados_baixa.numero_nota : '---');
+            const tentativa = nf.tentativa_foto || (nf.dados_baixa ? nf.dados_baixa.tentativa_foto : 1);
+            const chave = nf.chave_acesso || '';
+            const tipo = nf.tipo_operacao || 'ENTREGA';
+            
+            html += `
+                <div class="card border-0 bg-danger text-white mb-3 shadow-lg animate__animated animate__pulse animate__infinite" style="border-radius: 16px;">
+                    <div class="card-body p-3">
+                        <div class="d-flex align-items-center mb-2">
+                            <div class="bg-white bg-opacity-25 rounded-circle p-2 me-2">
+                                <i class="bi bi-camera-fill fs-4 text-warning"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-0 fw-bold">⚠️ Canhoto Ilegível: NF #${numNota}</h6>
+                                <small class="text-white-50">Tentativa ${tentativa} de 3 • Foto fora de foco ou borrada</small>
+                            </div>
+                        </div>
+                        <p class="small mb-3 text-white">A foto do canhoto não pôde ser lida pela IA. Por favor, tire uma nova foto com boa iluminação e foco para comprovar a entrega.</p>
+                        <button class="btn btn-warning btn-lg fw-bold text-dark w-100 rounded-pill shadow-sm py-2" onclick="abrirModalRecadastroFoto('${numNota}', '${chave}', '${tipo}', ${tentativa})">
+                            <i class="bi bi-camera-fill me-2"></i> BATER NOVA FOTO (TENTATIVA ${tentativa + 1}/3)
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        containerAlertas.innerHTML = html;
+    } else {
+        containerAlertas.innerHTML = '';
+    }
+}
+
+function abrirModalRecadastroFoto(numeroNota, chaveAcesso, tipo, tentativa) {
+    console.log(`📸 Abrindo recadastro de foto para NF #${numeroNota} (Tentativa ${tentativa + 1}/3)...`);
+    abrirModalBaixa(numeroNota, chaveAcesso, tipo);
+    
+    setTimeout(() => {
+        const modalBody = document.querySelector('#modalBaixa .modal-body');
+        if (modalBody && !document.getElementById('aviso-recadastro-ia')) {
+            const avisoDiv = document.createElement('div');
+            avisoDiv.id = 'aviso-recadastro-ia';
+            avisoDiv.className = 'alert alert-warning border-0 shadow-sm mb-3 d-flex align-items-center';
+            avisoDiv.style.borderRadius = '12px';
+            avisoDiv.innerHTML = `
+                <i class="bi bi-camera-fill fs-3 text-warning me-3"></i>
+                <div>
+                    <strong>Recadastro de Foto (Tentativa ${tentativa + 1} de 3)</strong>
+                    <div class="small text-muted">Posicione o canhoto em local bem iluminado e segure firme a câmera para evitar desfoque.</div>
+                </div>
+            `;
+            modalBody.insertBefore(avisoDiv, modalBody.firstChild);
+        }
+    }, 200);
+}
+
+// =====================================================
 // 3. REFRESH SUAVE AO VOLTAR DO BACKGROUND (APK / PWA)
 // Quando o motorista minimiza o app (ex: vai pro Waze) e volta,
 // fazemos um refresh dos dados SEM recarregar a página inteira.
 // =====================================================
 let _ultimoRetornoBackground = 0;
+
+function tratarRetornoAppFoco() {
+    const agora = Date.now();
+    // Debounce de 3 segundos para evitar chamadas duplicadas entre visibility e focus
+    if (agora - _ultimoRetornoBackground < 3000) return;
+    _ultimoRetornoBackground = agora;
+
+    console.log("🔄 [App Foco / Retorno] App em primeiro plano! Atualizando dados e checando canhotos...");
+
+    // 1. Tenta sincronizar baixas que ficaram pendentes
+    if (navigator.onLine) {
+        sincronizarBaixasPendentes();
+    }
+
+    // 2. Se tem manifesto ativo, atualiza a lista de notas (refresh suave)
+    const mID = manifestoAtual || localStorage.getItem('manifesto_ativo');
+    if (mID && navigator.onLine) {
+        atualizarListaViva(mID);
+    }
+
+    // 3. Atualiza ícone de nuvem (status de conexão)
+    atualizarIconeNuvem();
+}
+
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
-        const agora = Date.now();
-        // Debounce: só executa se passou pelo menos 10 segundos desde o último refresh
-        if (agora - _ultimoRetornoBackground < 10000) return;
-        _ultimoRetornoBackground = agora;
-
-        console.log("🔄 [Background Return] App voltou ao foco! Atualizando dados...");
-
-        // 1. Tenta sincronizar baixas que ficaram pendentes
-        if (navigator.onLine) {
-            sincronizarBaixasPendentes();
-        }
-
-        // 2. Se tem manifesto ativo, atualiza a lista de notas (refresh suave)
-        const mID = manifestoAtual || localStorage.getItem('manifesto_ativo');
-        if (mID && navigator.onLine) {
-            atualizarListaViva(mID);
-        }
-
-        // 3. Atualiza ícone de nuvem (status de conexão)
-        atualizarIconeNuvem();
+        tratarRetornoAppFoco();
     }
 });
+window.addEventListener('focus', tratarRetornoAppFoco);
 
 
 // =====================================================

@@ -154,9 +154,9 @@ class ManifestoBuscaLogAdmin(ModelAdmin):
 
 @admin.register(BaixaNF)
 class BaixaNFAdmin(ModelAdmin):
-    list_display = ("get_nf", "tipo", "status_integracao", "data_baixa", "ver_mapa")
-    list_filter = ("processado_tms", "tipo", "data_baixa")
-    readonly_fields = ("data_integracao", "log_erro_tms", "data_baixa")
+    list_display = ("get_nf", "tipo", "qualidade_canhoto", "tentativa_foto", "status_integracao", "data_baixa", "ver_mapa")
+    list_filter = ("qualidade_canhoto", "solicitar_nova_foto", "processado_tms", "tipo", "data_baixa")
+    readonly_fields = ("data_integracao", "log_erro_tms", "data_baixa", "score_nitidez")
     
     actions = ["forcar_reintegracao"]
 
