@@ -13,10 +13,11 @@ class VerificarManifestoAtivoView(APIView):
             return Response({'tem_manifesto': False})
 
         with transaction.atomic():
-            # Busca se existe algum manifesto com status 'EM_TRANSPORTE'
+            # Busca se existe algum manifesto com status 'EM_TRANSPORTE' e NÃO finalizado
             manifesto_ativo = Manifesto.objects.filter(
                 motorista=motorista, 
-                status='EM_TRANSPORTE'
+                status='EM_TRANSPORTE',
+                finalizado=False
             ).first()
 
             if not manifesto_ativo:

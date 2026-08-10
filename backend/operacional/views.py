@@ -553,26 +553,26 @@ def salvar_edicao_manifesto_view(request, manifesto_id):
 
         # 4. Lógica de Status e Datas de Finalização
         enviar_finalizacao_tms = False
-        # Se o checkbox de finalizar foi marcado agora
-        if foi_finalizado and not manifesto.finalizado:
-            manifesto.finalizado = True
-            manifesto.data_finalizacao = timezone.now()
-            manifesto.status = 'FINALIZADO'
-            enviar_finalizacao_tms = True
         
-        # Se o checkbox foi desmarcado (reabertura de manifesto)
-        elif not foi_finalizado and manifesto.finalizado:
+        if (foi_finalizado or status_post == 'FINALIZADO'):
+            if not manifesto.finalizado:
+                manifesto.data_finalizacao = timezone.now()
+                enviar_finalizacao_tms = True
+            elif not manifesto.data_finalizacao:
+                manifesto.data_finalizacao = timezone.now()
+            manifesto.finalizado = True
+            manifesto.status = 'FINALIZADO'
+        else:
             manifesto.finalizado = False
             manifesto.data_finalizacao = None
-            # Se estava FINALIZADO, volta para EM_TRANSPORTE ao reabrir
-            if manifesto.status == 'FINALIZADO':
-                manifesto.status = 'EM_TRANSPORTE'
+            manifesto.status = status_post
 
         # 5. Salva no Banco de Dados
         manifesto.save()
 
         try:
-            from manifesto.services import notificar_atualizacao_cargas_fretes
+            from manifesto.services import enviar_painel, notificar_atualizacao_cargas_fretes
+            enviar_painel(manifesto)
             notificar_atualizacao_cargas_fretes(manifesto.filial)
         except Exception:
             pass

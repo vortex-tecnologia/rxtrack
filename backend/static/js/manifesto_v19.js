@@ -913,9 +913,11 @@ async function executarFinalizacaoManual() {
             })
         });
 
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
 
-        if (response.ok) {
+        const isSucesso = response.ok || (data && data.sucesso) || (data && data.mensagem && (data.mensagem.includes('já foi encerrado') || data.mensagem.includes('já finalizado') || data.mensagem.includes('Sucesso')));
+
+        if (isSucesso) {
             // ESTADO 2: SUCESSO
             container.innerHTML = `
                 <div class="modal-body text-center p-5 animate__animated animate__zoomIn">
@@ -936,10 +938,10 @@ async function executarFinalizacaoManual() {
 
             setTimeout(() => {
                 window.location.reload();
-            }, 500);
+            }, 600);
 
         } else {
-            // ESTADO 3: ERRO DO BACKEND
+            // ESTADO 3: ERRO DO BACKEND (ex: notas pendentes)
             const msgErro = data.mensagem || "Houve uma falha na confirmação do fim da rota.";
             container.innerHTML = `
                 <div class="modal-header border-0 flex-column align-items-center pt-4">

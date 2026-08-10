@@ -11,15 +11,17 @@ class AppInitView(APIView):
     def get(self, request):
         motorista = request.user.motorista_perfil
 
+        # Manifesto ativo em transporte e NÃO finalizado
         manifesto = Manifesto.objects.filter(
             motorista=motorista,
-            status='EM_TRANSPORTE'
+            status='EM_TRANSPORTE',
+            finalizado=False
         ).first()
 
         if manifesto:
             return Response({
                 'tela': 'NOTAS',
-                'manifesto_id': manifesto.id
+                'manifesto_id': manifesto.numero_manifesto or manifesto.id
             })
 
         return Response({'tela': 'BUSCA'})

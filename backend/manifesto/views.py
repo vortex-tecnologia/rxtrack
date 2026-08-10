@@ -23,12 +23,33 @@ class ManifestoFinalizacaoView(APIView):
             return Response({"mensagem": "Número do manifesto não fornecido."}, status=400)
 
         try:
-            manifesto = Manifesto.objects.get(numero_manifesto=str(numero_mft))
+            from django.db.models import Q
+            manifesto = Manifesto.objects.filter(
+                Q(numero_manifesto=str(numero_mft)) | Q(id=str(numero_mft))
+            ).first()
             
-            if manifesto.finalizado:
-                return Response({"mensagem": "Este manifesto já foi encerrado."}, status=400)
+            if not manifesto:
+                return Response({"mensagem": "Manifesto não encontrado."}, status=404)
 
-            # Conferência de Notas Pendentes (Sua trava de segurança)
+            # Se o manifesto já estava finalizado ou com status FINALIZADO, garante a consistência e libera o motorista
+            if manifesto.finalizado or manifesto.status == 'FINALIZADO':
+                manifesto.finalizado = True
+                manifesto.status = "FINALIZADO"
+                if not manifesto.data_finalizacao:
+                    manifesto.data_finalizacao = timezone.now()
+                if km_final and km_final != "0":
+                    manifesto.km_final = km_final
+                manifesto.save()
+
+                try:
+                    from manifesto.services import enviar_painel
+                    enviar_painel(manifesto)
+                except Exception:
+                    pass
+
+                return Response({"mensagem": "Manifesto finalizado com sucesso!", "sucesso": True}, status=200)
+
+            # Conferência de Notas Pendentes (Trava de segurança para não fechar se ainda houver notas pendentes)
             notas_pendentes = NotaFiscal.objects.filter(
                 manifesto=manifesto, 
                 status='PENDENTE'
@@ -40,20 +61,25 @@ class ManifestoFinalizacaoView(APIView):
                 }, status=400)
 
             # --- SUCESSO LOCAL ---
-            manifesto.km_final = km_final
+            if km_final and km_final != "0":
+                manifesto.km_final = km_final
             manifesto.finalizado = True
             manifesto.status = "FINALIZADO"
             manifesto.data_finalizacao = timezone.now()
             manifesto.save()
 
+            # Notifica a Torre de Controle para remover/atualizar o card
+            try:
+                from manifesto.services import enviar_painel
+                enviar_painel(manifesto)
+            except Exception:
+                pass
+
             # --- DISPARA INTEGRAÇÃO EM BACKGROUND ---
-            # O motorista já é liberado aqui, a task se vira com o TMS
             finalizar_manifesto_tms_task.delay(manifesto.id)
 
-            return Response({"mensagem": "Sucesso!"}, status=200)
+            return Response({"mensagem": "Manifesto finalizado com sucesso!", "sucesso": True}, status=200)
 
-        except Manifesto.DoesNotExist:
-            return Response({"mensagem": "Manifesto não encontrado."}, status=404)
         except Exception as e:
             return Response({"mensagem": f"Erro interno: {str(e)}"}, status=500)
 
