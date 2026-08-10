@@ -1076,7 +1076,7 @@ def motorista_cadastrar(request):
             plain_message = strip_tags(html_message)
             
             send_mail(
-                'Bem-vindo ao QuickTrack',
+                'Bem-vindo ao RXTrack',
                 plain_message,
                 settings.DEFAULT_FROM_EMAIL,
                 [email],
@@ -1398,7 +1398,7 @@ def enviar_redefinicao_senha_view(request, motorista_id):
         plain_message = strip_tags(html_message)
 
         send_mail(
-            'Redefinição de Senha - QuickTrack',
+            'Redefinição de Senha - RXTrack',
             plain_message,
             settings.DEFAULT_FROM_EMAIL,
             [motorista.email],

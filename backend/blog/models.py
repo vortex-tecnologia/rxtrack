@@ -71,7 +71,7 @@ class PostBlog(models.Model):
     )
     autor = models.CharField(
         max_length=100, 
-        default='Equipe QuickTrack', 
+        default='Equipe RXTrack', 
         verbose_name="Autor da Publicação"
     )
     

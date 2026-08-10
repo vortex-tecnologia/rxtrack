@@ -191,7 +191,7 @@ def api_criar_usuario(request):
             plain_message = strip_tags(html_message)
             
             send_mail(
-                'Bem-vindo ao QuickTrack',
+                'Bem-vindo ao RXTrack',
                 plain_message,
                 settings.EMAIL_HOST_USER,
                 [email],

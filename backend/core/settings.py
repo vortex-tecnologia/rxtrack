@@ -299,8 +299,8 @@ REST_FRAMEWORK = {
 }
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Quicktrack API',
-    'DESCRIPTION': 'Documentação oficial das integrações e recursos do sistema Quicktrack TMS.',
+    'TITLE': 'RXTrack API',
+    'DESCRIPTION': 'Documentação oficial das integrações e recursos do sistema RXTrack TMS.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
@@ -333,7 +333,7 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@quickdelivery.com.br')
 
 # Configurações do PWA
-PWA_APP_NAME = 'Quick Track'
+PWA_APP_NAME = 'RXTrack'
 PWA_APP_DESCRIPTION = "Aplicativo para gestão de entregas e manifestos"
 PWA_APP_THEME_COLOR = '#0d6efd' # Cor azul do seu app
 PWA_APP_BACKGROUND_COLOR = '#ffffff'
@@ -359,10 +359,10 @@ PWA_SERVICE_WORKER_PATH = 'static/js/serviceworker.js'
 
 JAZZMIN_SETTINGS = {
     # ── Branding ──
-    "site_title": "QuickTrack",
-    "site_header": "QuickTrack",
-    "site_brand": "QuickTrack",
-    "welcome_sign": "Bem-vindo ao painel QuickTrack",
+    "site_title": "RXTrack",
+    "site_header": "RXTrack",
+    "site_brand": "RXTrack",
+    "welcome_sign": "Bem-vindo ao painel RXTrack",
     "copyright": "Vortex Tecnologia",
     "search_model": ["manifesto.Manifesto", "manifesto.NotaFiscal", "usuarios.Motorista"],
 

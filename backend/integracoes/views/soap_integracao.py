@@ -153,7 +153,7 @@ class UploadRouteSoapView(APIView):
     <uploadRouteResponse xmlns="WebServiceComprovei:uploadRoute">
       <uploadRouteResult>
         <status>OK</status>
-        <mensagem>Manifesto processado com sucesso pelo Quicktrack</mensagem>
+        <mensagem>Manifesto processado com sucesso pelo RXTrack</mensagem>
       </uploadRouteResult>
     </uploadRouteResponse>
   </soap:Body>

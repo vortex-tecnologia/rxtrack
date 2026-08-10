@@ -9,7 +9,7 @@ def public_index(request):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>QuickTrack SaaS - Plataforma Logística</title>
+        <title>RXTrack SaaS - Plataforma Logística</title>
         <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
         <style>
             body {
@@ -61,10 +61,10 @@ def public_index(request):
     </head>
     <body>
         <div class="container">
-            <h1>QuickTrack SaaS</h1>
+            <h1>RXTrack SaaS</h1>
             <p>Seja bem-vindo à nossa plataforma logística inteligente. Cada empresa possui um endereço de acesso exclusivo.</p>
             <p>Por favor, acesse utilizando o subdomínio da sua empresa:</p>
-            <div class="subdomain-badge">exemplo.quicktrack.com.br</div>
+            <div class="subdomain-badge">exemplo.rxtrack.com.br</div>
         </div>
     </body>
     </html>

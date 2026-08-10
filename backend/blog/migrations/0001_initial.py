@@ -23,7 +23,7 @@ def popular_blog_inicial(apps, schema_editor):
             "categoria": "NOVIDADE",
             "imagem_url": "/static/images/megafone_3d.png",
             "tags": "Inteligência Artificial, Guardião de Canhotos, Push Notification, Mobile",
-            "autor": "Equipe de Engenharia QuickTrack",
+            "autor": "Equipe de Engenharia RXTrack",
             "destaque": True,
             "ativo": True,
         }
@@ -45,7 +45,7 @@ def popular_blog_inicial(apps, schema_editor):
             "categoria": "CORRECAO",
             "imagem_url": "/static/images/megafone_3d.png",
             "tags": "TMS, Manifestos, Blindagem, Operacional",
-            "autor": "Equipe de Engenharia QuickTrack",
+            "autor": "Equipe de Engenharia RXTrack",
             "destaque": False,
             "ativo": True,
         }
@@ -67,7 +67,7 @@ def popular_blog_inicial(apps, schema_editor):
             "categoria": "MELHORIA",
             "imagem_url": "/static/images/megafone_3d.png",
             "tags": "Torre de Controle, WebSocket, Tempo Real, Dashboard",
-            "autor": "Equipe de Engenharia QuickTrack",
+            "autor": "Equipe de Engenharia RXTrack",
             "destaque": False,
             "ativo": True,
         }
@@ -89,7 +89,7 @@ def popular_blog_inicial(apps, schema_editor):
             "categoria": "NOVIDADE",
             "imagem_url": "/static/images/megafone_3d.png",
             "tags": "Inteligência Artificial, OCR, Visão Computacional",
-            "autor": "Equipe de Engenharia QuickTrack",
+            "autor": "Equipe de Engenharia RXTrack",
             "destaque": False,
             "ativo": True,
         }
@@ -117,7 +117,7 @@ class Migration(migrations.Migration):
                 ('imagem_capa', models.ImageField(blank=True, null=True, upload_to='blog/', verbose_name='Imagem de Capa (Upload)')),
                 ('imagem_url', models.CharField(blank=True, default='', help_text='URL direta ou estática (ex: /static/images/megafone_3d.png)', max_length=500, verbose_name='Imagem URL (Opcional)')),
                 ('tags', models.CharField(blank=True, default='IA, App Mobile, Entregas', help_text='Tags separadas por vírgula (ex: IA, TMS, Notificações)', max_length=200, verbose_name='Tags / Palavras-chave')),
-                ('autor', models.CharField(default='Equipe QuickTrack', max_length=100, verbose_name='Autor da Publicação')),
+                ('autor', models.CharField(default='Equipe RXTrack', max_length=100, verbose_name='Autor da Publicação')),
                 ('data_publicacao', models.DateTimeField(default=django.utils.timezone.now, verbose_name='Data e Hora de Publicação')),
                 ('destaque', models.BooleanField(default=False, verbose_name='⭐ Fixar como Destaque Principal')),
                 ('ativo', models.BooleanField(default=True, verbose_name='Publicação Ativa / Visível')),

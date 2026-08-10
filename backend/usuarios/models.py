@@ -375,7 +375,7 @@ def enviar_email_convite_sac(sender, instance, created, **kwargs):
             plain_message = strip_tags(html_message)
             
             send_mail(
-                'Convite para Equipe - QuickTrack',
+                'Convite para Equipe - RXTrack',
                 plain_message,
                 settings.EMAIL_HOST_USER,
                 [instance.email],

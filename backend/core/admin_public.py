@@ -13,8 +13,8 @@ from blog.models import PostBlog
 
 
 class PublicAdminSite(AdminSite):
-    site_header = "QuickTrack — Painel Global"
-    site_title = "QuickTrack Admin Global"
+    site_header = "RXTrack — Painel Global"
+    site_title = "RXTrack Admin Global"
     index_title = "Gestão de Clientes e Plataforma"
 
 

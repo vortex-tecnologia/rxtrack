@@ -36,10 +36,10 @@ class Command(BaseCommand):
             portainer_pwd = 'QuickTrack@2026!'
 
             # Disparar Email com todas as informações de acesso
-            subject = '🟢 QuickTrack Instalado — Credenciais de Acesso Master'
+            subject = '🟢 RXTrack Instalado — Credenciais de Acesso Master'
             message = f"""Olá Luiz,
 
-Seu projeto QuickTrack foi instalado com sucesso no ambiente do cliente!
+Seu projeto RXTrack foi instalado com sucesso no ambiente do cliente!
 Abaixo estão todas as informações de acesso:
 
 ══════════════════════════════════════════════

@@ -30,14 +30,14 @@ MENSAGENS_ATIVACAO = {
     1: (
         "🚛 Bom dia, {nome}! Informamos que o manifesto *#{numero}* "
         "foi gerado em seu nome.\n"
-        "Acesse o aplicativo *QuickTrack* e ative o manifesto para "
+        "Acesse o aplicativo *RXTrack* e ative o manifesto para "
         "iniciar seus registros de entrega.\n"
         "Bom trabalho! 💪"
     ),
     2: (
         "📋 Olá, {nome}. Verificamos que o manifesto *#{numero}* "
         "ainda não foi ativado no aplicativo.\n"
-        "Pedimos que acesse o *QuickTrack* e realize a ativação "
+        "Pedimos que acesse o *RXTrack* e realize a ativação "
         "para que suas entregas sejam registradas corretamente."
     ),
     3: (
@@ -49,14 +49,14 @@ MENSAGENS_ATIVACAO = {
     4: (
         "🔔 *Atenção, {nome}!* Já são 15h e o manifesto *#{numero}* "
         "permanece sem ativação.\n"
-        "Ative agora pelo app *QuickTrack* para garantir que todas as "
+        "Ative agora pelo app *RXTrack* para garantir que todas as "
         "ocorrências do dia sejam registradas a tempo."
     ),
     5: (
         "🚨 *Última notificação do dia, {nome}.*\n"
         "O manifesto *#{numero}* ainda não foi ativado. Caso não seja "
         "ativado, as entregas realizadas ficarão sem registro no sistema.\n"
-        "Ative *imediatamente* pelo app QuickTrack."
+        "Ative *imediatamente* pelo app RXTrack."
     ),
 }
 
