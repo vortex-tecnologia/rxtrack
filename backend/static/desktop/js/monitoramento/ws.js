@@ -162,6 +162,13 @@ function conectarWebSocket() {
                 if (typeof atualizarUltimoSinalTorre === 'function') {
                     atualizarUltimoSinalTorre();
                 }
+
+                // Atualiza em tempo real o modal de detalhes caso esteja aberto para este manifesto
+                if (typeof manifestoAbertoDetalhesId !== 'undefined' && manifestoAbertoDetalhesId) {
+                    if ((manifestoAbertoDetalhesId === String(mID) || manifestoAbertoDetalhesId === String(d.manifesto_id)) && typeof carregarConteudoModalDetalhes === 'function') {
+                        carregarConteudoModalDetalhes(manifestoAbertoDetalhesId, true);
+                    }
+                }
             }
         } catch (err) {
             console.error("❌ Erro ao processar mensagem WS:", err);
@@ -243,10 +250,16 @@ function conectarWebSocket() {
                                 <span id="percent-${d.manifesto_id}">
                                     ${d.porcentagem || 0}</span>%
                             </div>
-                            <button class="btn btn-sm btn-outline-primary"
-                                onclick="abrirRastreio('${d.manifesto_id}', '${d.motorista_nome || ''}', '${d.baixadas || 0}', '${d.total || 0}')">
-                                <i class="bi bi-geo-alt me-1"></i> Rastrear
-                            </button>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
+                                    onclick="abrirDetalhesManifestoTorre('${d.manifesto_id}')" title="Ver Notas / Itens do Manifesto">
+                                    <i class="bi bi-card-list"></i> Notas
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
+                                    onclick="abrirRastreio('${d.manifesto_id}', '${d.motorista_nome || ''}', '${d.baixadas || 0}', '${d.total || 0}')">
+                                    <i class="bi bi-geo-alt"></i> Rastrear
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

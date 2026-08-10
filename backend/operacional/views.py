@@ -460,13 +460,29 @@ def detalhes_manifesto_modal_view(request, manifesto_id):
     # Busca o manifesto e faz o prefetch das notas e baixas para ser rápido
     from manifesto.models import Manifesto, NotaFiscal
     from django.db.models import Count, Q
-    from django.shortcuts import get_object_or_404
+    from django.http import HttpResponse
 
-    manifesto = get_object_or_404(Manifesto, id=manifesto_id)
-    notas = NotaFiscal.objects.filter(manifesto=manifesto)
+    # Busca flexível por ID primário ou por numero_manifesto
+    manifesto = None
+    manifesto_id_str = str(manifesto_id).strip()
+    if manifesto_id_str.isdigit():
+        manifesto = Manifesto.objects.filter(
+            Q(id=int(manifesto_id_str)) | Q(numero_manifesto=manifesto_id_str)
+        ).select_related('motorista', 'filial').first()
+    else:
+        manifesto = Manifesto.objects.filter(
+            numero_manifesto=manifesto_id_str
+        ).select_related('motorista', 'filial').first()
+
+    if not manifesto:
+        return HttpResponse("<div class='modal-body text-center p-4 text-danger fw-bold'>Manifesto não encontrado.</div>", status=404)
+
+    notas = NotaFiscal.objects.filter(manifesto=manifesto).select_related('manifesto').prefetch_related('baixa_info', 'baixa_info__ocorrencia')
     
     total_notas = notas.count()
-    concluidas = notas.filter(status='BAIXADA').count()
+    baixadas = notas.filter(status='BAIXADA').count()
+    ocorrencias = notas.filter(status='OCORRENCIA').count()
+    concluidas = notas.filter(status__in=['BAIXADA', 'OCORRENCIA']).count()
     
     # Cálculo da percentagem com segurança para não dividir por zero
     progresso = (concluidas / total_notas * 100) if total_notas > 0 else 0
@@ -475,6 +491,8 @@ def detalhes_manifesto_modal_view(request, manifesto_id):
         'manifesto': manifesto,
         'notas': notas,
         'total_notas': total_notas,
+        'baixadas': baixadas,
+        'ocorrencias': ocorrencias,
         'concluidas': concluidas,
         'progresso': int(progresso)
     }
