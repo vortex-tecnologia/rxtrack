@@ -195,31 +195,31 @@ function conectarWebSocket() {
 
                     <div class="card-body pt-4">
                         <div class="d-flex justify-content-between align-items-start mb-3">
-                            <div class="d-flex align-items-center">
+                            <div class="d-flex align-items-center flex-grow-1 me-2" style="min-width: 0;">
                                 <div class="flex-shrink-0">
                                     ${d.foto_motorista ?
-                `<img src="${d.foto_motorista}" class="rounded-circle" style="width: 48px; height: 48px; object-fit: cover; border: 2px solid #0d6efd;">`
+                `<img src="${d.foto_motorista}" class="rounded-circle" style="width: 44px; height: 44px; object-fit: cover; border: 2px solid #0d6efd;">`
                 :
-                `<div class="bg-soft-primary p-3 rounded-circle d-flex justify-content-center align-items-center" style="width: 48px; height: 48px;">
+                `<div class="bg-soft-primary p-2 rounded-circle d-flex justify-content-center align-items-center" style="width: 44px; height: 44px;">
                                         <i class="fas fa-truck-moving text-primary"></i>
                                     </div>`
             }
                                 </div>
-                                <div class="ms-3">
-                                    <h6 class="mb-0 fw-bold d-flex align-items-center gap-1">
-                                        <span>${d.motorista_nome || 'Desconhecido'}</span>
+                                <div class="ms-2 flex-grow-1" style="min-width: 0;">
+                                    <h6 class="mb-0 fw-bold d-flex align-items-center gap-1" style="min-width: 0;">
+                                        <span class="text-truncate" title="${d.motorista_nome || 'Desconhecido'}" style="max-width: 150px;">${d.motorista_nome || 'Desconhecido'}</span>
                                         ${d.icone_dispositivo || ''}
                                     </h6>
-                                    <div class="d-flex align-items-center gap-1 mt-0">
-                                        <small class="text-muted">Manifesto: #${d.manifesto_id}</small>
+                                    <div class="d-flex flex-wrap align-items-center gap-1 mt-0">
+                                        <small class="text-muted text-nowrap" style="font-size: 0.78rem;">#${d.manifesto_id}</small>
                                         ${d.motorista_categoria === 'AGREGADO' ?
-                `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-1 py-0 ms-1" style="font-size: 0.65rem; font-weight: 700;">AGREGADO</span>` :
+                `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-1 py-0" style="font-size: 0.6rem; font-weight: 700; border-radius: 4px;">AGREGADO</span>` :
                 d.motorista_categoria === 'DEDICADO' ?
-                    `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-1 py-0 ms-1" style="font-size: 0.65rem; font-weight: 700;">DEDICADO</span>` :
-                    `<span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle px-1 py-0 ms-1" style="font-size: 0.65rem; font-weight: 700;">EMPRESA</span>`
+                    `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-1 py-0" style="font-size: 0.6rem; font-weight: 700; border-radius: 4px;">DEDICADO</span>` :
+                    `<span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle px-1 py-0" style="font-size: 0.6rem; font-weight: 700; border-radius: 4px;">EMPRESA</span>`
             }
                                     </div>
-                                    <small class="text-muted d-block mt-1" style="font-size: 9px;" id="data-registro-${d.manifesto_id}">
+                                    <small class="text-muted d-block mt-0" style="font-size: 9px;" id="data-registro-${d.manifesto_id}">
                                         <i class="bi bi-clock pe-1"></i>${d.data_registro || ''}
                                     </small>
                                 </div>
