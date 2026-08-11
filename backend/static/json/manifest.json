@@ -1,0 +1,22 @@
+{
+  "name": "RXtrack Logística",
+  "short_name": "RXtrack",
+  "start_url": "/app/",
+  "scope": "/app/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0d6efd",
+  "icons": [
+    {
+      "src": "/static/images/icon-160x160.png?v=rxtrack2",
+      "sizes": "160x160",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/images/icon-512x512.png?v=rxtrack2",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
+

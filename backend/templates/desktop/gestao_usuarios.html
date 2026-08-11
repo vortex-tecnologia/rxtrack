@@ -1,0 +1,316 @@
+{% extends 'desktop/base.html' %}
+{% load static %}
+
+{% block title %}Gestao de Usuarios{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" data-cargo="{{ perfil_logado.cargo }}">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold mb-1"><i class="bi bi-people-fill me-2"></i>Gestao de Usuarios</h4>
+            <p class="text-muted mb-0">Gerencie membros, permissoes e acessos do sistema</p>
+        </div>
+        <button class="btn btn-primary rounded-pill px-4 shadow-sm" onclick="abrirModalCriar()">
+            <i class="bi bi-person-plus-fill me-2"></i>Novo Usuario
+        </button>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card border-0 shadow-sm mb-4" style="border-radius: 12px;">
+        <div class="card-body py-3">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold text-muted">Filial</label>
+                    <select class="form-select" id="filtro-filial" onchange="carregarUsuarios()">
+                        {% if perfil_logado.cargo == 'GESTOR' or perfil_logado.cargo == 'ADMINISTRADOR' %}
+                        <option value="">Todas as Filiais</option>
+                        {% endif %}
+                        {% for f in filiais %}
+                        <option value="{{ f.id }}" {% if f.id == perfil_logado.filial_id %}selected{% endif %}>{{ f.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold text-muted">Tipo</label>
+                    <select class="form-select" id="filtro-tipo" onchange="carregarUsuarios()">
+                        <option value="">Todos</option>
+                        <option value="OPERACIONAL">Operacional</option>
+                        <option value="SAC">SAC</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold text-muted">Cargo</label>
+                    <select class="form-select" id="filtro-cargo" onchange="carregarUsuarios()">
+                        <option value="">Todos</option>
+                        <option value="MEMBRO">Membro</option>
+                        <option value="GERENTE">Gerente</option>
+                        <option value="GESTOR">Gestor</option>
+                        {% if perfil_logado.cargo == 'ADMINISTRADOR' %}
+                        <option value="ADMINISTRADOR">Administrador</option>
+                        {% endif %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-outline-secondary w-100" onclick="carregarUsuarios()">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Atualizar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela de Usuarios -->
+    <div class="card border-0 shadow-sm" style="border-radius: 12px;">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th class="border-0 px-4 py-3">Usuario & E-mail</th>
+                            <th class="border-0">Acesso</th>
+                            <th class="border-0">CPF</th>
+                            <th class="border-0">Tipo</th>
+                            <th class="border-0">Cargo</th>
+                            <th class="border-0">Filial</th>
+                            <th class="border-0">Status</th>
+                            <th class="border-0 text-end pe-4">Acoes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabela-usuarios">
+                        <tr>
+                            <td colspan="7" class="text-center py-5 text-muted">
+                                <i class="bi bi-hourglass-split fs-1 d-block mb-2"></i>
+                                Carregando...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Criar/Editar Usuario -->
+<div class="modal fade" id="modalUsuario" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold" id="modalUsuarioTitulo">Novo Usuario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-usuario-id">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Nome Completo</label>
+                    <input type="text" class="form-control" id="campo-nome" placeholder="Nome completo">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">E-mail (Obrigatório)</label>
+                    <input type="email" class="form-control" id="campo-email" placeholder="usuario@empresa.com.br" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">CPF</label>
+                    <input type="text" class="form-control" id="campo-cpf" placeholder="Apenas numeros" maxlength="11">
+                </div>
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label fw-bold">Tipo</label>
+                        <select class="form-select" id="campo-tipo">
+                            <option value="OPERACIONAL">Operacional</option>
+                            <option value="SAC">SAC</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-bold">Cargo</label>
+                        <select class="form-select" id="campo-cargo">
+                            <option value="MEMBRO">Membro</option>
+                            {% if perfil_logado.cargo == 'GESTOR' or perfil_logado.cargo == 'ADMINISTRADOR' %}
+                            <option value="GERENTE">Gerente</option>
+                            <option value="GESTOR">Gestor</option>
+                            {% endif %}
+                            {% if perfil_logado.cargo == 'ADMINISTRADOR' %}
+                            <option value="ADMINISTRADOR">Administrador</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                </div>
+                {% if perfil_logado.cargo == 'GESTOR' or perfil_logado.cargo == 'ADMINISTRADOR' %}
+                <div class="mt-3">
+                    <label class="form-label fw-bold">Filial</label>
+                    <select class="form-select" id="campo-filial">
+                        {% for f in filiais %}
+                        <option value="{{ f.id }}" {% if f.id == perfil_logado.filial_id %}selected{% endif %}>{{ f.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                <div class="mt-3 p-3 bg-light rounded shadow-sm border border-info">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="campo-is-sac-mobile">
+                        <label class="form-check-label fw-bold text-primary" for="campo-is-sac-mobile">Acesso SAC Mobile (App PWA)</label>
+                    </div>
+                    <small class="d-block text-muted mt-1">Se ativado, ao fazer login esta conta será direcionada para o aplicativo de celular em vez do painel.</small>
+                </div>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary rounded-pill px-4" onclick="salvarUsuario()">
+                    <i class="bi bi-check-lg me-1"></i>Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Permissoes -->
+<div class="modal fade" id="modalPermissoes" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-shield-check me-2"></i>Permissoes de <span id="perm-nome-usuario"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="perm-usuario-id">
+                <p class="text-muted small">Ative ou desative funcionalidades para este usuario. As alteracoes sao salvas ao clicar em "Salvar".</p>
+                
+                <div class="row g-4">
+                    <!-- Dashboard -->
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-speedometer2 me-2"></i>Dashboard</h6>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="perm-pode_acessar_dashboard">
+                            <label class="form-check-label">Acessar Dashboard</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="perm-pode_puxar_relatorio">
+                            <label class="form-check-label">Puxar Relatorios</label>
+                        </div>
+                    </div>
+                    
+                    <!-- Manifestos -->
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-success mb-3"><i class="bi bi-file-earmark-text me-2"></i>Manifestos</h6>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="perm-pode_ver_manifestos">
+                            <label class="form-check-label">Visualizar Manifestos</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="perm-pode_criar_manifesto">
+                            <label class="form-check-label">Criar Manifestos</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="perm-pode_editar_manifesto">
+                            <label class="form-check-label">Editar Manifestos</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="perm-pode_excluir_manifesto">
+                            <label class="form-check-label">Excluir Manifestos</label>
+                        </div>
+                    </div>
+                    
+                    <!-- Notas Fiscais -->
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-receipt me-2"></i>Notas Fiscais</h6>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="perm-pode_adicionar_notas">
+                            <label class="form-check-label">Adicionar Notas</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="perm-pode_remover_notas">
+                            <label class="form-check-label">Remover Notas</label>
+                        </div>
+                    </div>
+                    
+                    <!-- SAC / Suporte -->
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-info mb-3"><i class="bi bi-headset me-2"></i>Suporte / SAC</h6>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="perm-pode_acessar_sac">
+                            <label class="form-check-label">Acessar Painel SAC</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="perm-pode_acessar_tickets">
+                            <label class="form-check-label">Acessar Tickets</label>
+                        </div>
+                    </div>
+                    
+                    <!-- Motoristas -->
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-danger mb-3"><i class="bi bi-truck me-2"></i>Motoristas</h6>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="perm-pode_registrar_motorista">
+                            <label class="form-check-label">Registrar Motoristas</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="perm-pode_excluir_motorista">
+                            <label class="form-check-label">Excluir Motoristas</label>
+                        </div>
+                    </div>
+                    
+                    <!-- Operacional -->
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-secondary mb-3"><i class="bi bi-gear me-2"></i>Operacional</h6>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="perm-pode_realizar_baixas">
+                            <label class="form-check-label">Realizar Baixas</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="perm-pode_ver_historico">
+                            <label class="form-check-label">Ver Historico</label>
+                        </div>
+                    </div>
+                    
+                    <!-- Gestao -->
+                    <div class="col-12">
+                        <h6 class="fw-bold text-dark mb-3"><i class="bi bi-person-gear me-2"></i>Gestao</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="perm-pode_gerenciar_usuarios">
+                                    <label class="form-check-label">Gerenciar Usuarios</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="perm-pode_alterar_permissoes">
+                                    <label class="form-check-label">Alterar Permissoes</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success rounded-pill px-4" onclick="salvarPermissoes()">
+                    <i class="bi bi-check-lg me-1"></i>Salvar Permissoes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Confirmar Exclusao -->
+<div class="modal fade" id="modalExcluir" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow-lg text-center" style="border-radius: 16px;">
+            <div class="modal-body p-4">
+                <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 3rem;"></i>
+                <h5 class="fw-bold mt-3">Excluir Usuario</h5>
+                <p class="text-muted" id="excluir-texto">Tem certeza?</p>
+                <input type="hidden" id="excluir-usuario-id">
+                <div class="d-flex gap-2 justify-content-center mt-3">
+                    <button class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                    <button class="btn btn-danger rounded-pill px-4" onclick="confirmarExclusao()">Excluir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{% static 'js/gestao_usuarios.js' %}"></script>
+{% endblock %}

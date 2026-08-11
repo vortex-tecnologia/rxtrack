@@ -1,0 +1,11 @@
+body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont;
+}
+
+.card {
+    border-radius: 16px;
+}
+
+#btn-loading {
+    margin-left: 8px;
+}

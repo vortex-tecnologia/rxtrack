@@ -1,0 +1,179 @@
+{% extends 'desktop/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid py-4" style="height: calc(100vh - 60px);">
+    <div class="row h-100">
+        <!-- LISTA DE CHAMADOS (LATERAL ESQUERDA) -->
+        <div class="col-md-4 col-lg-3 h-100 d-flex flex-column border-end bg-white rounded-start shadow-sm position-relative">
+            <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-headset"></i> Painel SAC</h5>
+                <span class="badge bg-success" id="conexao-status">Online</span>
+            </div>
+            
+            <div class="p-2 border-bottom bg-light">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                    <input type="text" id="filtro-tickets" class="form-control border-start-0 ps-0" placeholder="Buscar motorista ou NF...">
+                </div>
+            </div>
+
+            <!-- FILTRO DE ABAS -->
+            <ul class="nav nav-pills nav-fill p-2 bg-light custom-tabs" id="pills-tab" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active py-1" id="tab-abertos" data-bs-toggle="pill" data-status="abertos" type="button">Abertos <span class="badge bg-danger ms-1" id="badge-abertos" style="display:none;">0</span></button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link py-1" id="tab-meus" data-bs-toggle="pill" data-status="meus" type="button">Meus Atend. <span class="badge bg-primary ms-1" id="badge-meus" style="display:none;">0</span></button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link py-1 text-secondary" id="tab-fechados" data-bs-toggle="pill" data-status="fechados" type="button">Fechados <span class="badge bg-secondary ms-1" id="badge-fechados" style="display:none;">0</span></button>
+                </li>
+            </ul>
+
+            <div class="flex-grow-1 overflow-auto p-2" id="lista-chamados" style="background-color: #f8f9fa;">
+                <div class="text-center text-muted mt-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 small">Carregando fila...</p>
+                </div>
+            </div>
+            
+            <div class="p-2 border-top bg-light text-center small text-muted">
+                Filial: <strong id="filial-nome">{{ request.user.motorista_perfil.filial.nome }}</strong>
+                <input type="hidden" id="filial-id-config" value="{{ request.user.motorista_perfil.filial_id }}">
+            </div>
+        </div>
+
+        <!-- ÁREA DO CHAT (LATERAL DIREITA) -->
+        <div class="col-md-8 col-lg-9 h-100 d-flex flex-column bg-white rounded-end shadow-sm p-0 position-relative">
+            
+            <!-- VIEWPLACEHOLDER: Quando nenhum ticket está selecionado -->
+            <div id="chat-placeholder" class="h-100 d-flex flex-column align-items-center justify-content-center text-muted" style="background-color: #f0f2f5;">
+                <i class="bi bi-chat-square-dots opacity-25" style="font-size: 8rem;"></i>
+                <h4 class="fw-bold mt-3 opacity-50">Selecione um chamado</h4>
+                <p class="opacity-50">Clique em um ticket na barra lateral para iniciar o atendimento.</p>
+            </div>
+
+            <!-- CHAT VIEWER: Quando um ticket está ativo -->
+            <div id="chat-ativo" class="h-100 d-flex flex-column d-none">
+                <!-- HEADER DO CHAT -->
+                <div class="p-3 border-bottom bg-white d-flex justify-content-between align-items-center shadow-sm z-2">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 45px; height: 45px;">
+                            <i class="bi bi-truck fs-4"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0" id="chat-header-nome">Carregando...</h5>
+                            <small class="text-muted d-flex align-items-center gap-2">
+                                <span id="chat-header-categoria" class="badge bg-secondary">Categoria</span>
+                                <span id="chat-header-status">Aguardando...</span>
+                            </small>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <!-- BOTOES DE ACAO DO TICKET -->
+                        <button class="btn btn-success fw-bold me-2 px-4 shadow-sm" id="btn-assumir-ticket" onclick="assumirTicketAtivo()" style="display: none;">
+                            <i class="bi bi-person-check-fill me-1"></i> Assumir Atendimento
+                        </button>
+                        <button class="btn btn-outline-danger shadow-sm" id="btn-encerrar-ticket" onclick="encerrarTicketAtivo()" style="display: none;">
+                            <i class="bi bi-check2-all me-1"></i> Encerrar Chamado
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ALERTA DE SOMENTE LEITURA -->
+                <div class="alert alert-warning m-0 border-0 rounded-0 text-center py-2 d-none" id="alerta-somente-leitura">
+                    <i class="bi bi-eye-fill me-2"></i> Você está visualizando este ticket. Apenas o responsável pode responder.
+                </div>
+
+                <!-- CORPO DO CHAT -->
+                <div class="flex-grow-1 p-4 overflow-auto" id="chat-mensagens" style="background-color: #efeae2; background-image: url('data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M0 0h20v20H0z\' fill=\'%23ede6e0\'/%3E%3Cpath d=\'M20 1H0zm-10 10H0v10h10V11zm10 0H10v10h10V11z\' fill=\'%23e4dfdc\' fill-opacity=\'0.4\'/%3E%3C/svg%3E');">
+                    <!-- Mensagens são injetadas aqui -->
+                </div>
+
+                <!-- INPUT BARA DE MENSAGEM -->
+                <div class="p-3 bg-light border-top d-flex gap-2 align-items-center position-relative" id="chat-input-area" style="z-index: 10;">
+                    <button class="btn btn-light rounded-circle shadow-sm text-secondary form-control-lg d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;" onclick="document.getElementById('chat-upload-arquivo').click()">
+                        <i class="bi bi-paperclip fs-4"></i>
+                    </button>
+                    <input type="file" id="chat-upload-arquivo" class="d-none" accept="image/*,video/*,audio/*" onchange="uploadMidiaPainel()">
+                    
+                    <input type="text" class="form-control form-control-lg border-0 rounded-pill px-4 shadow-sm" id="chat-input-texto" placeholder="Digite uma mensagem..." autocomplete="off">
+                    
+                    <button class="btn btn-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 50px; height: 50px; flex-shrink: 0;" onclick="enviarMensagemPainel()">
+                        <i class="bi bi-send-fill fs-4 ms-1 mt-1"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Confirmar Encerramento -->
+<div class="modal fade" id="modalConfirmarEncerramento" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-body text-center py-4">
+                <i class="bi bi-exclamation-triangle text-warning" style="font-size: 3rem;"></i>
+                <h5 class="fw-bold mt-3">Encerrar Chamado?</h5>
+                <p class="text-muted small">Apos encerrado, nenhuma mensagem podera ser enviada ou recebida neste chamado.</p>
+                <div class="d-flex gap-2 justify-content-center mt-3">
+                    <button class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cancelar</button>
+                    <button class="btn btn-danger px-4" id="btn-confirmar-encerrar" onclick="confirmarEncerramento()">Encerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Visualizar Midia (Semelhante ao do Whatsapp) -->
+<div class="modal fade" id="modalMidia" tabindex="-1">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content bg-dark">
+            <div class="modal-header border-0 bg-transparent position-absolute w-100 z-3">
+                <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0 d-flex justify-content-center align-items-center" style="height: 100vh;">
+                <img id="visualizar-img" src="" style="max-height: 100vh; max-width: 100vw; object-fit: contain; display: none;">
+                <video id="visualizar-video" src="" controls style="max-height: 100vh; max-width: 100vw; display: none;"></video>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* CSS do Painel */
+.ticket-card { cursor: pointer; border-left: 4px solid transparent; transition: all 0.2s; }
+.ticket-card:hover { background-color: #f1f3f5; }
+.ticket-card.active { background-color: #e7f1ff; border-left: 4px solid #0d6efd; }
+.ticket-card.unread { background-color: #fff3cd; }
+
+.chat-bubble { max-width: 75%; padding: 10px 15px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); font-size: 0.95rem; }
+.chat-bubble-sac { background-color: #e7f1ff; border-radius: 15px 15px 0 15px; }
+.chat-bubble-motorista { background-color: #ffffff; border-radius: 15px 15px 15px 0; }
+
+.custom-tabs .nav-link { border-radius: 5px; color: #6c757d; font-size: 0.85rem; font-weight: bold; }
+.custom-tabs .nav-link.active { background-color: #dee2e6; color: #212529; }
+
+@keyframes ticket-flash {
+    0%, 100% { background-color: #fff3cd; }
+    50% { background-color: #ffffff; }
+}
+.ticket-card.flash-new {
+    animation: ticket-flash 1s ease-in-out 3;
+}
+.chat-bubble-sistema {
+    background-color: #e8f5e9;
+    border-radius: 10px;
+    text-align: center;
+    font-style: italic;
+    max-width: 90%;
+}
+</style>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/suporte_painel.js' %}"></script>
+{% endblock %}

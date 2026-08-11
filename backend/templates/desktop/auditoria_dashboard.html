@@ -1,0 +1,403 @@
+{% extends 'desktop/base.html' %}
+{% load static %}
+
+{% block title %}Auditoria de Processos | Quick Track{% endblock %}
+
+{% block usuario %}{{ request.user.first_name }} ({{ request.user.motorista_perfil.cargo }}){% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-center">
+        <div>
+            <h4 class="mb-1 fw-bold">Auditoria de Processos</h4>
+            <p class="text-muted small mb-0">Monitoramento de conformidade e performance de motoristas em tempo real.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary btn-sm" onclick="location.reload()">
+                <i class="bi bi-arrow-clockwise me-1"></i> Atualizar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Resumo em Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm p-3 bg-white h-100">
+            <div class="d-flex align-items-center mb-2">
+                <div class="rounded-circle bg-primary bg-opacity-10 p-2 me-3">
+                    <i class="bi bi-truck text-primary fs-4"></i>
+                </div>
+                <h6 class="mb-0 text-muted fw-semibold">MANIFESTOS ATIVOS</h6>
+            </div>
+            <h2 class="mb-0 fw-bold">{{ total_ativos }}</h2>
+            <small class="text-muted">Viagens em transporte agora</small>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-start border-danger border-4">
+            <div class="d-flex align-items-center mb-2">
+                <div class="rounded-circle bg-danger bg-opacity-10 p-2 me-3">
+                    <i class="bi bi-exclamation-triangle text-danger fs-4"></i>
+                </div>
+                <h6 class="mb-0 text-muted fw-semibold">ALERTAS CRÍTICOS</h6>
+            </div>
+            <h2 class="mb-0 fw-bold text-danger">{{ total_criticos }}</h2>
+            <small class="text-muted">Sem sinal há mais de 4h com notas pendentes</small>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-start border-warning border-4">
+            <div class="d-flex align-items-center mb-2">
+                <div class="rounded-circle bg-warning bg-opacity-10 p-2 me-3">
+                    <i class="bi bi-person-x text-warning fs-4"></i>
+                </div>
+                <h6 class="mb-0 text-muted fw-semibold">TOTAL PENALIDADES</h6>
+            </div>
+            <h2 class="mb-0 fw-bold text-warning">{{ total_penalidades }}</h2>
+            <small class="text-muted">Notas baixadas por desleixo do motorista</small>
+        </div>
+    </div>
+</div>
+
+<!-- Tabela de Auditoria -->
+<div class="card border-0 shadow-sm overflow-hidden">
+    <div class="card-header bg-white py-3 border-0">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-list-check me-2"></i>Monitoramento de Manifestos</h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="bg-light">
+                <tr>
+                    <th class="ps-4">Motorista / Filial</th>
+                    <th>Manifesto</th>
+                    <th>Início</th>
+                    <th>Progresso</th>
+                    <th>Último Sinal</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in manifestos %}
+                <tr>
+                    <td class="ps-4">
+                        <div class="d-flex align-items-center">
+                            <div class="avatar-sm bg-light rounded-circle me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                <i class="bi bi-person text-secondary"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-0 fw-bold" style="font-size: 0.9rem;">{{ item.obj.motorista.nome_completo|default:"Não Identificado" }}</h6>
+                                <small class="text-muted">{{ item.obj.filial.nome }}</small>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge bg-light text-dark border fw-medium">#{{ item.obj.numero_manifesto }}</span>
+                    </td>
+                    <td>
+                        <small class="text-muted">{{ item.obj.data_criacao|date:"d/m H:i" }}</small>
+                    </td>
+                    <td style="width: 200px;">
+                        <div class="d-flex align-items-center">
+                            <div class="progress flex-grow-1" style="height: 6px; border-radius: 10px;">
+                                <div class="progress-bar bg-{{ item.status_cor }}" role="progressbar" style="width: {{ item.progresso }}%"></div>
+                            </div>
+                            <span class="ms-2 small fw-bold">{{ item.progresso }}%</span>
+                        </div>
+                        <small class="text-muted" style="font-size: 0.75rem;">{{ item.obj.notas_pendentes }} notas pendentes</small>
+                    </td>
+                    <td>
+                        {% if item.obj.ultimo_acesso %}
+                            <div class="d-flex flex-column">
+                                <span class="badge bg-{{ item.status_cor }} bg-opacity-10 text-{{ item.status_cor }} border-{{ item.status_cor }} border rounded-pill px-2 py-1" style="font-size: 0.7rem; width: fit-content;">
+                                    <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i>
+                                    {{ item.obj.ultimo_acesso|date:"H:i" }}
+                                </span>
+                                <small class="text-muted mt-1" style="font-size: 0.7rem;">
+                                    {% if item.horas_sem_sinal == 0 %}
+                                        Sinal agora
+                                    {% else %}
+                                        Hán {{ item.horas_sem_sinal }}h
+                                    {% endif %}
+                                </small>
+                            </div>
+                        {% else %}
+                            <span class="text-muted small">Sem sinal</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-light border" onclick="abrirModalAuditoria('{{ item.obj.id }}', '{{ item.obj.numero_manifesto }}')">
+                            <i class="bi bi-search"></i> Detalhes
+                        </button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-5">
+                        <i class="bi bi-check-circle text-success fs-1 mb-3 d-block"></i>
+                        <h6 class="text-muted">Nenhum manifesto ativo no momento.</h6>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Ranking de Penalidades -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 border-0">
+                <h6 class="mb-0 fw-bold text-warning"><i class="bi bi-trophy me-2"></i>Ranking de Penalidades (Top 5)</h6>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for motorista in top_penalidades %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-3">
+                        <div>
+                            <span class="badge bg-light text-dark me-2">{{ forloop.counter }}º</span>
+                            <span class="fw-bold">{{ motorista.nota_fiscal__manifesto__motorista__nome_completo|default:"Motorista Externo" }}</span>
+                        </div>
+                        <span class="badge bg-danger rounded-pill">{{ motorista.total }} ocorrências</span>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-center py-4 text-muted">
+                        Nenhuma penalidade registrada hoje.
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100 bg-primary bg-opacity-10 border-primary border-opacity-25">
+            <div class="card-body d-flex flex-column justify-content-center align-items-center text-center p-4">
+                <i class="bi bi-shield-lock fs-1 text-primary mb-3"></i>
+                <h5 class="fw-bold text-primary">Regra de Auditoria</h5>
+                <p class="text-primary small">Baixas realizadas pelo SAC como "Desleixo" são descontadas automaticamente do prêmio de produtividade conforme política da diretoria.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Detalhes e Auditoria -->
+<div class="modal fade" id="modalAuditoria" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-dark text-white">
+                <h6 class="modal-title fw-bold" id="modalTitle">Detalhes do Manifesto</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="modalLoading" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">Carregando dados das notas...</p>
+                </div>
+                <div id="modalContent" style="display: none;">
+                    <div class="p-3 bg-light border-bottom">
+                        <div class="row text-center">
+                            <div class="col-4 border-end">
+                                <small class="text-muted d-block">Total de Notas</small>
+                                <span class="fw-bold fs-5" id="totalNotas">0</span>
+                            </div>
+                            <div class="col-4 border-end">
+                                <small class="text-muted d-block text-danger">Pendentes</small>
+                                <span class="fw-bold fs-5 text-danger" id="pendentesNotas">0</span>
+                            </div>
+                            <div class="col-4">
+                                <small class="text-muted d-block text-success">Baixadas</small>
+                                <span class="fw-bold fs-5 text-success" id="baixadasNotas">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height: 400px;">
+                        <table class="table align-middle">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th class="ps-3">Nota / Destinatário</th>
+                                    <th>Status</th>
+                                    <th class="text-end pe-3">Ações SAC</th>
+                                </tr>
+                            </thead>
+                            <tbody id="listaNotas">
+                                <!-- Preenchido via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .avatar-sm { width: 32px; height: 32px; }
+    .table thead th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; color: #6c757d; }
+    .progress-bar { transition: width 0.6s ease; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let modalAuditoria;
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        modalAuditoria = new bootstrap.Modal(document.getElementById('modalAuditoria'));
+    });
+
+    async function abrirModalAuditoria(id, numero) {
+        document.getElementById('modalTitle').innerText = `Auditoria: Manifesto #${numero}`;
+        document.getElementById('modalLoading').style.display = 'block';
+        document.getElementById('modalContent').style.display = 'none';
+        modalAuditoria.show();
+
+        try {
+            // Reutiliza a API de listagem de notas que já existe (Prefixo correto é /api/)
+            const response = await fetch(`/api/manifesto/notas/?numero_manifesto=${numero}`);
+            const data = await response.json();
+
+            // A API retorna uma lista direta de notas
+            if (Array.isArray(data)) {
+                renderizarNotas(data);
+            } else {
+                Swal.fire('Erro', 'Formato de dados inválido.', 'error');
+            }
+        } catch (err) {
+            Swal.fire('Erro', 'Falha na comunicação com o servidor.', 'error');
+        }
+    }
+
+    function renderizarNotas(notas) {
+        const tbody = document.getElementById('listaNotas');
+        tbody.innerHTML = '';
+        
+        let pendentes = 0;
+        let baixadas = 0;
+
+        notas.forEach(nota => {
+            let badgeColor = 'secondary';
+            if (nota.status === 'PENDENTE') {
+                pendentes++;
+                badgeColor = 'warning';
+            } else if (nota.status === 'BAIXADA') {
+                baixadas++;
+                badgeColor = 'success';
+            } else if (nota.status === 'OCORRENCIA') {
+                baixadas++;
+                badgeColor = 'danger';
+            } else {
+                baixadas++;
+            }
+
+            let badgesSac = '';
+            if (nota.dados_baixa && nota.dados_baixa.motivo_baixa) {
+                if (nota.dados_baixa.motivo_baixa === 'MOTORISTA_DESLEIXO') {
+                    badgesSac = '<span class="badge bg-danger rounded-pill ms-1" style="font-size: 0.65rem;">PENALIDADE (SAC)</span>';
+                } else if (nota.dados_baixa.motivo_baixa === 'APP_ERROR') {
+                    badgesSac = '<span class="badge bg-info text-dark rounded-pill ms-1" style="font-size: 0.65rem;">ERRO APP (SAC)</span>';
+                }
+            }
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="ps-3">
+                    <div class="d-flex align-items-center">
+                        <div class="fw-bold" style="font-size: 0.85rem;">NF ${nota.numero_nota}</div>
+                        ${badgesSac}
+                    </div>
+                    <small class="text-muted d-block" style="font-size: 0.75rem; max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        ${nota.destinatario}
+                    </small>
+                </td>
+                <td>
+                    <span class="badge bg-${badgeColor} bg-opacity-10 text-${badgeColor} rounded-pill">
+                        ${nota.status}
+                    </span>
+                </td>
+                <td class="text-end pe-3">
+                    ${nota.status === 'PENDENTE' ? `
+                        <button class="btn btn-sm btn-primary" onclick="realizarBaixaSAC('${nota.id}', '${nota.numero_nota}')">
+                            <i class="bi bi-check-lg"></i> Baixa Forçada
+                        </button>
+                    ` : `
+                        <div class="d-flex flex-column align-items-end">
+                            <span class="text-muted small"><i class="bi bi-info-circle"></i> Já processado</span>
+                            ${nota.dados_baixa && nota.dados_baixa.motivo_baixa ? `
+                                <small class="text-primary fw-bold" style="font-size: 0.7rem;">Por: ${nota.dados_baixa.recebedor}</small>
+                            ` : ''}
+                        </div>
+                    `}
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        document.getElementById('totalNotas').innerText = notas.length;
+        document.getElementById('pendentesNotas').innerText = pendentes;
+        document.getElementById('baixadasNotas').innerText = baixadas;
+        
+        document.getElementById('modalLoading').style.display = 'none';
+        document.getElementById('modalContent').style.display = 'block';
+    }
+
+    async function realizarBaixaSAC(notaId, numeroNota) {
+        const { value: formValues } = await Swal.fire({
+            title: `Baixa SAC - NF ${numeroNota}`,
+            html: `
+                <div class="text-start">
+                    <label class="small fw-bold mb-1">Tipo de Ocorrência:</label>
+                    <select id="swal-ocorrencia" class="form-select mb-3">
+                        <option value="01">01 - ENTREGA REALIZADA</option>
+                        <option value="1">1 - ENTREGA REALIZADA (Simplificado)</option>
+                        <option value="02">02 - ENTREGA PARCIAL</option>
+                        <option value="04">04 - RECUSA POR AVARIA</option>
+                        <option value="07">07 - ENDEREÇO NÃO LOCALIZADO</option>
+                    </select>
+                    <label class="small fw-bold mb-1">Observação Interna:</label>
+                    <textarea id="swal-obs" class="form-control" placeholder="Motivo da baixa manual pelo SAC..."></textarea>
+                </div>
+            `,
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: 'Confirmar Baixa',
+            cancelButtonText: 'Cancelar',
+            preConfirm: () => {
+                return {
+                    codigo_tms: document.getElementById('swal-ocorrencia').value,
+                    observacao: document.getElementById('swal-obs').value
+                }
+            }
+        });
+
+        if (formValues) {
+            Swal.showLoading();
+            try {
+                const response = await fetch('/auditoria/api/baixa-sac/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({
+                        nota_id: notaId,
+                        codigo_tms: formValues.codigo_tms,
+                        observacao: formValues.observacao
+                    })
+                });
+
+                const res = await response.json();
+                if (res.status === 'sucesso') {
+                    Swal.fire('Sucesso', res.mensagem, 'success').then(() => {
+                        location.reload();
+                    });
+                } else {
+                    Swal.fire('Erro', res.erro || 'Falha ao registrar baixa.', 'error');
+                }
+            } catch (err) {
+                Swal.fire('Erro', 'Falha na comunicação.', 'error');
+            }
+        }
+    }
+</script>
+{% endblock %}

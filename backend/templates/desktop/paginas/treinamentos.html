@@ -1,0 +1,175 @@
+{% extends 'desktop/base.html' %}
+
+{% block title %}Treinamentos e Dicas - Quick Track{% endblock %}
+
+{% block content %}
+<div class="row mb-4 animate__animated animate__fadeIn">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm p-4 bg-primary text-white" style="border-radius: 15px; background: linear-gradient(45deg, #0d6efd, #004bb5) !important;">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h2 class="fw-bold mb-2">Central de Treinamentos</h2>
+                    <p class="mb-0 opacity-75">Aprenda a dominar todas as ferramentas do sistema com nossos tutoriais rápidos e práticos.</p>
+                </div>
+                <div class="col-md-4 text-md-end mt-3 mt-md-0">
+                    <div class="input-group">
+                        <input type="text" class="form-control border-0 shadow-none" placeholder="O que você quer aprender hoje?">
+                        <button class="btn btn-dark border-0"><i class="bi bi-search"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    {% if videos %}
+        {% for video in videos %}
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100 overflow-hidden" style="border-radius: 12px; transition: transform 0.2s;">
+                <div class="position-relative bg-dark cursor-pointer" style="height: 180px; cursor: pointer;" onclick="abrirVideoModal({{ video.id }}, '{{ video.url_youtube }}')">
+                    <!-- Tenta extrair ID do YT básico para thumbnail (apenas visual, modal usa iframe completo) -->
+                    <img src="https://img.youtube.com/vi/{{ video.url_youtube|slice:'-11:' }}/mqdefault.jpg" class="w-100 h-100 object-fit-cover opacity-50" onerror="this.src='https://placehold.co/600x400/1a1d21/FFF?text=Video'" alt="Thumbnail">
+                    <div class="position-absolute top-50 start-50 translate-middle">
+                        <i class="bi bi-play-circle-fill text-white fs-1 shadow-sm"></i>
+                    </div>
+                </div>
+                <div class="p-3 d-flex flex-column h-100">
+                    <span class="badge bg-primary-subtle text-primary mb-2 align-self-start">TREINAMENTO</span>
+                    <h6 class="fw-bold mb-2 text-dark">{{ video.titulo }}</h6>
+                    <p class="small text-muted mb-3 flex-grow-1">{{ video.descricao|default:"Sem descrição." }}</p>
+                    
+                    <div class="d-flex justify-content-between align-items-center border-top pt-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-eye text-muted"></i>
+                            <small class="text-muted" id="view-count-{{ video.id }}">{{ video.visualizacoes }} views</small>
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="abrirVideoModal({{ video.id }}, '{{ video.url_youtube }}')">Assistir</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="col-12 text-center py-5">
+            <i class="bi bi-film text-muted" style="font-size: 3rem;"></i>
+            <h5 class="text-muted mt-3">Nenhum vídeo cadastrado ainda.</h5>
+            <p class="text-muted small">Os vídeos cadastrados no painel de administração aparecerão aqui.</p>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Modal Blindado de Vídeo -->
+<div class="modal fade" id="videoModal" tabindex="-1" aria-labelledby="videoModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg bg-dark text-white">
+            <div class="modal-header border-0 pb-0">
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" onclick="fecharVideoModal()"></button>
+            </div>
+            <div class="modal-body p-0">
+                <!-- Wrapper responsivo para Iframe -->
+                <div class="ratio ratio-16x9">
+                    <iframe id="videoIframe" src="" title="Treinamento" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                </div>
+            </div>
+            <div class="modal-footer border-0 d-flex justify-content-between align-items-center bg-dark">
+                <small class="text-muted"><i class="bi bi-play-btn-fill text-success"></i> Reprodução Padrão</small>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-light rounded-pill px-3" onclick="avaliarVideo('like')">
+                        <i class="bi bi-hand-thumbs-up-fill text-primary"></i> <span id="modal-likes">0</span>
+                    </button>
+                    <button class="btn btn-outline-light rounded-pill px-3" onclick="avaliarVideo('dislike')">
+                        <i class="bi bi-hand-thumbs-down-fill text-danger"></i> <span id="modal-dislikes">0</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentVideoId = null;
+    const videoModal = new bootstrap.Modal(document.getElementById('videoModal'));
+
+    function extrairVideoID(url) {
+        let match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})/);
+        return (match && match[1]) ? match[1] : null;
+    }
+
+    function abrirVideoModal(id, url) {
+        currentVideoId = id;
+        
+        let ytId = extrairVideoID(url);
+        if(!ytId) {
+            Swal.fire('Erro', 'URL do YouTube inválida no cadastro.', 'error');
+            return;
+        }
+
+        // Devolve os controles básicos para evitar bloqueio do YouTube e erro 153
+        let iframeUrl = `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1`;
+        
+        let iframe = document.getElementById('videoIframe');
+        iframe.src = iframeUrl;
+        
+        // Pega likes e dislikes atuais da DOM (guardados data-attributes se quisermos, ou iniciamos em ??)
+        // Por simplicidade visual, podemos deixar 0 até ele atualizar a pagina ou puxar via fetch get.
+        
+        videoModal.show();
+
+        // Dispara view na API
+        fetch(`/api/treinamentos/registrar_view/${id}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.status === 'success') {
+                document.getElementById(`view-count-${id}`).innerText = `${data.views} views`;
+            }
+        });
+    }
+
+    function fecharVideoModal() {
+        // Pausa o video removendo o src
+        document.getElementById('videoIframe').src = "";
+        currentVideoId = null;
+    }
+
+    function avaliarVideo(tipo) {
+        if(!currentVideoId) return;
+
+        fetch(`/api/treinamentos/avaliar/${currentVideoId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ tipo: tipo })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.status === 'success') {
+                if(tipo === 'like') {
+                    document.getElementById('modal-likes').innerText = data.likes;
+                    Swal.fire({toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, icon: 'success', title: 'Você curtiu!'});
+                } else {
+                    document.getElementById('modal-dislikes').innerText = data.dislikes;
+                    Swal.fire({toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, icon: 'info', title: 'Feedback recebido!'});
+                }
+            }
+        });
+    }
+</script>
+{% endblock %}

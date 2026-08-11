@@ -1,0 +1,188 @@
+name: rxtrack_homolog
+
+services:
+
+  redis:
+    image: redis:7-alpine
+    container_name: rxtrack_homolog_redis
+    restart: always
+
+    networks:
+      - rxtrack_homolog_network
+
+  backend:
+    build: ./backend
+    container_name: rxtrack_homolog_backend
+    restart: always
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    entrypoint: ["sh", "./entrypoint.sh"]
+
+    command:
+      [
+        "daphne",
+        "-b",
+        "0.0.0.0",
+        "-p",
+        "8000",
+        "--application-close-timeout",
+        "60",
+        "core.asgi:application"
+      ]
+
+    env_file:
+      - ./backend/.env
+
+    environment:
+      - RUN_SETUP=true
+
+    volumes:
+      - ./backend:/transportadora_backend
+      - rxtrack_homolog_media_data:/transportadora_backend/media
+
+    depends_on:
+      - redis
+
+    ports:
+      - "8011:8000"
+
+    networks:
+      - rxtrack_homolog_network
+
+  celery_worker:
+    build: ./backend
+    container_name: rxtrack_homolog_celery_worker
+    restart: always
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    entrypoint: ["sh", "./entrypoint.sh"]
+
+    command:
+      [
+        "celery",
+        "-A",
+        "core",
+        "worker",
+        "-l",
+        "info"
+      ]
+
+    env_file:
+      - ./backend/.env
+
+    volumes:
+      - ./backend:/transportadora_backend
+      - rxtrack_homolog_media_data:/transportadora_backend/media
+
+    depends_on:
+      - redis
+
+    networks:
+      - rxtrack_homolog_network
+
+  celery_beat:
+    build: ./backend
+    container_name: rxtrack_homolog_celery_beat
+    restart: always
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    entrypoint: ["sh", "./entrypoint.sh"]
+
+    command:
+      [
+        "celery",
+        "-A",
+        "core",
+        "beat",
+        "-l",
+        "info",
+        "--scheduler",
+        "django_celery_beat.schedulers.DatabaseScheduler"
+      ]
+
+    env_file:
+      - ./backend/.env
+
+    volumes:
+      - ./backend:/transportadora_backend
+
+    depends_on:
+      - redis
+
+    networks:
+      - rxtrack_homolog_network
+
+  celery_worker_ai:
+    build: ./backend
+    container_name: rxtrack_homolog_celery_ai
+    restart: always
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    entrypoint: ["sh", "./entrypoint.sh"]
+
+    command:
+      [
+        "celery",
+        "-A",
+        "core",
+        "worker",
+        "-l",
+        "info",
+        "-Q",
+        "ai_queue",
+        "--pool=solo",
+        "--concurrency=1"
+      ]
+
+    env_file:
+      - ./backend/.env
+
+    environment:
+      - OMP_NUM_THREADS=1
+      - OPENBLAS_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - VECLIB_MAXIMUM_THREADS=1
+      - NUMEXPR_NUM_THREADS=1
+
+    volumes:
+      - ./backend:/transportadora_backend
+      - rxtrack_homolog_media_data:/transportadora_backend/media
+
+    depends_on:
+      - redis
+
+    networks:
+      - rxtrack_homolog_network
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: rxtrack_homolog_portainer
+    restart: always
+
+    ports:
+      - "127.0.0.1:9010:9000"
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - rxtrack_homolog_portainer_data:/data
+
+    command: --admin-password '$$2b$$10$$dNxs1ay/04kVqPd8fPAEIuJ7KbI0c6x3rnRQmHKR4mJliTwtLwBQy'
+
+    networks:
+      - rxtrack_homolog_network
+
+networks:
+  rxtrack_homolog_network:
+    name: rxtrack_homolog_network
+    external: true
+volumes:
+  rxtrack_homolog_media_data:
+  rxtrack_homolog_portainer_data:

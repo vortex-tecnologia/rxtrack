@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Falha de Integração TMS</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 0;
+            color: #333333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 30px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            border-top: 5px solid #e74c3c;
+        }
+        .header {
+            background-color: #fcf8f8;
+            padding: 25px 30px;
+            text-align: center;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .header h1 {
+            color: #e74c3c;
+            margin: 0;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .content p {
+            font-size: 16px;
+            line-height: 1.6;
+            margin-top: 0;
+            color: #555555;
+        }
+        .info-card {
+            background-color: #f9fbfd;
+            border: 1px solid #e1e8ed;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 25px 0;
+        }
+        .info-row {
+            display: flex;
+            margin-bottom: 15px;
+            border-bottom: 1px dashed #e1e8ed;
+            padding-bottom: 10px;
+        }
+        .info-row:last-child {
+            margin-bottom: 0;
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        .info-label {
+            font-weight: 600;
+            width: 40%;
+            color: #666666;
+            font-size: 14px;
+        }
+        .info-value {
+            width: 60%;
+            color: #2c3e50;
+            font-weight: 500;
+            font-size: 14px;
+            word-break: break-all;
+        }
+        .error-box {
+            background-color: #fdf3f2;
+            border-left: 4px solid #e74c3c;
+            padding: 15px 20px;
+            margin: 25px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        .error-box h3 {
+            margin-top: 0;
+            color: #c0392b;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        .error-text {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+            color: #e74c3c;
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            font-size: 13px;
+            color: #888888;
+            border-top: 1px solid #eeeeee;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚠️ Falha na Integração com TMS</h1>
+        </div>
+        
+        <div class="content">
+            <p>Olá, equipe Logística.</p>
+            <p>Ocorreu uma falha ao tentar sincronizar uma baixa de nota fiscal com o TMS.</p>
+            
+            <div class="info-card">
+                <div class="info-row">
+                    <div class="info-label">Manifesto:</div>
+                    <div class="info-value">#{{ numero_manifesto }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Data de Criação (MFT):</div>
+                    <div class="info-value">{{ data_criacao_manifesto }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Motorista:</div>
+                    <div class="info-value">{{ motorista_nome }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Nota Fiscal:</div>
+                    <div class="info-value">{{ numero_nota }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Chave NF-e:</div>
+                    <div class="info-value">{{ chave_nfe }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Data da Baixa:</div>
+                    <div class="info-value">{{ data_baixa }}</div>
+                </div>
+            </div>
+
+            <div class="error-box">
+                <h3>Detalhes do Erro Retornado:</h3>
+                <div class="error-text">{{ erro }}</div>
+            </div>
+            
+            <p style="margin-bottom: 0;">Por favor, verifique o status desta nota fiscal no sistema operacional para possíveis correções manuais.</p>
+        </div>
+        
+        <div class="footer">
+            Este é um e-mail automático do sistema QuickTrack Cloud. Por favor, não responda.
+        </div>
+    </div>
+</body>
+</html>

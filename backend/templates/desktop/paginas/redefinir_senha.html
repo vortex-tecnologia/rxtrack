@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redefinir Senha - QuickTrack</title>
+    <!-- Incluindo Bootstrap direto do CDN para a página pública -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f7f6; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .card-reset { border: none; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 100%; max-width: 400px; padding: 2rem; background: #fff; }
+        .logo-img { max-width: 150px; margin-bottom: 1.5rem; }
+    </style>
+</head>
+<body>
+
+    <div class="card-reset text-center">
+        <!-- Logo -->
+        <img src="/static/images/logo_app.png" alt="QuickTrack Logo" class="logo-img">
+        
+        <h4 class="fw-bold mb-4">Redefinir Senha</h4>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} small text-start">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+
+        {% if validlink %}
+            <p class="text-muted small mb-4 text-start">Por favor, digite sua nova senha de acesso abaixo. Ela será atualizada imediatamente.</p>
+            
+            <form method="POST">
+                {% csrf_token %}
+                <div class="mb-3 text-start">
+                    <label class="form-label small fw-bold">Nova Senha</label>
+                    <input type="password" name="senha" class="form-control" required placeholder="Digite a nova senha">
+                </div>
+                <div class="mb-4 text-start">
+                    <label class="form-label small fw-bold">Confirmar Nova Senha</label>
+                    <input type="password" name="senha_confirmacao" class="form-control" required placeholder="Confirme a nova senha">
+                </div>
+                
+                <button type="submit" class="btn btn-primary w-100 fw-bold">Salvar e Acessar</button>
+            </form>
+        {% else %}
+            <div class="alert alert-danger text-start small">
+                Este link de redefinição de senha é inválido, possivelmente porque já foi usado ou expirou. Por favor, solicite um novo link.
+            </div>
+            <a href="/login/" class="btn btn-outline-secondary w-100 mt-3">Voltar ao Login</a>
+        {% endif %}
+    </div>
+
+</body>
+</html>

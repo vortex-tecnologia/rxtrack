@@ -1,0 +1,23 @@
+{
+    "name": "RXtrack SAC Mobile",
+    "short_name": "RXtrack SAC",
+    "description": "App para o Serviço de Atendimento ao Cliente",
+    "start_url": "/app-sac/",
+    "display": "standalone",
+    "background_color": "#0f172a",
+    "theme_color": "#0d6efd",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "/static/images/icon-sac-160x160.png?v=rxtrack4",
+            "sizes": "160x160",
+            "type": "image/png"
+        },
+        {
+            "src": "/static/images/icon-sac-512x512.png?v=rxtrack4",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
+

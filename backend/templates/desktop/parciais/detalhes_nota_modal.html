@@ -1,0 +1,179 @@
+{% load tz %}
+<div class="p-4 bg-primary text-white mb-0">
+    <div class="row align-items-center">
+        <div class="col-md-8">
+            <small class="text-white-50 d-block text-uppercase fw-bold mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">Chave de Acesso</small>
+            <h6 class="fw-bold mb-0" style="word-break: break-all; font-family: monospace;">{{ nota_principal.chave_acesso }}</h6>
+        </div>
+        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+            <div class="bg-white bg-opacity-25 rounded p-2 text-center">
+                <small class="d-block text-white-50 fw-bold" style="font-size: 0.6rem;">NF-E Nº</small>
+                <span class="fs-4 fw-bold">{{ nota_principal.numero_nota }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="p-4">
+    <div class="d-flex align-items-center mb-4">
+        <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-clock-history me-2 text-primary"></i>Linha do Tempo de Rastreio</h6>
+        <span class="badge bg-primary-subtle text-primary ms-auto">{{ historico.count }} Registro(s)</span>
+    </div>
+
+    <div class="accordion accordion-flush" id="accordionHistorico">
+        {% for registro in historico %}
+        {% with baixa=registro.baixa_info.all.last %}
+        <div class="accordion-item border rounded mb-3 overflow-hidden shadow-sm">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed py-3" type="button" data-bs-toggle="collapse" data-bs-target="#tentativa{{ registro.id }}">
+                    <div class="d-flex justify-content-between w-100 align-items-center me-3">
+                        <div>
+                            <div class="fw-bold text-dark small">{{ registro.manifesto.motorista.nome_completo|default:"Motorista não identificado" }}</div>
+                            <div class="text-muted" style="font-size: 0.75rem;">
+                                <i class="bi bi-truck me-1"></i>Manifesto #{{ registro.manifesto.numero_manifesto }}
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            {% if registro.status == 'BAIXADA' %}
+                                <span class="badge bg-success-subtle text-success border border-success px-3">ENTREGUE</span>
+                            {% elif registro.status == 'OCORRENCIA' %}
+                                <span class="badge bg-danger-subtle text-danger border border-danger px-3">{{ baixa.ocorrencia.descricao|default:"OCORRÊNCIA" }}</span>
+                            {% else %}
+                                <span class="badge bg-warning-subtle text-dark border border-warning px-3">PENDENTE</span>
+                            {% endif %}
+                            <div class="text-muted mt-1" style="font-size: 0.7rem;">
+                                {% if baixa %}
+                                    {{ baixa.data_baixa|localtime|date:"d/m/Y H:i" }}
+                                {% else %}
+                                    {{ registro.manifesto.data_criacao|localtime|date:"d/m/Y H:i" }}
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </button>
+            </h2>
+            <div id="tentativa{{ registro.id }}" class="accordion-collapse collapse" data-bs-parent="#accordionHistorico">
+                <div class="accordion-body bg-light border-top">
+                    <div class="row g-4">
+                        <div class="col-md-7 border-end-md">
+                            <div class="mb-3">
+                                <label class="text-muted small fw-bold d-block mb-1 text-uppercase" style="font-size: 0.65rem;">Informações da Baixa</label>
+                                <p class="mb-1 small"><strong>Recebedor:</strong> {{ baixa.recebedor|default:"Não informado" }}</p>
+                                <p class="mb-1 small"><strong>Documento:</strong> {{ baixa.documento_recebedor|default:"--" }}</p>
+                            </div>
+                            <div>
+                                <label class="text-muted small fw-bold d-block mb-1 text-uppercase" style="font-size: 0.65rem;">Observações do Motorista</label>
+                                <p class="mb-0 small text-muted italic">"{{ baixa.observacao|default:"Nenhuma observação registrada." }}"</p>
+                            </div>
+                            
+                            {% if baixa.integrado_tms %}
+                                <div class="mt-3 p-2 rounded bg-success-subtle text-success small border border-success border-opacity-25">
+                                    <i class="bi bi-cloud-check-fill me-1"></i> Transmitido ao TMS ESL em {{ baixa.data_integracao|date:"d/m/Y H:i" }}
+                                </div>
+                            {% endif %}
+
+                            {% if baixa %}
+                            <div class="mt-3 p-3 rounded border bg-white shadow-sm">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label class="text-muted small fw-bold text-uppercase mb-0" style="font-size: 0.65rem;">
+                                        <i class="bi bi-database me-1"></i>Registro de Ocorrência no Sistema
+                                    </label>
+                                    <span class="badge bg-primary-subtle text-primary" style="font-size: 0.65rem;">ID #{{ baixa.id }}</span>
+                                </div>
+                                <div class="row g-2 small">
+                                    <div class="col-6">
+                                        <span class="text-muted d-block" style="font-size: 0.65rem;">Tipo</span>
+                                        <strong>{{ baixa.get_tipo_display }}</strong>
+                                    </div>
+                                    <div class="col-6">
+                                        <span class="text-muted d-block" style="font-size: 0.65rem;">Ocorrência</span>
+                                        <strong>{{ baixa.ocorrencia.codigo_tms|default:"--" }}</strong>
+                                        <span class="text-muted">{{ baixa.ocorrencia.descricao|default:"" }}</span>
+                                    </div>
+                                    <div class="col-6">
+                                        <span class="text-muted d-block" style="font-size: 0.65rem;">Data do Registro</span>
+                                        <strong>{{ baixa.data_baixa|localtime|date:"d/m/Y H:i" }}</strong>
+                                    </div>
+                                    <div class="col-6">
+                                        <span class="text-muted d-block" style="font-size: 0.65rem;">Motivo</span>
+                                        <strong>{{ baixa.get_motivo_baixa_display|default:"--" }}</strong>
+                                    </div>
+                                </div>
+                                <div class="mt-3 d-flex gap-2">
+                                    <button type="button" 
+                                            class="btn btn-outline-danger btn-sm flex-fill fw-bold" 
+                                            onclick="confirmarDeletarOcorrencia('{{ registro.id }}', '{{ registro.numero_nota|escapejs }}', '{{ baixa.ocorrencia.descricao|default:"Sem descrição"|escapejs }}', {{ baixa.integrado_tms|yesno:'true,false' }})"
+                                            title="Deletar esta ocorrência e reverter nota para Pendente">
+                                        <i class="bi bi-trash me-1"></i>Deletar Ocorrência
+                                    </button>
+                                </div>
+                                {% if baixa.integrado_tms %}
+                                <div class="mt-2 p-2 rounded bg-warning-subtle text-warning-emphasis small border border-warning border-opacity-25">
+                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                    <strong>Atenção:</strong> Esta ocorrência já foi transmitida ao TMS ESL. A exclusão reverterá apenas no nosso sistema.
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-5 text-center">
+                            <label class="text-muted small fw-bold d-block mb-2 text-uppercase" style="font-size: 0.65rem;">Comprovante / Canhoto</label>
+                            {% if baixa.comprovante_foto_url %}
+                                <div class="mb-2">
+                                    <a href="{{ baixa.comprovante_foto_url }}" target="_blank" class="d-inline-block position-relative">
+                                        <img src="{{ baixa.comprovante_foto_url }}" class="img-fluid rounded shadow-sm border" style="max-height: 160px; object-fit: contain;">
+                                        <span class="position-absolute bottom-0 end-0 bg-dark bg-opacity-75 text-white p-1 rounded-start small" title="Foto Processada">
+                                            <i class="bi bi-cpu"></i>
+                                        </span>
+                                    </a>
+                                </div>
+                                <div class="d-flex justify-content-center gap-2 mb-2">
+                                    {% if baixa.ia_yolo_status %}
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle small">
+                                            <i class="bi bi-check-circle me-1"></i>IA: Canhoto OK
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle small">
+                                            <i class="bi bi-x-circle me-1"></i>IA: Canhoto Falhou
+                                        </span>
+                                    {% endif %}
+
+                                    {% if baixa.ia_ocr_status %}
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle small">
+                                            <i class="bi bi-eye me-1"></i>IA: Leitura OK
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle small">
+                                            <i class="bi bi-eye-slash me-1"></i>IA: Leitura Falhou
+                                        </span>
+                                    {% endif %}
+                                </div>
+                                {% if baixa.comprovante_original_url and baixa.comprovante_original_url != baixa.comprovante_foto_url %}
+                                    <div class="mt-2">
+                                        <label class="text-muted" style="font-size: 0.6rem; display: block;">FOTO ORIGINAL (BACKUP)</label>
+                                        <a href="{{ baixa.comprovante_original_url }}" target="_blank" class="d-inline-block opacity-75">
+                                            <img src="{{ baixa.comprovante_original_url }}" class="img-fluid rounded border" style="max-height: 80px; filter: grayscale(50%);">
+                                        </a>
+                                    </div>
+                                {% endif %}
+                            {% else %}
+                                <div class="py-4 px-3 bg-white border border-dashed rounded text-muted">
+                                    <i class="bi bi-camera-off d-block fs-3 mb-2 opacity-50"></i>
+                                    <span class="small">Sem evidência fotográfica</span>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endwith %}
+        {% empty %}
+        <div class="text-center py-5">
+            <i class="bi bi-search fs-1 text-muted opacity-25 d-block mb-3"></i>
+            <p class="text-muted">Nenhum histórico encontrado para esta chave no banco de dados.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>

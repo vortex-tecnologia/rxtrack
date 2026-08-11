@@ -1,0 +1,1043 @@
+{% extends "desktop/base.html" %}
+{% load static %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block usuario %}{{ usuario_nome }}{% endblock %}
+{% block extra_head %}
+<meta http-equiv="refresh" content="180">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold">Gestão de Manifestos</h3>
+        <div class="d-flex align-items-center">
+            <span class="badge bg-light text-dark border shadow-sm p-2 me-2">
+                <i class="bi bi-arrow-clockwise me-1 text-primary"></i>
+                Próxima atualização em: <span id="timer-regressivo" class="fw-bold">03:00</span>
+            </span>
+            <div id="status-ws" class="badge bg-danger p-2 me-2 shadow-sm" style="border-radius: 20px; min-width: 120px;">
+                <i class="fas fa-circle me-2"></i>DESCONECTADO
+            </div>
+            <button class="btn btn-success shadow-sm" onclick="abrirModalImportarManifesto()">
+                <i class="bi bi-cloud-download me-1"></i> Importar Manifesto
+            </button>
+        </div>
+    </div>
+
+    <!-- Log de Importações Recentes -->
+    <div class="mb-4">
+        <button class="btn btn-sm btn-outline-secondary mb-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseLogs">
+            <i class="bi bi-list-task me-1"></i> Ver Últimas Importações
+        </button>
+        <div class="collapse" id="collapseLogs">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm table-hover mb-0" style="font-size: 0.85rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Manifesto</th>
+                                    <th>Motorista</th>
+                                    <th>Notas</th>
+                                    <th>Status</th>
+                                    <th>Mensagem/Erro</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in ultimos_logs %}
+                                <tr>
+                                    <td class="text-nowrap">{{ log.criado_em|date:"d/m H:i" }}</td>
+                                    <td class="fw-bold">#{{ log.numero_manifesto }}</td>
+                                    <td>{{ log.motorista.nome_completo }}</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary">{{ log.quantidade_notas }}</span>
+                                    </td>
+                                    <td>
+                                        {% if log.status == 'PROCESSADO' %}
+                                            <span class="badge bg-success">Sucesso</span>
+                                        {% elif log.status == 'ERRO' %}
+                                            <span class="badge bg-danger">Erro</span>
+                                        {% elif log.status == 'AGUARDANDO' or log.status == 'ENRIQUECENDO' %}
+                                            <span class="badge bg-info">Processando...</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ log.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="small text-danger">{{ log.mensagem_erro|default:"-" }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center py-2 text-muted">Nenhuma importação recente.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer bg-white border-top-0 text-center py-2">
+                    <button class="btn btn-link btn-sm text-decoration-none" onclick="abrirModalHistoricoLogs()">
+                        <i class="bi bi-clock-history me-1"></i> Ver Histórico Completo
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-2">
+                    <label class="small fw-bold text-muted">Filial</label>
+                    <select name="filial" class="form-select">
+                        <option value="todas" {% if filial_selecionada == 'todas' %}selected{% endif %}>Todas as Filiais</option>
+                        {% for f in filiais %}
+                        <option value="{{ f.id }}" {% if filial_selecionada == f.id|stringformat:"i" %}selected{% endif %}>
+                            {{ f.nome }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-2">
+                    <label class="small fw-bold text-muted">Nº Manifesto</label>
+                    <input type="text" name="numero" class="form-control form-control-sm"
+                        value="{{ request.GET.numero }}">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="small fw-bold text-muted">Motorista</label>
+                    <input type="text" name="motorista" class="form-control form-control-sm"
+                        value="{{ request.GET.motorista }}">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="small fw-bold text-muted">Data</label>
+                    <input type="date" name="data" class="form-control form-control-sm" value="{{ request.GET.data }}">
+                </div>
+
+                <div class="col-md-2 d-flex align-items-end gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-filter"></i></button>
+                    <a href="?" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-circle"></i></a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Número</th>
+                        <th>Motorista</th>
+                        <th>Status</th>
+                        <th style="width: 250px;">Progresso de Entrega</th>
+                        <th class="text-center" title="Bateria do Celular">Bateria</th>
+                        <th class="text-center">Último Acesso</th>
+                        <th class="text-center">Rastreio</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in manifestos %}
+                    <tr data-manifesto-id="{{ m.numero_manifesto }}"
+                        data-lat="{{ m.ultima_lat|default:'' }}"
+                        data-lng="{{ m.ultima_lng|default:'' }}"
+                        data-bateria="{{ m.ultima_bateria|default:'' }}"
+                        data-rede="{{ m.ultima_rede|default:'' }}"
+                        data-ultimo-acesso="{{ m.ultimo_acesso|date:'c'|default:'' }}">
+                        <td class="fw-bold text-primary">#{{ m.numero_manifesto }}</td>
+                        <td>
+                            <div class="small fw-bold d-flex align-items-center gap-1">
+                                <span>{{ m.motorista.nome_completo }}</span>
+                                {{ m.motorista.icone_dispositivo_html|safe }}
+                            </div>
+                            <small class="text-muted">{{ m.motorista.cpf }}</small>
+                        </td>
+
+                        <td>
+                            {% if m.status == 'EM_TRANSPORTE' %}
+                            <span class="badge bg-info">Em Rota</span>
+                            {% elif m.status == 'FINALIZADO' %}
+                            <span class="badge bg-success">Finalizado</span>
+                            {% elif m.status == 'CANCELADO' %}
+                            <span class="badge bg-danger">Cancelado</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">Aguardando</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% with progresso=m.notas_concluidas|default:0|add:0 %}
+                            {% with total=m.total_notas|default:1 %}
+                            {# Cálculo simples de porcentagem via template tag custom ou lógica direta #}
+                            {% widthratio m.notas_concluidas m.total_notas 100 as porcentagem %}
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="progress w-100" style="height: 8px;">
+                                    <div class="progress-bar {% if porcentagem == '100' %}bg-success{% else %}bg-primary{% endif %}"
+                                        role="progressbar" style="width: {{ porcentagem }}%"></div>
+                                </div>
+                                <small class="fw-bold text-muted">{{ porcentagem }}%</small>
+                            </div>
+                            <div style="font-size: 0.65rem;" class="text-muted text-center mt-1">
+                                {{ m.notas_concluidas }} de {{ m.total_notas }} notas concluídas
+                            </div>
+                            {% endwith %}
+                            {% endwith %}
+                        </td>
+                        <td class="text-center" id="battery-mft-{{ m.numero_manifesto }}">
+                            {% if m.status == 'EM_TRANSPORTE' %}
+                            <div class="d-inline-flex flex-column align-items-center justify-content-center w-100">
+                                {% if m.ultima_bateria is not None %}
+                                    {% if m.ultima_bateria > 80 %}
+                                        <i class="bi bi-battery-full text-success" style="font-size: 1.2rem;"></i>
+                                        <small class="text-success">{{ m.ultima_bateria }}%</small>
+                                    {% elif m.ultima_bateria > 50 %}
+                                        <i class="bi bi-battery-half text-info" style="font-size: 1.2rem;"></i>
+                                        <small class="text-info">{{ m.ultima_bateria }}%</small>
+                                    {% elif m.ultima_bateria > 20 %}
+                                        <i class="bi bi-battery-half text-warning" style="font-size: 1.2rem;"></i>
+                                        <small class="text-warning">{{ m.ultima_bateria }}%</small>
+                                    {% else %}
+                                        <i class="bi bi-battery-low text-danger" style="font-size: 1.2rem;"></i>
+                                        <small class="text-danger">{{ m.ultima_bateria }}%</small>
+                                    {% endif %}
+                                {% else %}
+                                    <i class="bi bi-battery text-muted" style="font-size: 1.2rem;"></i>
+                                    <small class="text-muted">--%</small>
+                                {% endif %}
+                                <div class="badge bg-light text-dark border-0 mt-1" style="font-size: 0.65rem;" id="network-mft-{{ m.numero_manifesto }}">
+                                    {{ m.ultima_rede|default:"--" }}
+                                </div>
+                            </div>
+                            {% else %}
+                            <span class="text-muted">--</span>
+                            {% endif %}
+                        </td>
+                        <td class="small text-nowrap text-center" id="last-seen-mft-{{ m.numero_manifesto }}">
+                            {% if m.status == 'EM_TRANSPORTE' %}
+                            <div class="text-muted" style="font-size: 0.9rem; font-weight: bold; text-align: center;">
+                                {{ m.ultimo_acesso|date:"H:i"|default:"--:--" }}
+                            </div>
+                            {% else %}
+                            <span class="text-muted">--:--</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if m.status == 'EM_TRANSPORTE' %}
+                            <button class="btn btn-sm btn-info text-white" 
+                                    onclick="abrirRastreamentoRealTime('{{ m.numero_manifesto }}', '{{ m.motorista.nome_completo|escapejs }}', '{{ m.ultima_lat|default:'' }}', '{{ m.ultima_lng|default:'' }}')" 
+                                    title="Rastrear em Tempo Real">
+                                <i class="bi bi-geo-alt-fill"></i>
+                            </button>
+                            {% elif m.status == 'FINALIZADO' %}
+                            <button class="btn btn-sm btn-success text-white" 
+                                    onclick="abrirRastreioBaixas('{{ m.numero_manifesto }}', '{{ m.motorista.nome_completo|escapejs }}', '{{ m.notas_concluidas }}', '{{ m.total_notas }}')" 
+                                    title="Ver Locais de Baixa">
+                                <i class="bi bi-geo-alt-fill"></i>
+                            </button>
+                            {% else %}
+                            <i class="bi bi-geo text-muted opacity-25"></i>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-primary" onclick="verDetalhesManifesto('{{ m.id }}')" title="Ver Detalhes">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary"
+                                    onclick="abrirEdicaoManifesto('{{ m.id }}')" title="Editar">
+                                    <i class="bi bi-pencil-square"></i>
+                                </button>
+                                {% if m.status == 'EM_TRANSPORTE' %}
+                                <button class="btn btn-sm btn-outline-secondary"
+                                    onclick="sincronizarManifesto('{{ m.id }}')" title="Sincronizar com TMS">
+                                    <i class="bi bi-arrow-repeat"></i>
+                                </button>
+                                {% endif %}
+                                <button class="btn btn-sm btn-outline-danger"
+                                    onclick="confirmarExclusaoManifesto('{{ m.id }}', '{{ m.numero_manifesto }}', '{{ m.motorista.nome_completo }}')"
+                                    title="Deletar">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center py-4 text-muted">Nenhum manifesto encontrado.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Importar Manifesto Admin -->
+<div class="modal fade" id="modalImportarManifesto" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-cloud-download me-2"></i>Importar Manifesto TMS
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="formImportarManifesto">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted text-uppercase">Número do Manifesto (TMS)</label>
+                        <input type="number" class="form-control form-control-lg fw-bold" name="numero_manifesto" required placeholder="Ex: 58134">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted text-uppercase">Selecionar Motorista</label>
+                        <select class="form-select" name="motorista_id" required>
+                            <option value="">Escolha o motorista...</option>
+                            {% for m in motoristas_list %}
+                                <option value="{{ m.id }}">{{ m.nome_completo }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="alert alert-info border-0 shadow-sm small mb-0">
+                        <i class="bi bi-info-circle me-2"></i>
+                        A importação criará o manifesto e todas as suas notas fiscais automaticamente vinculadas ao motorista escolhido.
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light border-0">
+                <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success px-4 fw-bold" onclick="importarManifestoAdmin(this)">
+                    <i class="bi bi-check2-circle me-1"></i> Iniciar Importação
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalConfirmarExclusao" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>Atenção</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center p-4">
+                <i class="bi bi-trash text-danger mb-3" style="font-size: 3rem;"></i>
+                <h5 class="fw-bold">Tem certeza que deseja deletar este manifesto?</h5>
+                <p class="text-muted mt-2">Manifesto <span id="span_excluir_numero" class="fw-bold"></span> do motorista
+                    <span id="span_excluir_motorista" class="fw-bold"></span>.
+                </p>
+                <p class="small text-danger">Esta ação é irreversível e todas as notas ligadas a este manifesto também
+                    serão afetadas.</p>
+                <input type="hidden" id="input_excluir_id">
+            </div>
+            <div class="modal-footer bg-light justify-content-center">
+                <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger px-4" id="btn_confirmar_exclusao"
+                    onclick="deletarManifesto()">
+                    Sim, Deletar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+</div>
+
+<!-- Modal Histórico de Importações -->
+<div class="modal fade" id="modalHistoricoImportacoes" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-clock-history me-2"></i>Histórico Completo de Importações
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="tabelaHistoricoLogs">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Data/Hora</th>
+                                <th>Manifesto</th>
+                                <th>Motorista</th>
+                                <th class="text-center">Notas</th>
+                                <th>Status</th>
+                                <th>Mensagem</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Preenchido via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalGenerico" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" id="modalGenericoConteudo">
+            <div class="modal-body text-center p-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Carregando...</span>
+                </div>
+                <p class="mt-2">Carregando informações...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Rastreamento em Tempo Real -->
+<div class="modal fade" id="modalRastreamento" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 20px; overflow: hidden;">
+            <div class="modal-header bg-dark text-white border-0 py-3">
+                <div class="d-flex align-items-center">
+                    <div class="p-2 bg-primary rounded-circle me-3">
+                        <i class="bi bi-truck text-white"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold m-0" id="rastreamento-titulo">Rastreando Motorista</h5>
+                        <p class="text-light small m-0 opacity-75">Manifesto: <span id="rastreamento-mft">--</span></p>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0 position-relative">
+                <div id="mapa-rastreamento" style="height: 600px; width: 100%;"></div>
+                
+                <!-- Overlay de Status no Mapa -->
+                <div class="position-absolute top-0 start-0 m-3 p-3 bg-white rounded shadow-sm border" style="z-index: 1000; min-width: 200px; border-radius: 12px !important;">
+                    <div class="fw-bold mb-2 border-bottom pb-1">Status Atual</div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted small">Bateria:</span>
+                        <span id="mapa-status-bat" class="fw-bold">--</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted small">Sinal:</span>
+                        <span id="mapa-status-rede" class="badge bg-light text-dark">--</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted small">Último Sinal:</span>
+                        <span id="mapa-status-visto" class="text-primary fw-bold">--</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-0">
+                <button type="button" class="btn btn-secondary px-4 fw-bold" data-bs-dismiss="modal">Fechar Monitoramento</button>
+            </div>
+        </div>
+</div>
+    </div>
+</div>
+
+<!-- Modal de Locais de Baixa -->
+<div class="modal fade" id="modalRastreioBaixas" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold text-primary">
+                    <i class="bi bi-geo-alt-fill me-2"></i>Locais de Baixa - Manifesto #<span id="rastreio_numero"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body p-0">
+                <div class="p-3 border-bottom bg-white">
+                    <div class="row align-items-center">
+                        <div class="col-md-6 d-flex align-items-center">
+                            <div class="bg-primary text-white rounded p-2 me-3">
+                                <i class="bi bi-truck fs-4"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-0 fw-bold" id="rastreio_motorista"></h6>
+                                <small class="text-muted">Motorista Responsável</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="text-muted fw-bold">Progresso da Rota</small>
+                                <small class="fw-bold text-primary" id="rastreio_progresso_texto"></small>
+                            </div>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                                     id="rastreio_progresso_barra" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="mapaRastreioBaixas" style="height: 500px; width: 100%; border-radius: 0 0 10px 10px; z-index: 1;"></div>
+            </div>
+            <div class="modal-footer bg-light border-0">
+                <small class="text-muted me-auto">Locais onde o motorista tirou as fotos das entregas/ocorrências</small>
+                <button type="button" class="btn btn-secondary px-4 fw-bold" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .custom-div-icon {
+        background: transparent;
+        border: none;
+    }
+</style>
+
+<script>
+    function abrirEdicaoManifesto(id) {
+        const modalElement = document.getElementById('modalGenerico');
+        const modalConteudo = document.getElementById('modalGenericoConteudo');
+        const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+
+        // 1. Loading Imediato
+        modalConteudo.innerHTML = `
+        <div class="modal-body text-center p-5">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-3">Carregando dados para edição...</p>
+        </div>
+    `;
+        modalInstance.show();
+
+        // 2. Busca o formulário preenchido
+        fetch(`/api/manifesto/editar-modal/${id}/`)
+            .then(response => response.text())
+            .then(html => {
+                modalConteudo.innerHTML = html;
+            })
+            .catch(err => {
+                modalConteudo.innerHTML = `<div class="p-4 text-danger">Erro: ${err.message}</div>`;
+            });
+    }
+    // 3. Função para Salvar via AJAX
+    function salvarEdicaoManifesto(event, id) {
+        event.preventDefault();
+        const form = event.target;
+        const formData = new FormData(form);
+        const modalConteudo = document.getElementById('modalGenericoConteudo');
+
+        // 1. Validação de KM (como conversamos antes)
+        const kmIni = parseFloat(form.querySelector('[name="km_inicial"]').value.replace(',', '.')) || 0;
+        const kmFin = parseFloat(form.querySelector('[name="km_final"]').value.replace(',', '.')) || 0;
+
+        if (kmFin > 0 && kmFin < kmIni) {
+            // Em vez de alert, podemos usar um aviso no próprio formulário ou apenas console
+            console.error("KM Final menor que Inicial");
+            return;
+        }
+
+        // 2. Loading no Botão
+        const btnSubmit = form.querySelector('button[type="submit"]');
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Salvando...';
+
+        // 3. Envio AJAX
+        fetch(`/api/manifesto/salvar-edicao/${id}/`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // SUCESSO: Limpa o modal e mostra mensagem bonita
+                    modalConteudo.innerHTML = `
+                <div class="modal-body text-center p-5">
+                    <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+                    <h4 class="mt-3">Atualizado com Sucesso!</h4>
+                    <p class="text-muted">Os dados do manifesto foram sincronizados.</p>
+                </div>
+            `;
+
+                    // Aguarda 1.5 segundos e recarrega a página
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+
+                } else {
+                    // ERRO: Volta o botão ao normal e mostra o erro (sem alert)
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = '<i class="bi bi-save me-1"></i> Atualizar Dados';
+                    console.error(data.message);
+                }
+            })
+            .catch(err => {
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = '<i class="bi bi-save me-1"></i> Atualizar Dados';
+                console.error("Erro na requisição:", err);
+            });
+    }
+
+    // Função para abrir o Modal para Detalhes do Manifesto
+    function verDetalhesManifesto(manifestoId) {
+        if (!manifestoId) return;
+
+        const modalElement = document.getElementById('modalGenerico');
+        const modalConteudo = document.getElementById('modalGenericoConteudo');
+
+        // Inicia a instância do modal
+        const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+
+        // 1. INTERAÇÃO IMEDIATA: Coloca o loading antes de disparar o fetch
+        modalConteudo.innerHTML = `
+        <div class="modal-body text-center p-5">
+            <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+            <h5 class="mt-3 text-muted">Sincronizando dados com o servidor...</h5>
+            <p class="small text-secondary">Aguarde um momento.</p>
+        </div>
+    `;
+
+        modalInstance.show();
+
+        // 2. BUSCA DOS DADOS
+        fetch(`/api/manifesto/detalhes-modal/${manifestoId}/`)
+            .then(response => {
+                if (!response.ok) throw new Error(`Erro ${response.status}: Falha ao comunicar com o servidor.`);
+                return response.text();
+            })
+            .then(html => {
+                // 3. SUCESSO: Renderiza a lista e a barra de progresso
+                modalConteudo.innerHTML = html;
+            })
+            .catch(err => {
+                // 4. ERRO: Mostra o erro dentro do modal para o usuário saber o que houve
+                modalConteudo.innerHTML = `
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">Ops! Algo deu errado</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center p-4">
+                    <i class="bi bi-exclamation-octagon text-danger" style="font-size: 3rem;"></i>
+                    <p class="mt-3 fw-bold">${err.message}</p>
+                    <p class="text-muted small">Tente novamente em instantes ou contate o suporte.</p>
+                    <button class="btn btn-secondary mt-2" data-bs-dismiss="modal">Fechar</button>
+                </div>
+            `;
+            });
+    }
+
+    // Reutiliza a função de ontem para abrir os detalhes da NF de dentro do manifesto
+    function verDetalhesNF(chaveAcesso) {
+        // Redireciona para a página de Notas Fiscais
+        // Passando o parâmetro 'q' (ou o nome que você usa no seu filtro de busca)
+        window.location.href = `/notas-fiscais/?q=${chaveAcesso}`;
+    }
+
+    // 3. ADICIONE o novo cronômetro regressivo
+    // Configuração do cronômetro: 180 segundos = 3 minutos
+    let tempoRestante = 180;
+
+    function iniciarTimerRegressivo() {
+        const display = document.getElementById('timer-regressivo');
+
+        const intervalo = setInterval(function () {
+            // Calcula minutos e segundos
+            let minutos = Math.floor(tempoRestante / 60);
+            let segundos = tempoRestante % 60;
+
+            // CORREÇÃO: Usando a variável correta 'minutos'
+            let minFormatado = minutos < 10 ? '0' + minutos : minutos;
+            let segFormatado = segundos < 10 ? '0' + segundos : segundos;
+
+            // Atualiza o texto na tela
+            if (display) {
+                display.innerText = `${minFormatado}:${segFormatado}`;
+            }
+
+            // Se chegar a zero, limpa o intervalo e recarrega
+            if (--tempoRestante < 0) {
+                clearInterval(intervalo);
+                location.reload();
+            }
+        }, 1000);
+    }
+
+    // Inicia assim que a página carregar
+    document.addEventListener('DOMContentLoaded', iniciarTimerRegressivo);
+
+    // Função auxiliar para pegar o cookie CSRF (caso não tenha no seu arquivo)
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // ----------------------------------------------------
+    // BOTÃO SINCRONIZAR MANIFESTO
+    // ----------------------------------------------------
+    function sincronizarManifesto(manifestoId) {
+        const modalElement = document.getElementById('modalGenerico');
+        const modalConteudo = document.getElementById('modalGenericoConteudo');
+        const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+
+        // 1. Mostrar loading
+        modalConteudo.innerHTML = `
+            <div class="modal-body text-center p-5">
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+                <h5 class="mt-3 text-muted">Aguarde...</h5>
+                <p class="small text-secondary">Iniciando sincronização com o TMS.</p>
+            </div>
+        `;
+        modalInstance.show();
+
+        // 2. Fazer o Request
+        fetch(`/api/manifesto/sincronizar/${manifestoId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(response => {
+                if (!response.ok) throw new Error('Falha ao comunicar com o servidor.');
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    modalConteudo.innerHTML = `
+                    <div class="modal-body text-center p-5">
+                        <i class="bi bi-clock-history text-primary" style="font-size: 4rem;"></i>
+                        <h4 class="mt-3 fw-bold">Sincronização Iniciada</h4>
+                        <p class="text-muted">A busca por novas notas está sendo executada no servidor. Em breve as novas NFs aparecerão na lista.</p>
+                        <button class="btn btn-primary mt-3 px-4" data-bs-dismiss="modal">Entendi</button>
+                    </div>
+                `;
+                    // Atualiza automaticamente após 3 segundos para mostrar progresso (se aplicável na página principal)
+                    setTimeout(() => location.reload(), 3000);
+                } else {
+                    throw new Error(data.message);
+                }
+            })
+            .catch(err => {
+                modalConteudo.innerHTML = `
+                <div class="modal-header bg-danger text-white border-0">
+                    <h5 class="modal-title">Erro na Sincronização</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center p-4">
+                    <i class="bi bi-x-circle-fill text-danger mb-3" style="font-size: 3rem;"></i>
+                    <p class="mt-2 fw-bold text-dark">${err.message}</p>
+                    <button class="btn btn-secondary mt-3" data-bs-dismiss="modal">Fechar</button>
+                </div>
+            `;
+            });
+    }
+
+    // ----------------------------------------------------
+    // BOTÃO DELETAR MANIFESTO
+    // ----------------------------------------------------
+    function confirmarExclusaoManifesto(id, numero, motorista) {
+        document.getElementById('span_excluir_numero').innerText = '#' + numero;
+        document.getElementById('span_excluir_motorista').innerText = motorista;
+        document.getElementById('input_excluir_id').value = id;
+
+        // Reseta o botão caso ele tenha ficado em Loading num erro anterior
+        const btn = document.getElementById('btn_confirmar_exclusao');
+        btn.disabled = false;
+        btn.innerHTML = 'Sim, Deletar';
+
+        const modal = new bootstrap.Modal(document.getElementById('modalConfirmarExclusao'));
+        modal.show();
+    }
+
+    function deletarManifesto() {
+        const id = document.getElementById('input_excluir_id').value;
+        const btnSubmit = document.getElementById('btn_confirmar_exclusao');
+
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Deletando...';
+
+        fetch(`/api/manifesto/deletar/${id}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(response => {
+                if (!response.ok) throw new Error('Erro no servidor ao solicitar deleção.');
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    // Pode dar um reload direto ou sumir com a linha
+                    location.reload();
+                } else {
+                    throw new Error(data.message);
+                }
+            })
+            .catch(err => {
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = 'Sim, Deletar';
+                alert('Erro ao excluir: ' + err.message);
+            });
+    }
+
+
+    function abrirModalImportarManifesto() {
+        const modal = new bootstrap.Modal(document.getElementById('modalImportarManifesto'));
+        modal.show();
+    }
+
+    function importarManifestoAdmin(btn) {
+        const form = document.getElementById('formImportarManifesto');
+        const formData = new FormData(form);
+        const modalElement = document.getElementById('modalImportarManifesto');
+        const modalInstance = bootstrap.Modal.getInstance(modalElement);
+        
+        const data = {};
+        formData.forEach((value, key) => data[key] = value);
+
+        if (!data.numero_manifesto || !data.motorista_id) {
+            Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Preencha todos os campos.' });
+            return;
+        }
+
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Iniciando...';
+
+        fetch('/api/manifesto/importar-admin/', {
+            method: 'POST',
+            body: JSON.stringify(data),
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        })
+        .then(async response => {
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.erro || 'Erro ao processar requisição');
+            }
+            return result;
+        })
+        .then(result => {
+            if (result.status === 'AGUARDANDO') {
+                // Em vez de fechar e dar tchau, vamos avisar que estamos processando
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Importando dados...';
+                esperarImportacao(result.log_id, btn, modalInstance);
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            Swal.fire({
+                icon: 'error',
+                title: 'Erro no Pedido',
+                text: err.message
+            });
+        });
+    }
+
+    function esperarImportacao(logId, btn, modalInstance) {
+        const checkStatus = () => {
+            fetch(`/api/manifesto/importar-status/${logId}/`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'PROCESSADO') {
+                    modalInstance.hide();
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Sucesso!',
+                        text: 'Manifesto importado com sucesso.',
+                        confirmButtonText: 'Ótimo'
+                    }).then(() => location.reload());
+                } else if (data.status === 'ERRO') {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Reiniciar Importação';
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Falha na Importação',
+                        text: data.mensagem_erro || 'Erro desconhecido durante o processamento.'
+                    });
+                } else {
+                    // Continua aguardando (ENRIQUECENDO, AGUARDANDO, etc)
+                    setTimeout(checkStatus, 2000);
+                }
+            })
+            .catch(err => {
+                console.error('Erro ao checar status:', err);
+                setTimeout(checkStatus, 5000);
+            });
+        };
+        checkStatus();
+    }
+
+    function abrirModalHistoricoLogs() {
+        const modalElement = document.getElementById('modalHistoricoImportacoes');
+        const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+        const tbody = document.querySelector('#tabelaHistoricoLogs tbody');
+        
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4"><div class="spinner-border spinner-border-sm me-2"></div>Carregando histórico...</td></tr>';
+        modal.show();
+
+        fetch('/api/manifesto/importar-logs/')
+            .then(res => res.json())
+            .then(data => {
+                tbody.innerHTML = '';
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">Nenhum log encontrado.</td></tr>';
+                    return;
+                }
+
+                data.forEach(log => {
+                    let statusBadge = '';
+                    if (log.status === 'PROCESSADO') statusBadge = '<span class="badge bg-success">Sucesso</span>';
+                    else if (log.status === 'ERRO') statusBadge = '<span class="badge bg-danger">Erro</span>';
+                    else statusBadge = `<span class="badge bg-info">${log.status}</span>`;
+
+                    const row = `
+                        <tr>
+                            <td class="text-nowrap">${log.data}</td>
+                            <td class="fw-bold">#${log.numero}</td>
+                            <td>${log.motorista}</td>
+                            <td class="text-center"><span class="badge bg-secondary">${log.quantidade_notas}</span></td>
+                            <td>${statusBadge}</td>
+                            <td class="small text-muted">${log.erro || '-'}</td>
+                        </tr>
+                    `;
+                    tbody.insertAdjacentHTML('beforeend', row);
+                });
+            })
+            .catch(err => {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-danger">Erro ao carregar dados.</td></tr>';
+                console.error(err);
+            });
+    }
+
+    let mapaEntregaBaixas = null;
+
+    function abrirRastreioBaixas(manifestoId, nomeMotorista, progresso, totalNfs) {
+        document.getElementById('rastreio_numero').innerText = manifestoId;
+        document.getElementById('rastreio_motorista').innerText = nomeMotorista;
+        document.getElementById('rastreio_progresso_texto').innerText = `${progresso}/${totalNfs} NFs`;
+
+        let calculoProgresso = (parseInt(progresso) / parseInt(totalNfs)) * 100;
+        document.getElementById('rastreio_progresso_barra').style.width = (calculoProgresso || 0) + '%';
+
+        const modalElement = document.getElementById('modalRastreioBaixas');
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+
+        modalElement.addEventListener('shown.bs.modal', function () {
+            if (mapaEntregaBaixas) {
+                mapaEntregaBaixas.remove();
+                mapaEntregaBaixas = null;
+            }
+
+            const latFilial = -22.7873755;
+            const lngFilial = -43.2886202;
+
+            mapaEntregaBaixas = L.map('mapaRastreioBaixas').setView([latFilial, lngFilial], 13);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; CARTO',
+                subdomains: 'abcd',
+                maxZoom: 20
+            }).addTo(mapaEntregaBaixas);
+
+            // Ícones Normais (Caixas)
+            const iconEntregue = L.divIcon({
+                html: '<i class="bi bi-box-seam-fill text-success" style="font-size: 18px;"></i>',
+                className: 'custom-div-icon',
+                iconSize: [20, 20]
+            });
+
+            const iconOcorrencia = L.divIcon({
+                html: '<i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 18px;"></i>',
+                className: 'custom-div-icon',
+                iconSize: [20, 20]
+            });
+
+            // ÍCONE DO VEÍCULO (Última parada)
+            const iconCaminhao = L.divIcon({
+                html: '<div style="background: #007bff; border: 2px solid white; border-radius: 50%; padding: 5px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0,0,0,0.3);">' +
+                    '<i class="bi bi-truck text-white" style="font-size: 20px;"></i>' +
+                    '</div>',
+                className: 'custom-div-icon',
+                iconSize: [35, 35],
+                iconAnchor: [17, 17] // Centraliza o ícone no ponto exato
+            });
+
+            fetch(`/api/rastreio/${manifestoId}/`)
+                .then(res => {
+                    if (!res.ok) throw new Error(`Erro HTTP: ${res.status}`);
+                    return res.json();
+                })
+                .then(data => {
+                    let pontosParaRota = [`${lngFilial},${latFilial}`];
+
+                    L.marker([latFilial, lngFilial]).bindPopup("<b>Filial RDexpresso</b>").addTo(mapaEntregaBaixas);
+
+                    if (data.pontos && data.pontos.length > 0) {
+                        data.pontos.forEach((ponto, index) => {
+                            const latLng = [ponto.lat, ponto.lng];
+                            pontosParaRota.push(`${ponto.lng},${ponto.lat}`);
+
+                            // LÓGICA: Se for o ÚLTIMO ponto da lista, coloca o caminhão. Senão, coloca a caixa.
+                            let iconChoice;
+                            if (index === data.pontos.length - 1) {
+                                iconChoice = iconCaminhao;
+                            } else {
+                                iconChoice = (ponto.status === 'BAIXADA') ? iconEntregue : iconOcorrencia;
+                            }
+
+                            L.marker(latLng, { icon: iconChoice })
+                                .bindPopup(`<b>Nota: ${ponto.nota}</b><br>Hora: ${ponto.horario}<br>${index === data.pontos.length - 1 ? '<b>Última parada aqui</b>' : ''}`)
+                                .addTo(mapaEntregaBaixas);
+                        });
+
+                        const coordenadasString = pontosParaRota.join(';');
+                        const urlOSRM = `https://router.project-osrm.org/route/v1/driving/${coordenadasString}?overview=full&geometries=geojson`;
+
+                        fetch(urlOSRM)
+                            .then(response => response.json())
+                            .then(result => {
+                                if (result.routes && result.routes.length > 0) {
+                                    const rotaRua = result.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+
+                                    let polyline = L.polyline(rotaRua, {
+                                        color: '#007bff',
+                                        weight: 6,
+                                        opacity: 0.8,
+                                        lineJoin: 'round'
+                                    }).addTo(mapaEntregaBaixas);
+
+                                    mapaEntregaBaixas.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+                                }
+                            });
+                    }
+                })
+                .catch(err => console.error('Erro ao carregar rastro:', err));
+
+        }, { once: true });
+    }
+</script>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.FILIAL_ATIVA = "{{ filial_selecionada|default:'todas' }}";
+</script>
+<script src="{% static 'desktop/js/monitoramento/ws.js' %}"></script>
+{% endblock %}

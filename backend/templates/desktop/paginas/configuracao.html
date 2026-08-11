@@ -1,0 +1,394 @@
+{% extends 'desktop/base.html' %}
+{% load static %}
+
+{% block title %}Configuração do Sistema | Quick Track{% endblock %}
+
+{% block usuario %}{{ usuario_nome }} ({{ cargo }}){% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm p-4">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h4 class="fw-bold mb-1"><i class="bi bi-gear-fill text-primary me-2"></i>Configuração do Sistema</h4>
+                    <p class="text-muted mb-0">Gerencie tokens, feature flags e configurações globais.</p>
+                </div>
+                <div>
+                    <span class="badge {% if cargo == 'GESTOR' or cargo == 'ADMINISTRADOR' %}bg-success{% else %}bg-secondary{% endif %} px-3 py-2 fs-6">
+                        <i class="bi bi-shield-lock me-1"></i> Perfil: {{ cargo }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}opacity-50{% endif %}">
+    <!-- 1. TOKENS DA API ESL -->
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-key-fill me-2"></i>🔑 Tokens da API ESL</h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted">Token Analytics / GraphQL</label>
+                    <div class="input-group">
+                        <input type="password" id="token_analytics" class="form-control" value="{{ token_analytics_masked }}" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                        {% if cargo == 'GESTOR' or cargo == 'ADMINISTRADOR' %}
+                        <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('token_analytics', '{{ config.token_analytics }}')">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                    <small class="text-muted" style="font-size: 0.7rem;">Endpoint de Analytics, Data Export (zy...kw)</small>
+                </div>
+                <div class="mb-0">
+                    <label class="form-label small fw-bold text-muted">Token Invoices / Ocorrências</label>
+                    <div class="input-group">
+                        <input type="password" id="token_invoices" class="form-control" value="{{ token_invoices_masked }}" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                        {% if cargo == 'GESTOR' or cargo == 'ADMINISTRADOR' %}
+                        <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('token_invoices', '{{ config.token_invoices }}')">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                    <small class="text-muted" style="font-size: 0.7rem;">Endpoint de Invoice Occurrences (jz...LA)</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. DOMÍNIO E REPORTS -->
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-globe me-2"></i>🌐 Domínio e Reports</h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted">Domínio Base ESL</label>
+                    <input type="text" id="dominio_esl" class="form-control" value="{{ config.dominio_esl }}" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                </div>
+                <div class="row">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold text-muted">ID Report Validação</label>
+                        <input type="text" id="report_validacao" class="form-control" value="{{ config.report_validacao }}" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold text-muted">ID Report Busca NF-e</label>
+                        <input type="text" id="report_busca_nfe" class="form-control" value="{{ config.report_busca_nfe }}" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. FEATURE FLAGS -->
+    <div class="col-md-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-toggle-on me-2"></i>⚙️ Feature Flags</h6>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="form-check form-switch p-3 border rounded">
+                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="processar_yolo" {% if config.processar_yolo %}checked{% endif %} {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                            <label class="form-check-label fw-bold small">🤖 Processar YOLO (IA)</label>
+                            <div class="text-muted" style="font-size: 0.75rem;">Recorte automático de canhotos</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check form-switch p-3 border rounded">
+                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="processar_ocr" {% if config.processar_ocr %}checked{% endif %} {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                            <label class="form-check-label fw-bold small">📖 Processar OCR (IA)</label>
+                            <div class="text-muted" style="font-size: 0.75rem;">Leitura e rotação automática</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check form-switch p-3 border rounded border-primary bg-primary bg-opacity-10">
+                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="enviar_tms" {% if config.enviar_tms %}checked{% endif %} {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                            <label class="form-check-label fw-bold small">📤 Enviar para TMS (Produção)</label>
+                            <div class="text-muted" style="font-size: 0.75rem;">Se desligado, nada vai para a ESL</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check form-switch p-3 border rounded border-danger bg-danger bg-opacity-10">
+                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="modulo_torre_erros" {% if config.modulo_torre_erros %}checked{% endif %} {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                            <label class="form-check-label fw-bold small text-danger">🚨 Módulo Torre de Erros</label>
+                            <div class="text-muted" style="font-size: 0.75rem;">Ativar monitoramento de falhas em tempo real</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check form-switch p-3 border rounded">
+                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="armazenar_foto_backup" {% if config.armazenar_foto_backup %}checked{% endif %} {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                            <label class="form-check-label fw-bold small">💾 Foto de Backup</label>
+                            <div class="text-muted" style="font-size: 0.75rem;">Salva imagem original no servidor</div>
+                        </div>
+                    </div>
+                    <div class="col-12 mt-4">
+                        <div class="p-3 border rounded bg-light">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="enviar_email_falhas" {% if config.enviar_email_falhas %}checked{% endif %} {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                                <label class="form-check-label fw-bold small">📧 Notificar Falhas por E-mail</label>
+                            </div>
+                            <label class="form-label small fw-bold text-muted mb-1">E-mails (separados por vírgula)</label>
+                            <textarea id="emails_notificacao" class="form-control form-control-sm" rows="2" placeholder="ex: alerta@empresa.com, ti@empresa.com" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>{{ config.emails_notificacao }}</textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. AGENTE IA E GRUPOS WHATSAPP -->
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-robot me-2"></i>🤖 Agente IA</h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted">Códigos que ativam YOLO</label>
+                    <input type="text" id="codigos_ocorrencia_yolo" class="form-control" value="{{ config.codigos_ocorrencia_yolo }}" placeholder="01,02,1,2" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>
+                    <p class="text-muted mt-2" style="font-size: 0.75rem;">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Apenas baixas com estes códigos de amarrada serão processadas pela IA.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="fw-bold mb-0 text-success"><i class="bi bi-whatsapp me-2"></i>📱 Relatórios no WhatsApp</h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted">JIDs dos Grupos (Relatório 22h)</label>
+                    <textarea id="grupos_relatorio_whatsapp" class="form-control form-control-sm mb-2" rows="3" placeholder="JID do grupo. Ex: 12036...1923@g.us" {% if cargo != 'GESTOR' and cargo != 'ADMINISTRADOR' %}disabled{% endif %}>{{ config.grupos_relatorio_whatsapp }}</textarea>
+                    
+                    {% if cargo == 'GESTOR' or cargo == 'ADMINISTRADOR' %}
+                    <button type="button" class="btn btn-sm btn-outline-success w-100" onclick="buscarGruposWhatsapp()">
+                        <i class="bi bi-search me-1"></i> Buscar Grupos Conectados
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL DE GRUPOS DO WHATSAPP -->
+<div class="modal fade" id="modalGruposWhatsapp" tabindex="-1">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold text-success"><i class="bi bi-whatsapp me-2"></i>Grupos Conectados</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="loadingGrupos" class="text-center py-4">
+                    <div class="spinner-border text-success" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="text-muted mt-2 small">Buscando grupos na Evolution API...</p>
+                </div>
+                
+                <div id="listaGrupos" class="d-none">
+                    <p class="text-muted small mb-3">Selecione os grupos que deseja adicionar à lista de relatórios diários (22h):</p>
+                    <div class="list-group list-group-flush" id="gruposContainer">
+                        <!-- Renderizado via JS -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-success" onclick="aplicarGruposSelecionados()">Adicionar Selecionados</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if cargo == 'GESTOR' or cargo == 'ADMINISTRADOR' %}
+<div class="row mt-5 mb-5">
+    <div class="col-12 text-center">
+        <button type="button" class="btn btn-primary btn-lg px-5 py-3 fw-bold shadow" onclick="salvarConfiguracao()">
+            <i class="bi bi-check2-circle me-2"></i>SALVAR TODAS AS ALTERAÇÕES
+        </button>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info mt-4 d-flex align-items-center">
+    <i class="bi bi-info-circle-fill fs-4 me-3"></i>
+    <div>
+        <strong>Acesso apenas para leitura.</strong> Os campos estão bloqueados pois seu cargo atual é <b>{{ cargo }}</b>. 
+        Apenas usuários com o cargo <b>GESTOR</b> ou <b>ADMINISTRADOR</b> podem modificar as variáveis do sistema.
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const TOKENS_ORIGINAIS = {
+        'token_analytics': '{{ config.token_analytics|escapejs }}',
+        'token_invoices': '{{ config.token_invoices|escapejs }}'
+    };
+
+    function togglePassword(id, valorReal) {
+        const input = document.getElementById(id);
+        const icon = input.nextElementSibling.querySelector('i');
+        
+        if (input.type === 'password') {
+            input.type = 'text';
+            input.value = TOKENS_ORIGINAIS[id] || valorReal;
+            icon.classList.replace('bi-eye', 'bi-eye-slash');
+        } else {
+            input.type = 'password';
+            input.value = TOKENS_ORIGINAIS[id].substring(0, 5) + "**********" + TOKENS_ORIGINAIS[id].substring(TOKENS_ORIGINAIS[id].length - 5);
+            icon.classList.replace('bi-eye-slash', 'bi-eye');
+        }
+    }
+
+    async function salvarConfiguracao() {
+        const data = {
+            token_analytics: document.getElementById('token_analytics').value,
+            token_invoices: document.getElementById('token_invoices').value,
+            dominio_esl: document.getElementById('dominio_esl').value,
+            report_validacao: document.getElementById('report_validacao').value,
+            report_busca_nfe: document.getElementById('report_busca_nfe').value,
+            processar_yolo: document.getElementById('processar_yolo').checked,
+            processar_ocr: document.getElementById('processar_ocr').checked,
+            enviar_tms: document.getElementById('enviar_tms').checked,
+            enviar_email_falhas: document.getElementById('enviar_email_falhas').checked,
+            emails_notificacao: document.getElementById('emails_notificacao').value,
+            armazenar_foto_backup: document.getElementById('armazenar_foto_backup').checked,
+            modulo_torre_erros: document.getElementById('modulo_torre_erros').checked,
+            codigos_ocorrencia_yolo: document.getElementById('codigos_ocorrencia_yolo').value,
+            grupos_relatorio_whatsapp: document.getElementById('grupos_relatorio_whatsapp').value,
+        };
+
+        // Se o valor do token ainda tiver asteriscos, não enviamos ele (manter o original)
+        // No caso do Gestor, ele vê o real, então se ele não mexeu, envia o real.
+        // Se ele mexeu, envia o novo.
+        if (data.token_analytics.includes('**********')) delete data.token_analytics;
+        if (data.token_invoices.includes('**********')) delete data.token_invoices;
+
+        try {
+            const response = await fetch("{% url 'operacional:salvar_configuracao' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify(data)
+            });
+
+            const resData = await response.json();
+
+            if (response.ok) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Sucesso!',
+                    text: resData.message,
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+                setTimeout(() => window.location.reload(), 2000);
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Erro!',
+                    text: resData.message
+                });
+            }
+        } catch (error) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Erro!',
+                text: 'Falha na comunicação com o servidor.'
+            });
+        }
+    }
+
+    // ===== FUNÇÕES DE GRUPOS DO WHATSAPP =====
+    let modalGrupos = null;
+
+    async function buscarGruposWhatsapp() {
+        if (!modalGrupos) {
+            modalGrupos = new bootstrap.Modal(document.getElementById('modalGruposWhatsapp'));
+        }
+        
+        document.getElementById('loadingGrupos').classList.remove('d-none');
+        document.getElementById('listaGrupos').classList.add('d-none');
+        document.getElementById('gruposContainer').innerHTML = '';
+        
+        modalGrupos.show();
+
+        try {
+            const response = await fetch("{% url 'operacional:buscar_grupos_whatsapp' %}");
+            const data = await response.json();
+
+            if (data.status === 'sucesso') {
+                const container = document.getElementById('gruposContainer');
+                
+                if (data.grupos.length === 0) {
+                    container.innerHTML = '<div class="alert alert-warning">Nenhum grupo encontrado nesta conexão.</div>';
+                } else {
+                    data.grupos.forEach(g => {
+                        const html = `
+                        <label class="list-group-item d-flex justify-content-between align-items-center list-group-item-action cursor-pointer">
+                            <div>
+                                <h6 class="my-0 fw-bold">${g.subject}</h6>
+                                <small class="text-muted">${g.participants_count} participantes | ID: ${g.id}</small>
+                            </div>
+                            <div class="form-check form-switch ms-3">
+                                <input class="form-check-input fs-4 chk-grupo" type="checkbox" role="switch" value="${g.id}">
+                            </div>
+                        </label>`;
+                        container.innerHTML += html;
+                    });
+                }
+                
+                document.getElementById('loadingGrupos').classList.add('d-none');
+                document.getElementById('listaGrupos').classList.remove('d-none');
+            } else {
+                modalGrupos.hide();
+                Swal.fire('Ops!', data.message, 'error');
+            }
+        } catch (e) {
+            modalGrupos.hide();
+            Swal.fire('Erro', 'Falha ao buscar grupos.', 'error');
+        }
+    }
+
+    function aplicarGruposSelecionados() {
+        const checkboxes = document.querySelectorAll('.chk-grupo:checked');
+        const selecionados = Array.from(checkboxes).map(chk => chk.value);
+        
+        if (selecionados.length === 0) {
+            Swal.fire('Aviso', 'Nenhum grupo selecionado.', 'warning');
+            return;
+        }
+
+        const textArea = document.getElementById('grupos_relatorio_whatsapp');
+        let jidsAtuais = textArea.value.split(',').map(s => s.trim()).filter(s => s !== '');
+        
+        // Adiciona apenas se não existir
+        selecionados.forEach(jid => {
+            if (!jidsAtuais.includes(jid)) {
+                jidsAtuais.push(jid);
+            }
+        });
+        
+        textArea.value = jidsAtuais.join(', ');
+        
+        modalGrupos.hide();
+        Swal.fire('Pronto!', 'JIDs adicionados. Não esqueça de Salvar as Alterações.', 'success');
+    }
+</script>
+{% endblock %}

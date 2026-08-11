@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{% endblock %}</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'images/favicon.png' %}?v=rxtrack4">
+    <link rel="icon" type="image/x-icon" href="{% static 'images/favicon.ico' %}?v=rxtrack4">
+    <link rel="shortcut icon" href="{% static 'images/favicon.ico' %}?v=rxtrack4">
+    <link rel="apple-touch-icon" sizes="160x160" href="{% static 'images/icon-160x160.png' %}?v=rxtrack4">
+
+
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Driver.js para Tutoriais Guiados -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.js"></script>
+    <style>
+        @keyframes pulse-danger-animation {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .icon-pulse-danger {
+            animation: pulse-danger-animation 1.5s infinite;
+            color: var(--bs-danger) !important;
+            filter: drop-shadow(0 0 5px rgba(220, 53, 69, 0.5));
+        }
+        :root {
+        --sidebar-width: 260px;
+        --sidebar-collapsed-width: 75px;
+        --primary-color: #0d6efd;
+        --dark-bg: #11111d;
+    }
+
+    body {
+        font-family: 'Inter', sans-serif;
+        background-color: #f8f9fa;
+        transition: all 0.3s;
+    }
+
+    #sidebar {
+        width: var(--sidebar-collapsed-width);
+        height: 100vh;
+        position: fixed;
+        background: var(--dark-bg);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 1050;
+        overflow-y: auto;
+        overflow-x: hidden;
+        scrollbar-width: none;
+    }
+
+    #sidebar::-webkit-scrollbar {
+        display: none;
+    }
+
+    #sidebar.active {
+        width: var(--sidebar-width);
+    }
+
+    #sidebar .nav-link {
+        color: #aeb7c2;
+        padding: 15px 22px;
+        display: flex;
+        align-items: center;
+        white-space: nowrap;
+        text-decoration: none;
+        transition: 0.2s;
+    }
+
+    #sidebar .nav-link:hover, #sidebar .nav-link.active-menu {
+        background: rgba(255,255,255,0.08);
+        color: #fff;
+    }
+
+    #sidebar .nav-link i {
+        min-width: 45px;
+        font-size: 1.4rem;
+    }
+
+    #sidebar .menu-text {
+        opacity: 0;
+        display: none;
+        transition: opacity 0.3s;
+    }
+
+    #sidebar.active .menu-text {
+        display: inline-block;
+        opacity: 1;
+    }
+
+    #main-content {
+        margin-left: var(--sidebar-collapsed-width);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #main-content.expanded {
+        margin-left: var(--sidebar-width);
+    }
+
+    .navbar {
+        background: #fff;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .btn-toggle-menu {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+    }
+
+    /* ========== Centro de Notificações ========== */
+    .notif-bell-wrapper {
+        position: relative;
+        cursor: pointer;
+    }
+    .notif-bell-wrapper .notif-badge {
+        position: absolute;
+        top: -4px;
+        right: -6px;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        font-size: 0.65rem;
+        font-weight: 700;
+        line-height: 18px;
+        text-align: center;
+        color: #fff;
+        background: #dc3545;
+        border-radius: 50px;
+        animation: notifPulse 2s infinite;
+    }
+    @keyframes notifPulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.15); }
+    }
+    .notif-dropdown {
+        position: absolute;
+        top: 45px;
+        right: 0;
+        width: 380px;
+        max-height: 420px;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+        border: 1px solid #e9ecef;
+        z-index: 1200;
+        display: none;
+        overflow: hidden;
+    }
+    .notif-dropdown.show {
+        display: block;
+        animation: notifSlideIn 0.2s ease-out;
+    }
+    @keyframes notifSlideIn {
+        from { opacity: 0; transform: translateY(-8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .notif-dropdown-header {
+        padding: 12px 16px;
+        background: linear-gradient(135deg, #dc3545, #c82333);
+        color: #fff;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .notif-dropdown-body {
+        max-height: 320px;
+        overflow-y: auto;
+        scrollbar-width: thin;
+    }
+    .notif-item {
+        padding: 12px 16px;
+        border-bottom: 1px solid #f0f0f0;
+        cursor: pointer;
+        transition: background 0.15s;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    .notif-item:hover {
+        background: #fff5f5;
+    }
+    .notif-item:last-child {
+        border-bottom: none;
+    }
+    .notif-item .notif-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #fee2e2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    .notif-item .notif-icon i {
+        color: #dc3545;
+        font-size: 0.9rem;
+    }
+    .notif-item .notif-content {
+        flex: 1;
+        min-width: 0;
+    }
+    .notif-item .notif-title {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #1a1a2e;
+        margin-bottom: 2px;
+    }
+    .notif-item .notif-msg {
+        font-size: 0.72rem;
+        color: #6c757d;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .notif-item .notif-time {
+        font-size: 0.65rem;
+        color: #adb5bd;
+        white-space: nowrap;
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+    .notif-empty {
+        padding: 30px;
+        text-align: center;
+        color: #adb5bd;
+    }
+
+    /* Toast de erro */
+    .toast-erro .toast-header {
+        background: linear-gradient(135deg, #dc3545, #c82333) !important;
+        color: #fff !important;
+    }
+
+    @media (max-width: 768px) {
+        #sidebar {
+            transform: translateX(-100%);
+            width: var(--sidebar-width) !important;
+        }
+        #sidebar.active {
+            transform: translateX(0);
+        }
+        #main-content, #main-content.expanded {
+            margin-left: 0 !important;
+        }
+        .notif-dropdown {
+            position: fixed;
+            top: 65px;
+            left: 10px;
+            right: 10px;
+            width: auto;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+    }
+    </style>
+</head>
+<body>
+
+    <nav id="sidebar" class="d-flex flex-column vh-100">
+    <div class="p-3 text-white d-flex flex-column">
+        <div class="d-flex align-items-center">
+            <img src="{% static 'images/logo_white.png' %}" alt="RXtrack Logo" class="me-2" style="height: 38px; max-width: 140px; object-fit: contain;">
+            <span class="fw-bold menu-text mb-0 text-capitalize" style="font-size: 1.15rem; letter-spacing: 0.5px;">
+                {{ request.tenant.name|default:request.tenant.schema_name|title|default:"RXtrack" }}
+            </span>
+        </div>
+
+
+        <div class="menu-text mt-3">
+            <small class="text-white-50" style="font-size: 0.7rem; font-weight: 600;">FILIAL ATIVA</small><br>
+            <span class="badge bg-primary mt-1 text-wrap text-start w-100 p-2" style="font-size: 0.75rem; border: 1px solid rgba(255,255,255,0.2);">
+                <i class="bi bi-geo-alt-fill me-1"></i> {{ request.user.motorista_perfil.filial.nome|default:"MATRIZ" }}
+            </span>
+        </div>
+    </div>
+    
+    <div class="nav flex-column mt-2 flex-grow-1">
+        <a href="/dashboard/" class="nav-link {% if request.path == '/dashboard/' %}active-menu{% endif %}">
+            <i class="bi bi-grid-1x2"></i>
+            <span class="menu-text">Dashboard</span>
+        </a>
+        <a href="{% url 'operacional:notas_fiscais' %}" class="nav-link {% if request.path == '/notas-fiscais/' %}active-menu{% endif %}">
+            <i class="bi bi-file-earmark-bar-graph"></i>
+            <span class="menu-text">Notas Fiscais</span>
+        </a>
+        <a href="{% url 'operacional:manifesto_detalhes' %}" class="nav-link {% if request.path == '/manifesto/' %}active-menu{% endif %}">
+            <i class="bi bi-layers"></i>
+            <span class="menu-text">Manifestos</span>
+        </a>
+        <a href="{% url 'auditoria:dashboard' %}" class="nav-link {% if '/auditoria/' in request.path %}active-menu{% endif %}">
+            <i class="bi bi-shield-check"></i>
+            <span class="menu-text">Auditoria de Processos</span>
+        </a>
+        <a href="{% url 'operacional:motoristas' %}" class="nav-link {% if request.path == '/motoristas/' %}active-menu{% endif %}">
+            <i class="bi bi-people"></i>
+            <span class="menu-text">Motoristas</span>
+        </a>
+
+        {% if config_sistema.modulo_torre_erros %}
+        <a href="{% url 'operacional:torre_erros' %}" id="torre-erros-link" class="nav-link {% if '/torre-erros/' in request.path %}active-menu{% endif %}">
+            <i class="bi bi-activity" id="torre-erros-icon"></i>
+            <span class="menu-text">Torre de Erros</span>
+        </a>
+        {% endif %}
+
+
+        <!-- Seção de Suporte -->
+        <div class="border-top border-secondary opacity-25 my-2"></div>
+        <small class="ms-4 menu-text d-block mb-1" style="font-size: 0.65rem; letter-spacing: 1px; color: #fff;">SUPORTE & AJUDA</small>
+        
+        <a href="{% url 'suporte:painel_sac' %}" class="nav-link {% if '/suporte/' in request.path %}active-menu{% endif %}">
+            <i class="bi bi-headset"></i>
+            <span class="menu-text">Suporte Online</span>
+        </a>
+
+        {% if request.user.motorista_perfil.cargo == 'GESTOR' or request.user.motorista_perfil.cargo == 'ADMINISTRADOR' or request.user.motorista_perfil.cargo == 'GERENTE' %}
+        <a href="{% url 'gestao:gestao_usuarios' %}" class="nav-link {% if '/gestao/' in request.path %}active-menu{% endif %}">
+            <i class="bi bi-person-gear"></i>
+            <span class="menu-text">Gestao de Usuarios</span>
+        </a>
+        {% endif %}
+        <a href="{% url 'operacional:treinamentos' %}" class="nav-link {% if '/treinamentos/' in request.path %}active-menu{% endif %}">
+            <i class="bi bi-play-circle"></i>
+            <span class="menu-text">Treinamentos</span>
+        </a>
+        <a href="{% url 'operacional:central_ajuda' %}" class="nav-link {% if '/central-ajuda/' in request.path %}active-menu{% endif %}">
+            <i class="bi bi-question-circle"></i>
+            <span class="menu-text">Central de Ajuda</span>
+        </a>
+    </div>
+
+    <div class="nav flex-column mb-3 border-top border-secondary pt-2">
+        <a href="{% url 'operacional:configuracao_sistema' %}" class="nav-link {% if '/configuracao/' in request.path %}active-menu{% endif %}">
+            <i class="bi bi-gear"></i>
+            <span class="menu-text">Configurações</span>
+        </a>
+        <a href="/logout/" class="nav-link text-danger-emphasis">
+            <i class="bi bi-box-arrow-right"></i>
+            <span class="menu-text">Sair do Sistema</span>
+        </a>
+    </div>
+</nav>
+
+<div id="main-content">
+    <nav class="navbar navbar-light px-4 py-2">
+        <button class="btn btn-light border-0" id="btn-toggle-sidebar">
+            <i class="bi bi-list fs-4"></i>
+        </button>
+        <span class="ms-3 fw-semibold text-muted d-none d-md-inline">Painel Operacional</span>
+        
+        <div class="ms-auto d-flex align-items-center gap-3">
+            <!-- Centro de Notificações de Erros -->
+            <div class="notif-bell-wrapper" id="notifBellWrapper" onclick="toggleNotifDropdown(event)">
+                <i class="bi bi-bell fs-5 text-muted"></i>
+                <span class="notif-badge" id="notifBadge" style="display: none;">0</span>
+                
+                <!-- Dropdown de Notificações -->
+                <div class="notif-dropdown" id="notifDropdown">
+                    <div class="notif-dropdown-header">
+                        <span class="fw-bold" style="font-size: 0.85rem;">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>Notificações de Erro
+                        </span>
+                        <button class="btn btn-sm btn-outline-light py-0 px-2" style="font-size: 0.7rem;" onclick="marcarTodasLidas(event)">
+                            Limpar
+                        </button>
+                    </div>
+                    <div class="notif-dropdown-body" id="notifDropdownBody">
+                        <div class="notif-empty">
+                            <i class="bi bi-check-circle fs-3 d-block mb-2"></i>
+                            <span class="small">Nenhuma notificação</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <span class="small fw-bold">
+                {% block usuario %}{% endblock %}
+            </span>
+            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 35px; height: 35px;">
+                OP
+            </div>
+        </div>
+    </nav>
+
+        <div class="container-fluid p-4">
+            {% if sem_filial %}
+            <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center mb-4" role="alert">
+                <i class="bi bi-exclamation-triangle-fill fs-4 me-3 text-warning"></i>
+                <div>
+                    <h6 class="alert-heading mb-1 fw-bold">Aviso Importante</h6>
+                    <p class="mb-0">Você precisa estar vinculado a uma filial no seu cadastro de motorista para ver dados. Nenhum dado será carregado até que seu perfil seja associado a uma unidade.</p>
+                </div>
+            </div>
+            {% endif %}
+            
+            {% block content %}
+            <div class="row g-4">
+                <div class="col-md-3">
+                    <div class="card border-0 shadow-sm p-3">
+                        <small class="text-muted fw-bold">MANIFESTOS ATIVOS</small>
+                        <h2 class="mb-0">24</h2>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-0 shadow-sm p-3 border-start border-success border-4">
+                        <small class="text-muted fw-bold">ENTREGAS HOJE</small>
+                        <h2 class="mb-0">158</h2>
+                    </div>
+                </div>
+            </div>
+            {% endblock %}
+        </div>
+    </div>
+
+    <!-- Toast Container para Notificações do SAC -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100; margin-top: 60px;"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            // Verifica se este cookie é o que estamos procurando
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+    document.getElementById('btn-toggle-sidebar').addEventListener('click', function(e) {
+        e.stopPropagation();
+        // Alterna a classe no sidebar para expandir/recolher
+        document.getElementById('sidebar').classList.toggle('active');
+        // Alterna a margem do conteúdo principal
+        document.getElementById('main-content').classList.toggle('expanded');
+    });
+
+    // Fechar barra lateral ao clicar fora (no mobile)
+    document.addEventListener('click', function(event) {
+        const sidebar = document.getElementById('sidebar');
+        // Verifica se tela é mobile e se o sidebar está aberto
+        if (window.innerWidth <= 768 && sidebar.classList.contains('active')) {
+            if (!sidebar.contains(event.target)) {
+                sidebar.classList.remove('active');
+                document.getElementById('main-content').classList.remove('expanded');
+            }
+        }
+    });
+
+    // Opcional: Fechar menu automaticamente se a tela for pequena ao carregar
+    window.addEventListener('load', () => {
+        if (window.innerWidth < 768) {
+            document.getElementById('sidebar').classList.remove('active');
+            document.getElementById('main-content').style.marginLeft = "0";
+        }
+    });
+</script>
+
+<!-- Script para Monitoramento de Notificações de Suporte do SAC -->
+<script>
+    const STORAGE_KEY = 'sac_notified_messages';
+
+    function getNotifiedMessages() {
+        try {
+            const data = sessionStorage.getItem(STORAGE_KEY);
+            return data ? JSON.parse(data) : [];
+        } catch(e) {
+            return [];
+        }
+    }
+
+    function showSACNotificationToast(ticketId, motoristaNome, textoMensagem) {
+        const container = document.querySelector('.toast-container');
+        if (!container) return;
+
+        // Limita a quantidade de toasts visíveis
+        while (container.children.length >= 5) {
+            container.removeChild(container.firstChild);
+        }
+
+        const toastId = 'toast-' + Date.now();
+        const toastHtml = `
+            <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="7000">
+                <div class="toast-header bg-primary text-white border-0">
+                    <i class="bi bi-headset me-2"></i>
+                    <strong class="me-auto">Mensagem de Suporte</strong>
+                    <small class="text-white-50">agora</small>
+                    <button type="button" class="btn-close btn-close-white" data-bs-toast="close" aria-label="Close" onclick="bootstrap.Toast.getInstance(document.getElementById('${toastId}')).hide()"></button>
+                </div>
+                <div class="toast-body d-flex justify-content-between align-items-center bg-white shadow-sm" style="border-radius: 0 0 var(--bs-toast-border-radius) var(--bs-toast-border-radius);">
+                    <div class="flex-grow-1 me-3">
+                        <span class="fw-bold d-block text-dark" style="font-size: 0.85rem;">${motoristaNome}</span>
+                        <span class="text-muted text-truncate d-block small" style="max-width: 250px;">${textoMensagem}</span>
+                    </div>
+                    <a href="/suporte/painel/" class="btn btn-outline-primary btn-sm fw-bold px-3 rounded-pill flex-shrink-0">
+                        Atender
+                    </a>
+                </div>
+            </div>
+        `;
+
+        container.insertAdjacentHTML('beforeend', toastHtml);
+        const toastEl = document.getElementById(toastId);
+        if (toastEl) {
+            const bsToast = new bootstrap.Toast(toastEl);
+            bsToast.show();
+
+            toastEl.addEventListener('hidden.bs.toast', function () {
+                toastEl.remove();
+            });
+        }
+    }
+
+    async function verificarNovasMensagensSAC() {
+        try {
+            const response = await fetch('/suporte/api/tickets/');
+            if (!response.ok) return;
+
+            const tickets = await response.json();
+            const notifiedList = getNotifiedMessages();
+            let updatedNotified = false;
+
+            tickets.forEach(ticket => {
+                if (ticket.status !== 'FECHADO' && ticket.mensagens) {
+                    ticket.mensagens.forEach(msg => {
+                        // Só notifica se foi enviada pelo motorista, não lida e ainda não notificada nesta sessão
+                        if (msg.enviado_por_motorista && !msg.lida && !notifiedList.includes(msg.id)) {
+                            showSACNotificationToast(
+                                ticket.id,
+                                ticket.motorista_str || "Motorista",
+                                msg.texto || (msg.tipo !== 'TEXTO' ? '[Mídia]' : '') || "Enviou uma mensagem"
+                            );
+                            notifiedList.push(msg.id);
+                            updatedNotified = true;
+                        }
+                    });
+                }
+            });
+
+            if (updatedNotified) {
+                sessionStorage.setItem(STORAGE_KEY, JSON.stringify(notifiedList));
+            }
+        } catch (error) {
+            console.error('Erro ao verificar novas mensagens do SAC:', error);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        if (window.location.pathname.includes('/suporte/painel/')) {
+            return;
+        }
+
+        {% if request.user.motorista_perfil.tipo_usuario == 'SAC' or request.user.motorista_perfil.cargo == 'GESTOR' or request.user.motorista_perfil.cargo == 'ADMINISTRADOR' or request.user.motorista_perfil.cargo == 'GERENTE' %}
+            setTimeout(verificarNovasMensagensSAC, 3000);
+            setInterval(verificarNovasMensagensSAC, 15000);
+        {% endif %}
+    });
+</script>
+
+<!-- Script para Centro de Notificações de Erros -->
+<script>
+    // Estado das notificações
+    const NOTIF_STORAGE_KEY = 'notif_error_ids';
+    let notifAberta = false;
+
+    function getNotifiedErrorIds() {
+        try {
+            const data = sessionStorage.getItem(NOTIF_STORAGE_KEY);
+            return data ? JSON.parse(data) : [];
+        } catch(e) {
+            return [];
+        }
+    }
+
+    function toggleNotifDropdown(event) {
+        event.stopPropagation();
+        const dropdown = document.getElementById('notifDropdown');
+        dropdown.classList.toggle('show');
+        notifAberta = dropdown.classList.contains('show');
+    }
+
+    // Fechar dropdown ao clicar fora
+    document.addEventListener('click', function(e) {
+        const wrapper = document.getElementById('notifBellWrapper');
+        const dropdown = document.getElementById('notifDropdown');
+        if (wrapper && dropdown && !wrapper.contains(e.target)) {
+            dropdown.classList.remove('show');
+            notifAberta = false;
+        }
+    });
+
+    function marcarTodasLidas(event) {
+        event.stopPropagation();
+        fetch('/api/notificacoes/marcar-lidas/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(() => {
+            document.getElementById('notifBadge').style.display = 'none';
+            document.getElementById('notifDropdownBody').innerHTML = `
+                <div class="notif-empty">
+                    <i class="bi bi-check-circle fs-3 d-block mb-2 text-success"></i>
+                    <span class="small">Tudo limpo!</span>
+                </div>
+            `;
+        })
+        .catch(err => console.error('Erro ao limpar notificações:', err));
+    }
+
+    async function visualizarNotificacao(event, id, url) {
+        event.preventDefault();
+        try {
+            await fetch(`/api/notificacoes/marcar-lida/${id}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'Content-Type': 'application/json'
+                }
+            });
+        } catch (e) {
+            console.error('Erro ao marcar como lida', e);
+        }
+        window.location.href = url;
+    }
+
+    function showErrorNotificationToast(titulo, mensagem, numeroNota) {
+        const container = document.querySelector('.toast-container');
+        if (!container) return;
+
+        while (container.children.length >= 5) {
+            container.removeChild(container.firstChild);
+        }
+
+        const toastId = 'toast-err-' + Date.now();
+        const toastHtml = `
+            <div id="${toastId}" class="toast toast-erro" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="8000">
+                <div class="toast-header bg-danger text-white border-0">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <strong class="me-auto">Erro no Sistema</strong>
+                    <small class="text-white-50">agora</small>
+                    <button type="button" class="btn-close btn-close-white" data-bs-toast="close" aria-label="Close" onclick="bootstrap.Toast.getInstance(document.getElementById('${toastId}')).hide()"></button>
+                </div>
+                <div class="toast-body d-flex justify-content-between align-items-center bg-white shadow-sm gap-2" style="border-radius: 0 0 var(--bs-toast-border-radius) var(--bs-toast-border-radius);">
+                    <div style="min-width: 0;">
+                        <span class="fw-bold d-block text-dark text-truncate" style="font-size: 0.85rem;">${titulo}</span>
+                        <span class="text-muted d-block small text-truncate">${mensagem}</span>
+                    </div>
+                    <a href="/notas-fiscais/?q=${numeroNota}" class="btn btn-danger btn-sm fw-bold text-nowrap flex-shrink-0">
+                        Ver NF-e
+                    </a>
+                </div>
+            </div>
+        `;
+
+        container.insertAdjacentHTML('beforeend', toastHtml);
+        const toastEl = document.getElementById(toastId);
+        if (toastEl) {
+            const bsToast = new bootstrap.Toast(toastEl);
+            bsToast.show();
+            toastEl.addEventListener('hidden.bs.toast', function () {
+                toastEl.remove();
+            });
+        }
+    }
+
+    async function verificarNotificacoesErros() {
+        try {
+            const response = await fetch('/api/notificacoes/erros/');
+            if (!response.ok) return;
+
+            const data = await response.json();
+            const badge = document.getElementById('notifBadge');
+            const body = document.getElementById('notifDropdownBody');
+
+            // Atualiza badge
+            if (data.count > 0) {
+                badge.innerText = data.count > 99 ? '99+' : data.count;
+                badge.style.display = 'block';
+            } else {
+                badge.style.display = 'none';
+            }
+
+            // Atualiza Torre de Erros
+            const torreIcon = document.getElementById('torre-erros-icon');
+            if (torreIcon) {
+                if (data.erros_pendentes_torre > 0) {
+                    torreIcon.classList.add('text-danger', 'icon-pulse-danger');
+                } else {
+                    torreIcon.classList.remove('text-danger', 'icon-pulse-danger');
+                }
+            }
+
+            // Renderiza notificações no dropdown
+            if (data.notificacoes && data.notificacoes.length > 0) {
+                let html = '';
+                const notifiedIds = getNotifiedErrorIds();
+                let updatedNotified = false;
+
+                data.notificacoes.forEach(n => {
+                    html += `
+                        <div class="notif-item" onclick="visualizarNotificacao(event, ${n.id}, '/notas-fiscais/?q=${n.numero_nota}')">
+                            <div class="notif-icon">
+                                <i class="bi bi-exclamation-circle-fill"></i>
+                            </div>
+                            <div class="notif-content">
+                                <div class="notif-title">${n.titulo}</div>
+                                <div class="notif-msg">${n.mensagem}</div>
+                            </div>
+                            <div class="notif-time">${n.hora}</div>
+                        </div>
+                    `;
+
+                    // Toast para novos erros
+                    if (!notifiedIds.includes(n.id)) {
+                        showErrorNotificationToast(n.titulo, n.mensagem, n.numero_nota);
+                        notifiedIds.push(n.id);
+                        updatedNotified = true;
+                    }
+                });
+
+                body.innerHTML = html;
+
+                if (updatedNotified) {
+                    sessionStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifiedIds));
+                }
+            } else {
+                body.innerHTML = `
+                    <div class="notif-empty">
+                        <i class="bi bi-check-circle fs-3 d-block mb-2 text-success"></i>
+                        <span class="small">Nenhuma notificação</span>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Erro ao verificar notificações:', error);
+        }
+    }
+
+    // Inicializa polling de notificações
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(verificarNotificacoesErros, 2000);
+        setInterval(verificarNotificacoesErros, 15000);
+    });
+</script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

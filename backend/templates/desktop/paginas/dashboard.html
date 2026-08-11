@@ -1,0 +1,249 @@
+{% extends "desktop/base.html" %}
+{% load static %}
+
+{% block title %}{{ titulo }}{% endblock %}
+{% block usuario %}{{ usuario_nome }}{% endblock %}
+
+{% block content %}
+<style>
+    /* Estilo da bolinha de Live */
+.live-dot {
+    width: 10px;
+    height: 10px;
+    background-color: #ff0000; /* Vermelho vivo */
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+    position: relative;
+    vertical-align: middle;
+}
+
+/* Efeito de pulso */
+.live-dot::after {
+    content: '';
+    width: 100%;
+    height: 100%;
+    background-color: #ff0000;
+    border-radius: 50%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    animation: pulse-live 1.5s infinite;
+}
+
+@keyframes pulse-live {
+    0% {
+        transform: scale(1);
+        opacity: 0.8;
+    }
+    100% {
+        transform: scale(2.5);
+        opacity: 0;
+    }
+}
+</style>
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-center">
+        <h3 class="fw-bold">
+            Resumo da Operação 
+            <small class="text-muted fs-6">| Hoje, {{ "now"|date:"d/m/Y" }}</small>
+        </h3>
+        <div class="badge bg-dark-subtle text-dark p-2 border">
+            <i class="bi bi-arrow-clockwise me-1"></i> 
+            <span id="refresh-timer" class="fw-bold">3:00</span>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4 justify-content-center"> <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between px-md-1">
+                    <div>
+                        <h3 class="text-primary fw-bold">{{ mfts_ativos }}</h3>
+                        <p class="mb-0 text-muted">Manifestos Ativos</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-truck fs-1 text-primary opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>    
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between px-md-1">
+                    <div>
+                        <h3 class="fw-bold">{{ notas_em_transporte }}</h3>
+                        <p class="mb-0 text-muted">Total de Notas</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-file-earmark-bar-graph fs-1 opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between px-md-1">
+                    <div>
+                        <h3 class="text-success fw-bold">{{ total_notas }}</h3>
+                        <p class="mb-0 text-muted">Notas Entregues</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-check-all fs-1 text-success opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between px-md-1">
+                    <div>
+                        <h3 class="text-danger fw-bold">{{ notas_ocorrencia }}</h3>
+                        <p class="mb-0 text-muted">Insucesso/Devolução</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-x-circle fs-1 text-danger opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+   <div class="col-lg-8">
+    <div class="card border-0 shadow-sm p-4 h-100">
+        <h5 class="fw-bold mb-4">Fluxo de Entregas por Hora</h5>
+        <div style="position: relative; height: 300px; width: 100%;">
+            <canvas id="entregasChart"></canvas>
+        </div>
+    </div>
+</div>
+
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-0 pt-4 px-4">
+                <h5 class="fw-bold">Motoristas ativos</h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+    {% for m in top_motoristas %}
+    <div class="list-group-item border-0 d-flex justify-content-between align-items-center px-0">
+        <div class="d-flex align-items-center">
+            <div class="rounded-circle bg-light p-2 me-3" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                {% if m.foto %} <img src="{{ m.foto.url }}" class="rounded-circle w-100 h-100"> {% else %} 👨‍✈️ {% endif %}
+            </div>
+            <div>
+                <h6 class="mb-0 fw-bold small">{{ m.nome_completo }}</h6>
+                <small class="text-muted">Manifesto #{{ m.ultimo_mft.numero_manifesto|default:"--" }}</small>
+            </div>
+        </div>
+        <span class="badge {% if m.percentual > 90 %}bg-success-subtle text-success{% else %}bg-primary-subtle text-primary{% endif %}">
+            {{ m.percentual }}% Concluído
+        </span>
+    </div>
+    {% empty %}
+    <div class="text-center py-3 text-muted">Sem atividade registrada hoje.</div>
+    {% endfor %}
+</div>
+                <div class="mt-4">
+    <a href="{% url 'manifesto:painel_monitoramento' %}" class="btn btn-outline-dark btn-sm w-100 fw-bold d-flex align-items-center justify-content-center">
+        <span class="live-dot"></span> 
+        MONITORAMENTO AO VIVO
+    </a>
+</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Passagem da variável de filial ativa para o WS -->
+<script>
+    window.FILIAL_ATIVA = "{{ filial_selecionada|default:'todas' }}";
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+
+/* ======================
+   AUTO REFRESH (3 min)
+====================== */
+let tempoRestante = 180; // Tempo em segundos (3 minutos)
+const display = document.querySelector('#refresh-timer'); // Certifique-se que o ID existe no seu HTML
+
+function iniciarTimer() {
+    const cronometro = setInterval(() => {
+        let minutos = Math.floor(tempoRestante / 60);
+        let segundos = tempoRestante % 60;
+
+        // Formata para 0:00
+        segundos = segundos < 10 ? '0' + segundos : segundos;
+        
+        if (display) {
+
+            display.textContent = `Atualizando em: ${minutos}:${segundos}`;
+        }
+
+        if (tempoRestante <= 0) {
+            clearInterval(cronometro);
+            // Mostra o loading visual se você tiver um elemento de spinner
+            document.querySelector('#loading-overlay')?.classList.remove('d-none');
+            
+            // FORÇA O REFRESH DA PÁGINA
+            window.location.reload(true); 
+        }
+
+        tempoRestante--;
+    }, 1000);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    iniciarTimer();
+
+    // ✅ NOVO: Popup de Aviso de Desenvolvimento (apenas uma vez por sessão)
+    if (!sessionStorage.getItem('aviso_desenvolvimento_exibido')) {
+        Swal.fire({
+            title: 'Plataforma em Desenvolvimento 🚀',
+            html: `
+                <div class="text-start">
+                    <p>Seja bem-vindo! Gostaríamos de informar que o <b>Quick Track</b> está em fase de desenvolvimento ativo.</p>
+                    <ul>
+                        <li>Melhorias de performance são aplicadas constantemente.</li>
+                        <li>Novas funcionalidades e modificações podem ocorrer diariamente.</li>
+                        <li>Isso se aplica tanto ao <b>Painel Operacional</b> quanto ao <b>App do Motorista</b>.</li>
+                    </ul>
+                    <p class="mb-0">Agradecemos sua paciência e colaboração!</p>
+                </div>
+            `,
+            icon: 'info',
+            confirmButtonText: 'Entendido',
+            confirmButtonColor: '#0d6efd',
+            allowOutsideClick: false
+        });
+        sessionStorage.setItem('aviso_desenvolvimento_exibido', 'true');
+    }
+});
+
+/* ======================
+   GRÁFICO ENTREGAS
+====================== */
+
+</script>
+<script id="grafico-data" type="application/json">
+{
+    "labels": {{ grafico_labels|safe }},
+    "valores": {{ grafico_valores|safe }}
+}
+</script>
+<script src="{% static 'desktop/js/chart.js' %}"></script>
+
+
+{% endblock %}

@@ -1,0 +1,746 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <script src="/capacitor.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0d6efd">
+    <link rel="manifest" href="/app-sac/manifest_sac.json">
+    <link rel="apple-touch-icon" href="/static/images/icon-sac-160x160.png">
+    <title>App SAC - Gestão de Notas</title>
+    <link href="{% static 'css/bootstrap.min.css' %}" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/bootstrap-icons.css' %}">
+    <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="{% static 'js/authFetch_sac.js' %}"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { background-color: #f0f2f5; padding-bottom: 70px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        
+        .header-sac {
+            background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+            color: white; padding: 18px 20px; border-radius: 0 0 20px 20px;
+            box-shadow: 0 4px 15px rgba(13, 110, 253, 0.3);
+            position: sticky; top: 0; z-index: 1000;
+        }
+        
+        .hidden { display: none !important; }
+        
+        .nav-bottom {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: white; border-top: 1px solid #dee2e6;
+            display: flex; justify-content: space-around;
+            padding: 10px 0; z-index: 1000;
+        }
+        .nav-item-sac { text-align: center; color: #6c757d; font-size: 0.75rem; text-decoration: none; flex: 1; }
+        .nav-item-sac.active { color: #0d6efd; font-weight: bold; }
+        .nav-item-sac i { font-size: 1.4rem; display: block; margin-bottom: 2px; }
+
+        .card-sac { border: none; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+        .card-nf { border: none; border-left: 5px solid #0d6efd; border-radius: 12px; margin-top: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        
+        .badge-ocorrencia { background: #e2e3e5; color: #41464b; font-size: 0.7rem; }
+        .btn-camera-sac { background: #e9ecef; border: 2px dashed #6c757d; color: #495057; font-weight: 600; width: 100%; padding: 22px; text-align: center; border-radius: 14px; }
+        
+        #preview-foto-sac, #preview-foto-auditoria { max-width: 100%; border-radius: 12px; margin-top: 10px; }
+        .btn-scan { background: linear-gradient(135deg, #198754, #157347); border: none; color: white; font-weight: 600; border-radius: 12px; padding: 12px 18px; }
+        #qr-reader { width: 100%; min-height: 300px; border-radius: 12px; overflow: hidden; }
+        
+        .search-input-group .form-control { border-radius: 12px 0 0 12px; border: 2px solid #dee2e6; padding: 12px 16px; }
+        .search-input-group .btn { border-radius: 0 12px 12px 0; padding: 12px 20px; }
+
+        .manifesto-item { border-left: 4px solid #dee2e6; }
+        .manifesto-item.active { border-left-color: #198754; }
+        .manifesto-item.stale { border-left-color: #dc3545; }
+    </style>
+</head>
+
+<body>
+    <!-- Banner de Instalação do App (Oculto por padrão) -->
+    <div id="pwa-install-banner" class="container mt-2 px-3" style="display: none; z-index: 1050; position: relative;">
+        <div class="alert alert-primary d-flex justify-content-between align-items-center shadow-sm border-0 mb-2" style="border-radius: 12px;">
+            <div>
+                <span class="fw-bold d-block text-primary"><i class="bi bi-download"></i> Instalar SAC Mobile</span>
+                <small class="text-muted">Instale para ter acesso rápido na tela inicial.</small>
+            </div>
+            <button id="btn-instalar-app" class="btn btn-primary btn-sm px-3 rounded-pill">
+                Instalar
+            </button>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <div class="header-sac">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="mb-0 fw-bold"><i class="bi bi-headset"></i> SAC Mobile</h5>
+                <small class="opacity-75" id="usuario-logado-sac">Carregando...</small>
+            </div>
+            <button class="btn btn-sm btn-outline-light rounded-pill px-3" onclick="logoutSAC()">
+                <i class="bi bi-box-arrow-right"></i> Sair
+            </button>
+        </div>
+    </div>
+
+    <!-- Navegação Inferior -->
+    <div class="nav-bottom">
+        <a href="javascript:void(0)" class="nav-item-sac active" id="tab-busca" onclick="switchTab('busca')">
+            <i class="bi bi-search"></i> Busca
+        </a>
+        <a href="javascript:void(0)" class="nav-item-sac" id="tab-auditoria" onclick="switchTab('auditoria')">
+            <i class="bi bi-shield-check"></i> Auditoria
+        </a>
+        <a href="javascript:void(0)" class="nav-item-sac" id="tab-config" onclick="switchTab('config')">
+            <i class="bi bi-gear"></i> Config
+        </a>
+    </div>
+
+    <!-- Conteúdo: Busca -->
+    <div id="content-busca" class="container mt-3 px-3">
+        <div class="card card-sac mb-3">
+            <div class="card-body p-3">
+                <h6 class="fw-bold mb-3"><i class="bi bi-search"></i> Buscar Nota Fiscal</h6>
+                <div class="input-group search-input-group mb-2">
+                    <input type="tel" id="input-busca-nf" class="form-control" placeholder="NF-e, CT-e, Chave ou Minuta" onkeydown="if(event.key==='Enter') buscarNF()">
+                    <button class="btn btn-primary" onclick="buscarNF()"><i class="bi bi-search"></i></button>
+                </div>
+                <button class="btn btn-scan w-100" onclick="toggleScanner()">
+                    <i class="bi bi-qr-code-scan me-2"></i>Scanner
+                </button>
+                <div id="scanner-container" class="mt-3 hidden">
+                    <div id="qr-reader"></div>
+                    <button class="btn btn-outline-danger btn-sm w-100 mt-2 rounded-pill" onclick="fecharScanner()">Fechar Câmera</button>
+                </div>
+                <div id="loading-busca" class="text-center mt-3 hidden">
+                    <div class="spinner-border text-primary spinner-border-sm"></div>
+                </div>
+            </div>
+        </div>
+        <div id="resultados-busca"></div>
+    </div>
+
+    <!-- Conteúdo: Auditoria -->
+    <div id="content-auditoria" class="container mt-3 px-3 hidden">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-bold mb-0">Auditoria de Manifestos</h6>
+            <button class="btn btn-sm btn-light border rounded-pill" onclick="carregarManifestosAuditoria()">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+
+        <div id="lista-manifestos-auditoria">
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Conteúdo: Config -->
+    <div id="content-config" class="container mt-3 px-3 hidden">
+        <div class="card card-sac mb-3">
+            <div class="card-body p-3">
+                <h6 class="fw-bold mb-3"><i class="bi bi-clock-history"></i> Rebusca Automática (ESL)</h6>
+                <p class="small text-muted mb-3">Defina o horário diário em que o sistema buscará atualizações na ESL para os manifestos ativos da sua filial.</p>
+                <div class="input-group mb-3">
+                    <span class="input-group-text bg-light"><i class="bi bi-clock"></i></span>
+                    <input type="time" id="input-horario-rebusca" class="form-control">
+                    <button class="btn btn-primary" onclick="salvarHorarioRebusca()">Salvar</button>
+                </div>
+                
+                <hr>
+                
+                <h6 class="fw-bold mb-3"><i class="bi bi-lightning-charge"></i> Sincronização Manual</h6>
+                <p class="small text-muted mb-3">Force a atualização de todos os manifestos ativos agora mesmo.</p>
+                <button class="btn btn-success w-100 fw-bold rounded-pill" onclick="sincronizarFilialAgora()">
+                    <i class="bi bi-arrow-repeat me-2"></i> Atualizar Todos Agora
+                </button>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-3 mt-4">
+            <h6 class="fw-bold mb-0">Últimas Sincronizações</h6>
+            <button class="btn btn-sm btn-light border rounded-pill" onclick="carregarConfiguracaoRebusca()">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+        <div id="lista-logs-rebusca">
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Detalhes do Manifesto para Auditoria -->
+    <div class="modal fade" id="modalNotasAuditoria" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-fullscreen-sm-down modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h6 class="modal-title fw-bold" id="titleNotasAuditoria">Notas do Manifesto</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0" id="bodyNotasAuditoria">
+                    <!-- Lista de notas preenchida via JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Detalhes do Log Rebusca -->
+    <div class="modal fade" id="modalDetalhesLogRebusca" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h6 class="modal-title fw-bold">Detalhes da Sincronização</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0" id="bodyDetalhesLogRebusca">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Baixa de Auditoria (Com Motivo) -->
+    <div class="modal fade" id="modalBaixaAuditoria" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h6 class="modal-title fw-bold">Baixa de Auditoria SAC</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="auditoria-nota-id">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Motivo da Intervenção</label>
+                        <select id="auditoria-motivo" class="form-select">
+                            <option value="APP_ERROR">Erro de Aplicativo/Hardware (Sem Penalidade)</option>
+                            <option value="MOTORISTA_DESLEIXO">Não Finalizado pelo Motorista (Penalidade)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Ocorrência</label>
+                        <select id="auditoria-ocorrencia" class="form-select">
+                            {% for oc in ocorrencias %}
+                                <option value="{{ oc.id }}">[{{ oc.codigo_tms }}] {{ oc.descricao }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Observação</label>
+                        <textarea id="auditoria-obs" class="form-control" rows="2" placeholder="Descreva o motivo..."></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Foto do Canhoto (Opcional)</label>
+                        <div class="btn-camera-sac" onclick="document.getElementById('input-foto-auditoria').click()">
+                            <i class="bi bi-camera fs-2"></i>
+                        </div>
+                        <input type="file" id="input-foto-auditoria" accept="image/*" capture="environment" class="hidden" onchange="previewFotoAuditoria(this)">
+                        <img id="preview-foto-auditoria" class="hidden shadow-sm">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary rounded-pill" data-bs-dismiss="modal">Voltar</button>
+                    <button type="button" class="btn btn-primary rounded-pill px-4" onclick="confirmarBaixaAuditoria()">Confirmar Baixa</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mantemos os modais antigos de busca para retrocompatibilidade se necessário, mas focamos no novo fluxo -->
+    <!-- Modal de Baixa SAC (Busca Simples) -->
+    <div class="modal fade" id="modalBaixaSAC" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h6 class="modal-title fw-bold">Registrar Ação (SAC)</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="baixa-chave-acesso">
+                    <input type="hidden" id="baixa-numero-nota">
+                    <input type="hidden" id="baixa-freight-id">
+                    <div id="baixa-info-nota" class="fw-bold text-primary mb-3"></div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Ocorrência</label>
+                        <select id="select-ocorrencia-sac" class="form-select">
+                            <option value="">-- Escolha --</option>
+                            {% for oc in ocorrencias %}
+                                <option value="{{ oc.id }}">{{ oc.codigo_tms }} - {{ oc.descricao }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Foto</label>
+                        <input type="file" id="input-foto-sac" accept="image/*" capture="environment" class="form-control" onchange="previewFotoSAC(this)">
+                        <img id="preview-foto-sac" class="hidden">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary w-100" onclick="enviarBaixaSAC()">Enviar para TMS</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Feedback de Operação (Sucesso/Erro) -->
+    <div class="modal fade" id="modalFeedbackSAC" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 20px; border: none;">
+                <div class="modal-body text-center p-4">
+                    <div id="feedback-icon" class="mb-3">
+                        <!-- Ícone dinâmico -->
+                    </div>
+                    <h5 class="fw-bold mb-2" id="feedback-title">Título</h5>
+                    <p class="text-muted mb-4" id="feedback-message">Mensagem detalhada aqui.</p>
+                    <button type="button" class="btn btn-primary rounded-pill px-5" data-bs-dismiss="modal">Entendido</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Confirmação de Logout -->
+    <div class="modal fade" id="modalConfirmLogout" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 20px; border: none;">
+                <div class="modal-body text-center p-4">
+                    <i class="bi bi-door-open text-primary mb-3" style="font-size: 3rem;"></i>
+                    <h5 class="fw-bold mb-2">Sair do App?</h5>
+                    <p class="text-muted mb-4">Você precisará fazer login novamente para acessar os dados da filial.</p>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-light rounded-pill flex-grow-1" data-bs-dismiss="modal">Ficar</button>
+                        <button type="button" class="btn btn-danger rounded-pill flex-grow-1" onclick="logout()">Sim, Sair</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let modalNotasAuditoria, modalBaixaAuditoria, modalBaixaSAC, modalFeedback, modalLogout, modalDetalhesLog;
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            const authed = await initAuth();
+            if (!authed) return;
+
+            const res = await authFetch(`${BASE_URL}/api/auth/me/`);
+            if (res.ok) {
+                const data = await res.json();
+                document.getElementById('usuario-logado-sac').innerText = data.nome;
+            }
+
+            modalNotasAuditoria = new bootstrap.Modal(document.getElementById('modalNotasAuditoria'));
+            modalBaixaAuditoria = new bootstrap.Modal(document.getElementById('modalBaixaAuditoria'));
+            modalBaixaSAC = new bootstrap.Modal(document.getElementById('modalBaixaSAC'));
+            modalFeedback = new bootstrap.Modal(document.getElementById('modalFeedbackSAC'));
+            modalLogout = new bootstrap.Modal(document.getElementById('modalConfirmLogout'));
+            modalDetalhesLog = new bootstrap.Modal(document.getElementById('modalDetalhesLogRebusca'));
+        });
+
+        function showFeedback(sucesso, titulo, mensagem) {
+            const iconDiv = document.getElementById('feedback-icon');
+            const titleEl = document.getElementById('feedback-title');
+            const msgEl = document.getElementById('feedback-message');
+
+            if (sucesso) {
+                iconDiv.innerHTML = '<i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>';
+                titleEl.className = 'fw-bold mb-2 text-success';
+            } else {
+                iconDiv.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 4rem;"></i>';
+                titleEl.className = 'fw-bold mb-2 text-danger';
+            }
+
+            titleEl.innerText = titulo;
+            msgEl.innerText = mensagem;
+            modalFeedback.show();
+        }
+
+        function logoutSAC() {
+            modalLogout.show();
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.nav-item-sac').forEach(el => el.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            
+            document.getElementById('content-busca').classList.add('hidden');
+            document.getElementById('content-auditoria').classList.add('hidden');
+            document.getElementById('content-config').classList.add('hidden');
+            document.getElementById(`content-${tab}`).classList.remove('hidden');
+
+            if (tab === 'auditoria') carregarManifestosAuditoria();
+            else if (tab === 'config') carregarConfiguracaoRebusca();
+            else fecharScanner();
+        }
+
+        // --- SCANNER QR CODE ---
+        let html5QrCode;
+        function toggleScanner() {
+            const container = document.getElementById('scanner-container');
+            if (container.classList.contains('hidden')) {
+                container.classList.remove('hidden');
+                html5QrCode = new Html5Qrcode("qr-reader");
+                html5QrCode.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: { width: 250, height: 250 } },
+                    (decodedText) => {
+                        document.getElementById('input-busca-nf').value = decodedText;
+                        fecharScanner();
+                        buscarNF();
+                    },
+                    (errorMessage) => { /* ignore */ }
+                ).catch(err => {
+                    showFeedback(false, "Erro na Câmera", "Não foi possível acessar a câmera do dispositivo.");
+                });
+            } else {
+                fecharScanner();
+            }
+        }
+
+        function fecharScanner() {
+            const container = document.getElementById('scanner-container');
+            container.classList.add('hidden');
+            if (html5QrCode) {
+                html5QrCode.stop().catch(err => console.error(err));
+                html5QrCode = null;
+            }
+        }
+
+        async function carregarManifestosAuditoria() {
+            const container = document.getElementById('lista-manifestos-auditoria');
+            container.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>';
+
+            try {
+                const res = await authFetch(`${BASE_URL}/app-sac/api/auditoria/manifestos/`);
+                const data = await res.json();
+                
+                let html = '';
+                
+                if (data.ativos.length > 0) {
+                    html += '<h6 class="text-muted small fw-bold mb-2">EM TRANSPORTE (ATIVOS)</h6>';
+                    data.ativos.forEach(m => {
+                        html += renderItemManifesto(m, 'active');
+                    });
+                }
+
+                if (data.finalizados_pendentes.length > 0) {
+                    html += '<h6 class="text-muted small fw-bold mt-4 mb-2">FINALIZADOS COM PENDÊNCIA</h6>';
+                    data.finalizados_pendentes.forEach(m => {
+                        html += renderItemManifesto(m, 'stale');
+                    });
+                }
+
+                if (html === '') {
+                    html = '<div class="text-center py-5 text-muted"><i class="bi bi-check-circle fs-1 mb-2 d-block"></i>Nada pendente na sua filial.</div>';
+                }
+
+                container.innerHTML = html;
+            } catch (err) {
+                container.innerHTML = '<div class="alert alert-danger">Erro ao carregar dados.</div>';
+            }
+        }
+
+        function renderItemManifesto(m, statusClass) {
+            return `
+                <div class="card card-sac mb-2 manifesto-item ${statusClass}" onclick="abrirDetalhesManifesto('${m.id}', '${m.numero}')">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <div class="fw-bold text-dark">Manifesto #${m.numero}</div>
+                                <small class="text-muted d-block">${m.motorista}</small>
+                                <small class="text-primary fw-bold">${m.pendentes} notas pendentes</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-light text-dark border mb-1">${m.ultimo_acesso}</span>
+                                <i class="bi bi-chevron-right text-muted d-block"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function abrirDetalhesManifesto(id, numero) {
+            document.getElementById('titleNotasAuditoria').innerText = `Manifesto #${numero}`;
+            const body = document.getElementById('bodyNotasAuditoria');
+            body.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+            modalNotasAuditoria.show();
+
+            try {
+                const res = await authFetch(`${BASE_URL}/app-sac/api/auditoria/manifesto/${id}/notas/`);
+                const notas = await res.json();
+                
+                let html = '<div class="list-group list-group-flush">';
+                notas.forEach(n => {
+                    const statusColor = n.status === 'PENDENTE' ? 'warning' : 'success';
+                    html += `
+                        <div class="list-group-item d-flex justify-content-between align-items-center py-3">
+                            <div style="flex:1">
+                                <div class="fw-bold small">NF ${n.numero}</div>
+                                <small class="text-muted d-block text-truncate" style="max-width: 200px;">${n.destinatario}</small>
+                                <span class="badge bg-${statusColor} bg-opacity-10 text-${statusColor} rounded-pill" style="font-size:0.6rem">${n.status}</span>
+                            </div>
+                            ${n.status === 'PENDENTE' ? `
+                                <button class="btn btn-primary btn-sm rounded-pill px-3" onclick="abrirBaixaAuditoria('${n.id}', '${n.numero}')">
+                                    Baixar
+                                </button>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                body.innerHTML = html;
+            } catch (err) {
+                body.innerHTML = '<div class="p-3 text-danger">Erro ao carregar notas.</div>';
+            }
+        }
+
+        function abrirBaixaAuditoria(notaId, numero) {
+            document.getElementById('auditoria-nota-id').value = notaId;
+            document.getElementById('auditoria-obs').value = '';
+            document.getElementById('input-foto-auditoria').value = '';
+            document.getElementById('preview-foto-auditoria').classList.add('hidden');
+            modalBaixaAuditoria.show();
+        }
+
+        function previewFotoAuditoria(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    const img = document.getElementById('preview-foto-auditoria');
+                    img.src = e.target.result;
+                    img.classList.remove('hidden');
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        async function confirmarBaixaAuditoria() {
+            const formData = new FormData();
+            formData.append('nota_id', document.getElementById('auditoria-nota-id').value);
+            formData.append('ocorrencia_id', document.getElementById('auditoria-ocorrencia').value);
+            formData.append('motivo_baixa', document.getElementById('auditoria-motivo').value);
+            formData.append('observacao', document.getElementById('auditoria-obs').value);
+            
+            const foto = document.getElementById('input-foto-auditoria').files[0];
+            if (foto) formData.append('foto', foto);
+
+            try {
+                const res = await authFetch(`${BASE_URL}/app-sac/api/auditoria/baixa/`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await res.json();
+
+                if (res.ok) {
+                    modalBaixaAuditoria.hide();
+                    modalNotasAuditoria.hide();
+                    showFeedback(true, "Baixa Concluída", "A nota foi processada e integrada com o TMS com sucesso.");
+                    carregarManifestosAuditoria();
+                } else {
+                    showFeedback(false, "Falha na Baixa", data.error || "Ocorreu um erro inesperado no servidor.");
+                }
+            } catch (err) {
+                showFeedback(false, "Erro de Conexão", "Não foi possível se comunicar com o servidor. Verifique sua internet.");
+            }
+        }
+
+        // --- BUSCA SIMPLES (CÓDIGO ANTIGO ADAPTADO) ---
+        async function buscarNF() {
+            const termo = document.getElementById('input-busca-nf').value;
+            if(!termo) return;
+            document.getElementById('loading-busca').classList.remove('hidden');
+            try {
+                const res = await authFetch(`${BASE_URL}/app-sac/api/search-nf/?termo=${termo}`);
+                const data = await res.json();
+                document.getElementById('loading-busca').classList.add('hidden');
+                
+                let html = '';
+                if(data.notas) {
+                    data.notas.forEach(n => {
+                        html += `
+                            <div class="card card-nf mb-2" onclick='abrirModalBaixaSAC(${JSON.stringify(n)})'>
+                                <div class="card-body p-3">
+                                    <div class="fw-bold">NF ${n.numero_nota}</div>
+                                    <small class="text-muted d-block">${n.destinatario}</small>
+                                    <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill mt-1">${n.ultima_ocorrencia_descricao || 'Pendente'}</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                document.getElementById('resultados-busca').innerHTML = html;
+            } catch(e) { document.getElementById('loading-busca').classList.add('hidden'); }
+        }
+
+        function abrirModalBaixaSAC(nota) {
+            document.getElementById('baixa-chave-acesso').value = nota.chave_acesso || '';
+            document.getElementById('baixa-numero-nota').value = nota.numero_nota || '';
+            document.getElementById('baixa-freight-id').value = nota.freight_id || '';
+            document.getElementById('baixa-info-nota').innerText = `NF: ${nota.numero_nota}`;
+            modalBaixaSAC.show();
+        }
+
+        async function enviarBaixaSAC() {
+            // Reusa a lógica existente ou simplifica
+            const formData = new FormData();
+            formData.append('chave_acesso', document.getElementById('baixa-chave-acesso').value);
+            formData.append('numero_nota', document.getElementById('baixa-numero-nota').value);
+            formData.append('ocorrencia_id', document.getElementById('select-ocorrencia-sac').value);
+            const foto = document.getElementById('input-foto-sac').files[0];
+            if(foto) formData.append('foto', foto);
+
+            const res = await authFetch(`${BASE_URL}/app-sac/api/baixa/`, { method: 'POST', body: formData });
+            const data = await res.json();
+
+            if(res.ok) { 
+                modalBaixaSAC.hide(); 
+                showFeedback(true, "Enviado!", "A ocorrência foi registrada com sucesso.");
+                buscarNF(); 
+            } else {
+                showFeedback(false, "Erro no Envio", data.error || "Não foi possível registrar a ocorrência.");
+            }
+        }
+        
+        // --- GESTÃO SAC: REBUSCA ---
+        async function carregarConfiguracaoRebusca() {
+            const containerLogs = document.getElementById('lista-logs-rebusca');
+            containerLogs.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>';
+            
+            try {
+                const res = await authFetch(`${BASE_URL}/app-sac/api/configuracao/rebusca/`);
+                const data = await res.json();
+                
+                document.getElementById('input-horario-rebusca').value = data.horario_rebusca || '';
+                
+                let html = '';
+                if(data.logs && data.logs.length > 0) {
+                    data.logs.forEach(log => {
+                        let statusColor = log.status === 'CONCLUIDO' ? 'success' : (log.status === 'ERRO' ? 'danger' : 'warning');
+                        html += `
+                            <div class="card card-sac mb-2 manifesto-item" style="border-left-color: var(--bs-${statusColor})" onclick='abrirDetalhesLog(${JSON.stringify(log.detalhes).replace(/'/g, "&apos;")})'>
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between">
+                                        <div class="fw-bold">${log.tipo}</div>
+                                        <span class="badge bg-${statusColor} bg-opacity-10 text-${statusColor} rounded-pill">${log.status}</span>
+                                    </div>
+                                    <small class="text-muted d-block mt-1">Início: ${log.criado_em} | Fim: ${log.concluido_em}</small>
+                                </div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    html = '<div class="text-center py-4 text-muted">Nenhuma sincronização registrada.</div>';
+                }
+                containerLogs.innerHTML = html;
+            } catch(e) {
+                containerLogs.innerHTML = '<div class="alert alert-danger">Erro ao carregar dados.</div>';
+            }
+        }
+
+        async function salvarHorarioRebusca() {
+            const horario = document.getElementById('input-horario-rebusca').value;
+            try {
+                const res = await authFetch(`${BASE_URL}/app-sac/api/configuracao/rebusca/`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ horario_rebusca: horario })
+                });
+                const data = await res.json();
+                if(res.ok) showFeedback(true, "Salvo", data.mensagem);
+                else showFeedback(false, "Erro", data.error);
+            } catch(e) { showFeedback(false, "Erro", "Falha de conexão"); }
+        }
+
+        async function sincronizarFilialAgora() {
+            try {
+                const res = await authFetch(`${BASE_URL}/app-sac/api/configuracao/rebusca/agora/`, { method: 'POST' });
+                const data = await res.json();
+                if(res.ok) {
+                    showFeedback(true, "Iniciado", data.mensagem);
+                    setTimeout(() => carregarConfiguracaoRebusca(), 2000);
+                }
+                else showFeedback(false, "Erro", data.error);
+            } catch(e) { showFeedback(false, "Erro", "Falha de conexão"); }
+        }
+
+        function abrirDetalhesLog(detalhes) {
+            const body = document.getElementById('bodyDetalhesLogRebusca');
+            let html = '<div class="list-group list-group-flush">';
+            if(!detalhes || detalhes.length === 0) {
+                html += '<div class="p-3 text-muted text-center">Nenhum manifesto processado.</div>';
+            } else {
+                detalhes.forEach(item => {
+                    if(item.erro) {
+                        html += `
+                            <div class="list-group-item py-3">
+                                <div class="fw-bold text-danger">Manifesto #${item.manifesto}</div>
+                                <small class="text-muted d-block mt-1">Erro: ${item.erro}</small>
+                            </div>
+                        `;
+                    } else {
+                        html += `
+                            <div class="list-group-item py-3">
+                                <div class="fw-bold">Manifesto #${item.manifesto}</div>
+                                <div class="d-flex gap-2 mt-2">
+                                    <span class="badge bg-success bg-opacity-10 text-success"><i class="bi bi-plus-circle"></i> ${item.inseridas} novas</span>
+                                    <span class="badge bg-danger bg-opacity-10 text-danger"><i class="bi bi-trash"></i> ${item.removidas} removidas</span>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+            }
+            html += '</div>';
+            body.innerHTML = html;
+            modalDetalhesLog.show();
+        }
+    </script>
+    <script>
+        // Registro do Service Worker Exclusivo para o SAC
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/app-sac/serviceworker_sac.js')
+                    .then(registration => {
+                        console.log('✅ ServiceWorker SAC Registrado com sucesso:', registration.scope);
+                    })
+                    .catch(err => {
+                        console.log('❌ Falha ao registrar ServiceWorker SAC:', err);
+                    });
+            });
+        }
+
+        // Lógica de Instalação do PWA SAC
+        let deferredPromptSAC;
+        const installBannerSAC = document.getElementById('pwa-install-banner');
+        const installBtnSAC = document.getElementById('btn-instalar-app');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            // Apenas exibe em dispositivos móveis
+            if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                deferredPromptSAC = e;
+                installBannerSAC.style.display = 'block';
+            }
+        });
+
+        installBtnSAC.addEventListener('click', async () => {
+            if (deferredPromptSAC) {
+                deferredPromptSAC.prompt();
+                const { outcome } = await deferredPromptSAC.userChoice;
+                if (outcome === 'accepted') {
+                    installBannerSAC.style.display = 'none';
+                }
+                deferredPromptSAC = null;
+            }
+        });
+
+        window.addEventListener('appinstalled', () => {
+            installBannerSAC.style.display = 'none';
+            deferredPromptSAC = null;
+        });
+
+    </script>
+</body>
+</html>
