@@ -71,9 +71,14 @@ def public_index(request):
     """
     return HttpResponse(html)
 
+from django.shortcuts import redirect
+
+def redirect_to_admin(request):
+    return redirect('/admin/')
+
 urlpatterns = [
     path('admin/', public_admin_site.urls),
-    path('', public_index, name='public_index'),
+    path('', redirect_to_admin, name='public_index'),
 ]
 
 from django.urls import re_path
