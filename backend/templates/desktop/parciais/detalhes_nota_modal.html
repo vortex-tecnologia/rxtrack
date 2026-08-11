@@ -195,6 +195,30 @@
                                     <i class="bi bi-camera-off d-block fs-3 mb-2 opacity-50"></i>
                                     <span class="small">Sem evidência fotográfica</span>
                                 </div>
+                            {% if baixa.solicitar_nova_foto or baixa.qualidade_canhoto == 'ILEGIVEL' %}
+                                <div class="mt-3 p-3 bg-danger bg-opacity-10 border border-danger rounded-3 text-start shadow-sm">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="bi bi-exclamation-triangle-fill text-danger fs-4 me-2"></i>
+                                        <div>
+                                            <strong class="text-danger small d-block">Canhoto Reprovado pela IA (Tentativa {{ baixa.tentativa_foto }}/3)</strong>
+                                            <small class="text-muted" style="font-size: 0.72rem;">Motorista bloqueado aguardando nova foto ou validação manual.</small>
+                                        </div>
+                                    </div>
+                                    <p class="small text-dark mb-2" style="font-size: 0.8rem;">Deseja confirmar o envio desta imagem para o TMS e aprovar a baixa?</p>
+                                    <div class="d-grid gap-2">
+                                        <button type="button" class="btn btn-success btn-sm fw-bold shadow-sm" onclick="window.aprovarCanhotoManual('{{ baixa.id }}', '{{ registro.manifesto.id }}')">
+                                            <i class="bi bi-check-circle me-1"></i> Sim, Aprovar e Enviar ao TMS
+                                        </button>
+                                    </div>
+                                </div>
+                            {% elif baixa.qualidade_canhoto == 'APROVADO_MANUAL' %}
+                                <div class="mt-2 p-2 bg-info bg-opacity-10 text-info border border-info rounded text-start small">
+                                    <i class="bi bi-check2-circle me-1"></i> <strong>Aprovado Manualmente pelo SAC</strong>
+                                </div>
+                            {% elif baixa.qualidade_canhoto == 'REPROVADO_LIMITE_3X' %}
+                                <div class="mt-2 p-2 bg-warning bg-opacity-10 text-dark border border-warning rounded text-start small">
+                                    <i class="bi bi-exclamation-triangle me-1"></i> <strong>Enviado ao TMS após 3 tentativas reprovadas pela IA</strong>
+                                </div>
                             {% endif %}
 
                             {% if baixa %}

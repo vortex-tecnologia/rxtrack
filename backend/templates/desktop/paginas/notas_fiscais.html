@@ -179,7 +179,19 @@
                         </td>
                         <td>
                             {% if nota.status == 'BAIXADA' %}
-                                {% if nota.tipo_operacao == 'COLETA' %}
+                                {% if ultima_baixa.solicitar_nova_foto %}
+                                    <span class="badge bg-danger shadow-sm" title="Foto ilegível. Aguardando nova foto (Tentativa {{ ultima_baixa.tentativa_foto }}/3)">
+                                        <i class="bi bi-camera-fill me-1"></i>Ilegível ({{ ultima_baixa.tentativa_foto }}/3)
+                                    </span>
+                                {% elif ultima_baixa.qualidade_canhoto == 'REPROVADO_LIMITE_3X' %}
+                                    <span class="badge bg-warning text-dark" title="Enviado ao TMS após 3 tentativas reprovadas pela IA">
+                                        <i class="bi bi-exclamation-triangle-fill me-1"></i>3x Ilegível
+                                    </span>
+                                {% elif ultima_baixa.qualidade_canhoto == 'APROVADO_MANUAL' %}
+                                    <span class="badge bg-info text-white" title="Aprovado manualmente pelo Operacional/SAC">
+                                        <i class="bi bi-check2-circle me-1"></i>Aprovado SAC
+                                    </span>
+                                {% elif nota.tipo_operacao == 'COLETA' %}
                                     <span class="badge bg-success">Coletado</span>
                                 {% else %}
                                     <span class="badge bg-success">Entregue</span>
@@ -229,9 +241,15 @@
                         </td>
                         <td class="text-center">
                             <div class="btn-group">
-                                <button class="btn btn-sm btn-outline-secondary" onclick="abrirDetalhes('{{ nota.id }}')" title="Ver Foto/Histórico">
+                                <button class="btn btn-sm btn-outline-secondary" onclick="abrirDetalhes('{{ nota.id }}')" title="Ver Foto / Detalhes">
                                     <i class="bi bi-eye"></i>
                                 </button>
+                                
+                                {% if ultima_baixa and ultima_baixa.solicitar_nova_foto %}
+                                <button class="btn btn-sm btn-outline-success" onclick="aprovarCanhotoManual('{{ ultima_baixa.id }}', '{{ nota.manifesto.id }}')" title="Aprovar Canhoto Manualmente (Liberar para TMS)">
+                                    <i class="bi bi-check-lg"></i>
+                                </button>
+                                {% endif %}
                                 
                                 {% if nota.status == 'PENDENTE' %}
                                 <button class="btn btn-sm btn-warning" onclick="abrirModalBaixa('{{ nota.id }}', '{{ nota.numero_nota }}')" title="Registrar Baixa Manual">
@@ -269,7 +287,6 @@
         {% endif %}
 
     {% endwith %}
-                                </button>
                             </div>
                         </td>
                     </tr>

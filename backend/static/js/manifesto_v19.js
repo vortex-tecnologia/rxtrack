@@ -593,22 +593,56 @@ async function atualizarListaViva(numeroManifesto) {
                 containerColetiva.innerHTML = `<div class="card bg-primary text-white mb-4 shadow-sm border-0"><div class="card-body d-flex justify-content-between align-items-center"><div><small class="fw-bold opacity-75">OPERAÇÃO FILIAL</small><h6 class="mb-0">Chegada de ${transfPendentes.length} Notas</h6></div><button class="btn btn-light btn-sm fw-bold text-primary px-3" onclick="registrarChegadaColetiva('${numeroManifesto}')">CONFIRMAR CHEGADA</button></div></div>`;
             } else if (containerColetiva) { containerColetiva.innerHTML = ''; }
 
+            // VERIFICAÇÕES DE QUALIDADE IA E PENDÊNCIAS DE FOTO
+            const notasEmAnaliseIA = notas.filter(n => n.qualidade_canhoto === 'PENDENTE_ANALISE' || (n.dados_baixa && n.dados_baixa.qualidade_canhoto === 'PENDENTE_ANALISE'));
+            const notasComFotoRuim = notas.filter(n => n.solicitar_nova_foto === true || (n.dados_baixa && n.dados_baixa.solicitar_nova_foto === true));
+
             // CONTAINER DE FINALIZAÇÃO (BOTÃO MANUAL)
             const containerFinalizacao = document.getElementById('container-finalizacao-manifesto');
             if (containerFinalizacao) {
                 if (notas.length > 0 && totalFinalizadas === notas.length) {
-                    containerFinalizacao.innerHTML = `
-                        <div class="card bg-success text-white mb-4 shadow border-0 animate__animated animate__pulse animate__infinite">
-                            <div class="card-body text-center py-4">
-                                <i class="bi bi-flag-fill mb-2" style="font-size: 2rem;"></i>
-                                <h5 class="fw-bold mb-1">ENTREGAS CONCLUÍDAS!</h5>
-                                <p class="small mb-3 opacity-91">Todas as notas deste manifesto foram bipadas.</p>
-                                <button class="btn btn-light btn-lg fw-bold text-success w-100 rounded-pill shadow-sm" onclick="abrirModalFinalizacao()">
-                                    <i class="bi bi-check-all me-1"></i> FINALIZAR MANIFESTO
-                                </button>
+                    if (notasEmAnaliseIA.length > 0) {
+                        // Caso 1: Todas foram bipadas, mas há fotos sendo processadas pela IA
+                        containerFinalizacao.innerHTML = `
+                            <div class="card bg-warning bg-opacity-10 border border-warning text-dark mb-4 shadow-sm" style="border-radius: 16px;">
+                                <div class="card-body text-center py-4">
+                                    <div class="spinner-border text-warning mb-2" role="status" style="width: 2.2rem; height: 2.2rem;"></div>
+                                    <h5 class="fw-bold mb-1 text-dark">ANALISANDO IMAGENS PELA IA...</h5>
+                                    <p class="small mb-0 text-muted">Ainda não é possível finalizar o manifesto. Estamos analisando suas últimas imagens enviadas (<strong>${notasEmAnaliseIA.length} foto(s)</strong> em análise). Aguarde a conclusão para liberar.</p>
+                                </div>
                             </div>
-                        </div>
-                    `;
+                        `;
+                        // Auto-refresh a cada 4s enquanto a IA analisa
+                        setTimeout(() => {
+                            const mID = manifestoAtual || localStorage.getItem('manifesto_ativo');
+                            if (mID) atualizarListaViva(mID);
+                        }, 4000);
+                    } else if (notasComFotoRuim.length > 0) {
+                        // Caso 2: Há fotos reprovadas pela IA pendentes de reenvio (ou liberação do SAC)
+                        containerFinalizacao.innerHTML = `
+                            <div class="card bg-danger bg-opacity-10 border border-danger text-danger mb-4 shadow-sm" style="border-radius: 16px;">
+                                <div class="card-body text-center py-4">
+                                    <i class="bi bi-camera-fill fs-2 mb-2 d-block text-danger"></i>
+                                    <h5 class="fw-bold mb-1 text-danger">CANHOTO ILEGÍVEL PENDENTE</h5>
+                                    <p class="small mb-0 text-dark">Você possui <strong>${notasComFotoRuim.length} nota(s)</strong> com foto reprovada pela IA. Por favor, reenvie uma nova foto (até 3 tentativas) ou aguarde liberação pelo SAC/Operacional para finalizar o manifesto.</p>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        // Caso 3: Todas as notas concluídas e 100% aprovadas pela IA / SAC
+                        containerFinalizacao.innerHTML = `
+                            <div class="card bg-success text-white mb-4 shadow border-0 animate__animated animate__pulse animate__infinite" style="border-radius: 16px;">
+                                <div class="card-body text-center py-4">
+                                    <i class="bi bi-flag-fill mb-2" style="font-size: 2rem;"></i>
+                                    <h5 class="fw-bold mb-1">ENTREGAS CONCLUÍDAS!</h5>
+                                    <p class="small mb-3 opacity-91">Todas as notas deste manifesto foram bipadas e validadas.</p>
+                                    <button class="btn btn-light btn-lg fw-bold text-success w-100 rounded-pill shadow-sm" onclick="abrirModalFinalizacao()">
+                                        <i class="bi bi-check-all me-1"></i> FINALIZAR MANIFESTO
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }
                 } else {
                     containerFinalizacao.innerHTML = '';
                 }
@@ -845,21 +879,39 @@ function atualizarContadorVisual() {
 // =====================================================
 function verificarFimDoManifesto() {
     const container = document.getElementById('lista-notas-container');
-    const notasRestantes = container.querySelectorAll('.card');
+    const notasRestantes = container ? container.querySelectorAll('.card') : [];
 
-    // Se não houver mais cards visíveis na seção de pendentes, abre o modal de confirmação
-    if (notasRestantes.length === 0) {
-        abrirModalFinalizacao();
+    // Se não houver mais cards visíveis na seção de pendentes, atualiza a lista viva
+    const mID = manifestoAtual || localStorage.getItem('manifesto_ativo');
+    if (mID) {
+        atualizarListaViva(mID);
     }
 }
 
 // =====================================================
-// FINALIZAÇÃO AUTOMÁTICA EM SEGUNDO PLANO
-// =====================================================
-// =====================================================
 // FINALIZAÇÃO MANUAL (SOLICITADA PELO USUÁRIO)
 // =====================================================
 function abrirModalFinalizacao() {
+    const mID = manifestoAtual || localStorage.getItem('manifesto_ativo');
+    const rawData = localStorage.getItem(`cache_dados_puros_${mID}`);
+    if (rawData) {
+        try {
+            const notas = JSON.parse(rawData);
+            const notasEmAnalise = notas.filter(n => n.qualidade_canhoto === 'PENDENTE_ANALISE' || (n.dados_baixa && n.dados_baixa.qualidade_canhoto === 'PENDENTE_ANALISE'));
+            if (notasEmAnalise.length > 0) {
+                console.warn('⚠️ Tentativa de finalização com notas em análise de IA.');
+                atualizarListaViva(mID);
+                return;
+            }
+            const notasRuins = notas.filter(n => n.solicitar_nova_foto === true || (n.dados_baixa && n.dados_baixa.solicitar_nova_foto === true));
+            if (notasRuins.length > 0) {
+                console.warn('⚠️ Tentativa de finalização com fotos ilegíveis pendentes.');
+                atualizarListaViva(mID);
+                return;
+            }
+        } catch(e) {}
+    }
+
     const modalElement = document.getElementById('modalFinalizacaoManual');
     // Resetar o conteúdo caso tenha sido alterado por erro anterior
     document.getElementById('conteudo-modal-finalizacao').innerHTML = `

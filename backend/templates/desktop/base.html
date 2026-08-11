@@ -848,6 +848,15 @@
                     if (typeof carregarConteudoModalDetalhes === 'function' && manifestoId) {
                         carregarConteudoModalDetalhes(manifestoId, false);
                     }
+                    setTimeout(() => {
+                        const modalNotaEl = document.getElementById('modalNota');
+                        if (modalNotaEl && bootstrap.Modal.getInstance(modalNotaEl)) {
+                            bootstrap.Modal.getInstance(modalNotaEl).hide();
+                        }
+                        if (window.location.pathname.includes('notas-fiscais') || window.location.pathname.includes('monitoramento')) {
+                            window.location.reload();
+                        }
+                    }, 1200);
                 } else {
                     Swal.fire({
                         icon: 'error',

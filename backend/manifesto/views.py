@@ -49,7 +49,7 @@ class ManifestoFinalizacaoView(APIView):
 
                 return Response({"mensagem": "Manifesto finalizado com sucesso!", "sucesso": True}, status=200)
 
-            # Conferência de Notas Pendentes (Trava de segurança para não fechar se ainda houver notas pendentes)
+            # 1. Conferência de Notas Pendentes (Trava de segurança para não fechar se ainda houver notas pendentes de baixa)
             notas_pendentes = NotaFiscal.objects.filter(
                 manifesto=manifesto, 
                 status='PENDENTE'
@@ -57,7 +57,33 @@ class ManifestoFinalizacaoView(APIView):
 
             if notas_pendentes > 0:
                 return Response({
-                    "mensagem": f"Não é possível finalizar. Existem {notas_pendentes} notas pendentes."
+                    "mensagem": f"Não é possível finalizar. Existem {notas_pendentes} nota(s) pendente(s) de baixa.",
+                    "sucesso": False
+                }, status=400)
+
+            # 2. Conferência de Fotos em Análise pela IA
+            from manifesto.models import BaixaNF
+            notas_em_analise = BaixaNF.objects.filter(
+                nota_fiscal__manifesto=manifesto,
+                qualidade_canhoto='PENDENTE_ANALISE'
+            ).count()
+
+            if notas_em_analise > 0:
+                return Response({
+                    "mensagem": f"Ainda não é possível finalizar o manifesto: existem {notas_em_analise} foto(s) de canhoto sendo analisadas pela IA. Aguarde alguns instantes.",
+                    "sucesso": False
+                }, status=400)
+
+            # 3. Conferência de Canhotos Ilegíveis / Reprovados pela IA (Tentativa < 3 e sem aprovação manual)
+            notas_foto_ruim = BaixaNF.objects.filter(
+                nota_fiscal__manifesto=manifesto,
+                solicitar_nova_foto=True
+            ).count()
+
+            if notas_foto_ruim > 0:
+                return Response({
+                    "mensagem": f"Não é possível finalizar o manifesto: existem {notas_foto_ruim} nota(s) com canhoto ilegível pendente(s) de nova foto (máximo 3 tentativas) ou liberação do SAC.",
+                    "sucesso": False
                 }, status=400)
 
             # --- SUCESSO LOCAL ---

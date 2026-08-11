@@ -2336,7 +2336,7 @@ def atualizar_foto_baixa_view(request, baixa_id):
 @login_required
 @require_POST
 def aprovar_canhoto_manual_view(request, baixa_id):
-    """Permite ao operador do SAC aprovar manualmente um canhoto reprovado pela IA e liberar o envio ao TMS."""
+    """Permite ao operador do SAC/Operacional aprovar manualmente um canhoto reprovado pela IA e liberar o envio ao TMS."""
     from manifesto.models import BaixaNF
     baixa = get_object_or_404(BaixaNF, id=baixa_id)
     baixa.qualidade_canhoto = 'APROVADO_MANUAL'
@@ -2344,7 +2344,9 @@ def aprovar_canhoto_manual_view(request, baixa_id):
     baixa.save()
 
     from AgenteIa.tasks import finalizar_fluxo_tms
-    finalizar_fluxo_tms(baixa, somente_comprovante=True)
+    # Se a ocorrência ainda não foi transmitida ao TMS (estava retida pela IA), envia ocorrência completa + comprovante
+    somente_comprovante = bool(baixa.integrado_tms)
+    finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
 
     if baixa.nota_fiscal and baixa.nota_fiscal.manifesto:
         try:
