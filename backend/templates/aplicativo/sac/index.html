@@ -321,28 +321,16 @@
         
         document.addEventListener('DOMContentLoaded', async () => {
             const authed = await initAuth();
-            if (!authed) return;
+            if (!authed) return; // initAuth já mostra modal de acesso negado se necessário
 
-            const res = await authFetch(`${BASE_URL}/api/auth/me/`);
-            if (res && res.ok) {
-                const data = await res.json();
-                const cargosLideranca = ['SUPERVISOR', 'GERENTE', 'GESTOR', 'ADMINISTRADOR'];
-                const ehSac = data.tipo === 'SAC';
-                const ehLideranca = cargosLideranca.includes(data.cargo);
-
-                if (!ehSac && !ehLideranca) {
-                    alert('Acesso negado: Este aplicativo é exclusivo para a equipe de SAC e Supervisão/Gestão.');
-                    localStorage.removeItem('accessToken');
-                    localStorage.removeItem('refreshToken');
-                    localStorage.removeItem('motorista_id');
-                    window.location.href = '/login-sac/';
-                    return;
+            // Busca nome do usuário logado para exibir no header
+            try {
+                const res = await authFetch(`${BASE_URL}/api/auth/me/`);
+                if (res && res.ok) {
+                    const data = await res.json();
+                    document.getElementById('usuario-logado-sac').innerText = data.nome;
                 }
-                document.getElementById('usuario-logado-sac').innerText = data.nome;
-            } else {
-                window.location.href = '/login-sac/';
-                return;
-            }
+            } catch(e) { /* silencioso */ }
 
             modalNotasAuditoria = new bootstrap.Modal(document.getElementById('modalNotasAuditoria'));
             modalBaixaAuditoria = new bootstrap.Modal(document.getElementById('modalBaixaAuditoria'));

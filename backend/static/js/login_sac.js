@@ -178,18 +178,8 @@ form.addEventListener('submit', async (e) => {
             // 🔒 Backup em cookies para APK
             salvarTokensEmCookies(data.access, data.refresh);
 
-            // 🔥 BUSCA MOTORISTA
-            const meRes = await fetch(API_BASE + 'me/', {
-                headers: {
-                    Authorization: `Bearer ${data.access}`
-                }
-            });
-
-            if (!meRes.ok) throw new Error('Erro ao carregar perfil do motorista');
-
-            const me = await meRes.json();
-            localStorage.setItem('motorista_id', me.id);
-            setTokenCookie('qt_motorista_id', me.id, 365);
+            // 🔥 BUSCA MOTORISTA + VALIDAÇÃO DE PERFIL SAC
+            await carregarMotorista(data.access);
 
             if (window.syncToNativePreferences) {
                 await window.syncToNativePreferences();

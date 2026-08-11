@@ -140,7 +140,88 @@ async function initAuth() {
         return false;
     }
 
+    // 🛡️ VERIFICAÇÃO DE PERMISSÃO SAC
+    // Após renovar o token, verifica se o usuário tem perfil autorizado
+    // antes de permitir o uso do app SAC
+    const isSacApp = window.location.pathname.includes('/app-sac/');
+    if (isSacApp) {
+        try {
+            const access = localStorage.getItem('accessToken');
+            const meRes = await fetch(`${BASE_URL}/api/auth/me/`, {
+                headers: { 'Authorization': `Bearer ${access}` }
+            });
+
+            if (meRes.ok) {
+                const perfil = await meRes.json();
+                const cargosPermitidos = ['SUPERVISOR', 'GERENTE', 'GESTOR', 'ADMINISTRADOR'];
+                const ehSac = perfil.tipo === 'SAC';
+                const ehLideranca = cargosPermitidos.includes(perfil.cargo);
+
+                if (!ehSac && !ehLideranca) {
+                    // Motorista ou membro comum tentando acessar SAC
+                    _mostrarModalAcessoNegadoSAC(perfil.nome, perfil.tipo, perfil.cargo);
+                    return false;
+                }
+            } else {
+                // Token válido mas perfil inacessível — deslogar
+                logout();
+                return false;
+            }
+        } catch (e) {
+            console.error('[SAC Auth] Erro ao verificar permissão:', e);
+            logout();
+            return false;
+        }
+    }
+
     return true;
+}
+
+/**
+ * Exibe modal de acesso negado, limpa tokens e redireciona para login.
+ * Criado dinamicamente para funcionar em qualquer página do SAC.
+ */
+function _mostrarModalAcessoNegadoSAC(nome, tipoUsuario, cargo) {
+    // Cria o backdrop e modal dinamicamente (sem depender de SweetAlert2 ou Bootstrap Modal existente)
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+
+    const tipoLabel = tipoUsuario === 'MOTORISTA' ? 'Motorista' : `${tipoUsuario} (${cargo})`;
+
+    overlay.innerHTML = `
+        <div style="background:white;border-radius:20px;max-width:380px;width:100%;padding:32px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3);animation:sacPopIn .3s ease;">
+            <div style="width:72px;height:72px;border-radius:50%;background:#fee2e2;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+                <svg width="36" height="36" fill="none" stroke="#dc3545" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/>
+                </svg>
+            </div>
+            <h5 style="font-weight:700;color:#dc3545;margin-bottom:8px;">Acesso Negado</h5>
+            <p style="color:#6c757d;font-size:14px;margin-bottom:6px;">
+                Olá <strong>${nome || 'Usuário'}</strong>, seu perfil é <strong>${tipoLabel}</strong>.
+            </p>
+            <p style="color:#6c757d;font-size:13px;margin-bottom:20px;">
+                Este aplicativo é exclusivo para a equipe de <strong>SAC</strong> e <strong>Supervisão/Gestão</strong>.<br>
+                Motoristas e membros operacionais devem utilizar o <strong>App do Motorista</strong>.
+            </p>
+            <button onclick="window.__sacForceLogout()" style="background:linear-gradient(135deg,#dc3545,#c82333);color:white;border:none;padding:12px 32px;border-radius:12px;font-weight:600;font-size:15px;cursor:pointer;width:100%;box-shadow:0 4px 12px rgba(220,53,69,0.3);">
+                <span style="margin-right:6px;">🔒</span> Sair e Deslogar
+            </button>
+        </div>
+        <style>@keyframes sacPopIn{from{transform:scale(0.8);opacity:0}to{transform:scale(1);opacity:1}}</style>
+    `;
+
+    document.body.innerHTML = '';
+    document.body.appendChild(overlay);
+
+    // Função global para o botão
+    window.__sacForceLogout = function() {
+        localStorage.clear();
+        clearTokenCookies();
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences) {
+            window.Capacitor.Plugins.Preferences.clear().catch(() => {});
+        }
+        window.location.href = '/login-sac/';
+    };
 }
 
 async function authFetch(url, options = {}) {
