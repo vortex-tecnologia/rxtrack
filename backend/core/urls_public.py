@@ -72,6 +72,7 @@ def public_index(request):
     return HttpResponse(html)
 
 urlpatterns = [
+    path('admin/', public_admin_site.urls),
     path('', public_index, name='public_index'),
 ]
 
