@@ -624,7 +624,19 @@ function abrirDetalhes(id, nome, cpf, foto, telefone, filial_id, email, modelo_a
 }
 
 async function enviarRedefinicaoSenha(id) {
-    if(!confirm("Deseja enviar um link de redefinição de senha para o e-mail cadastrado deste usuário?")) return;
+    const result = await Swal.fire({
+        title: 'Redefinição de Senha',
+        text: 'Deseja enviar um link de redefinição de senha para o e-mail cadastrado deste usuário?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#0d6efd',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="bi bi-envelope me-1"></i> Sim, Enviar E-mail',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true,
+        customClass: { popup: 'rounded-4 shadow' }
+    });
+    if (!result.isConfirmed) return;
     
     try {
         const response = await fetch(`/operacional/usuarios/reset-senha/${id}/`, {
@@ -636,12 +648,31 @@ async function enviarRedefinicaoSenha(id) {
         });
         const data = await response.json();
         if (data.success) {
-            alert("E-mail de redefinição enviado com sucesso!");
+            Swal.fire({
+                icon: 'success',
+                title: 'E-mail Enviado!',
+                text: 'E-mail de redefinição enviado com sucesso.',
+                timer: 2500,
+                showConfirmButton: false,
+                customClass: { popup: 'rounded-4 shadow' }
+            });
         } else {
-            alert("Erro: " + data.message);
+            Swal.fire({
+                icon: 'error',
+                title: 'Erro ao Enviar',
+                text: data.message || 'Falha ao processar solicitação.',
+                confirmButtonColor: '#dc3545',
+                customClass: { popup: 'rounded-4 shadow' }
+            });
         }
     } catch (e) {
-        alert("Erro ao comunicar com o servidor.");
+        Swal.fire({
+            icon: 'error',
+            title: 'Erro de Conexão',
+            text: 'Erro ao comunicar com o servidor.',
+            confirmButtonColor: '#dc3545',
+            customClass: { popup: 'rounded-4 shadow' }
+        });
     }
 }
 
