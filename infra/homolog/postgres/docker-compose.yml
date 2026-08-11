@@ -1,0 +1,32 @@
+name: rxtrack_homolog_postgres
+
+services:
+
+  postgres:
+    image: postgres:15
+
+    container_name: rxtrack_homolog_postgres
+
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: rxtrack_homolog
+      POSTGRES_USER: rxtrack_homolog
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    ports:
+      - "127.0.0.1:5442:5432"
+
+    volumes:
+      - rxtrack_homolog_postgres_data:/var/lib/postgresql/data
+
+    networks:
+      - rxtrack_homolog_network
+
+volumes:
+  rxtrack_homolog_postgres_data:
+
+networks:
+  rxtrack_homolog_network:
+    name: rxtrack_homolog_network
+    external: true

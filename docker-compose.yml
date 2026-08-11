@@ -1,16 +1,18 @@
+name: rxtrack_homolog
+
 services:
 
   redis:
     image: redis:7-alpine
-    container_name: qt_homolog_redis
+    container_name: rxtrack_homolog_redis
     restart: always
 
     networks:
-      - qt-network
+      - rxtrack_homolog_network
 
   backend:
     build: ./backend
-    container_name: qt_homolog_backend
+    container_name: rxtrack_homolog_backend
     restart: always
 
     extra_hosts:
@@ -38,87 +40,20 @@ services:
 
     volumes:
       - ./backend:/transportadora_backend
-      - media_data:/transportadora_backend/media
+      - rxtrack_homolog_media_data:/transportadora_backend/media
 
     depends_on:
       - redis
 
     ports:
-      - "8001:8000"
+      - "8011:8000"
 
     networks:
-      - qt-network
+      - rxtrack_homolog_network
 
   celery_worker:
     build: ./backend
-    container_name: qt_homolog_celery_worker
-    restart: always
-
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-    entrypoint: ["sh", "./entrypoint.sh"]
-
-    command:
-      [
-        "celery",
-        "-A",
-        "core",
-        "worker",
-        "-l",
-        "info"
-      ]
-
-    env_file:
-      - ./backend/.env
-
-    volumes:
-      - ./backend:/transportadora_backend
-      - media_data:/transportadora_backend/media
-
-    depends_on:
-      - redis
-
-    networks:
-      - qt-network
-
-  celery_beat:
-    build: ./backend
-    container_name: qt_homolog_celery_beat
-    restart: always
-
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-    entrypoint: ["sh", "./entrypoint.sh"]
-
-    command:
-      [
-        "celery",
-        "-A",
-        "core",
-        "beat",
-        "-l",
-        "info",
-        "--scheduler",
-        "django_celery_beat.schedulers.DatabaseScheduler"
-      ]
-
-    env_file:
-      - ./backend/.env
-
-    volumes:
-      - ./backend:/transportadora_backend
-
-    depends_on:
-      - redis
-
-    networks:
-      - qt-network
-
-  celery_worker_ai:
-    build: ./backend
-    container_name: qt_homolog_celery_ai
+    container_name: rxtrack_homolog_celery_worker
     restart: always
 
     extra_hosts:
@@ -135,51 +70,115 @@ services:
         "-l",
         "info",
         "-Q",
-        "ai_queue",
-        "--pool=solo",
-        "--concurrency=1"
+        "celery"
       ]
 
     env_file:
       - ./backend/.env
 
-    environment:
-      - OMP_NUM_THREADS=1
-      - OPENBLAS_NUM_THREADS=1
-      - MKL_NUM_THREADS=1
-      - VECLIB_MAXIMUM_THREADS=1
-      - NUMEXPR_NUM_THREADS=1
-
     volumes:
       - ./backend:/transportadora_backend
-      - media_data:/transportadora_backend/media
+      - rxtrack_homolog_media_data:/transportadora_backend/media
 
     depends_on:
       - redis
 
     networks:
-      - qt-network
+      - rxtrack_homolog_network
+
+  celery_beat:
+    build: ./backend
+    container_name: rxtrack_homolog_celery_beat
+    restart: always
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    entrypoint: ["sh", "./entrypoint.sh"]
+
+    command:
+      [
+        "celery",
+        "-A",
+        "core",
+        "beat",
+        "-l",
+        "info",
+        "--scheduler",
+        "django_celery_beat.schedulers:DatabaseScheduler"
+      ]
+
+    env_file:
+      - ./backend/.env
+
+    volumes:
+      - ./backend:/transportadora_backend
+
+    depends_on:
+      - redis
+
+    networks:
+      - rxtrack_homolog_network
+
+  celery_worker_ai:
+    build: ./backend
+    container_name: rxtrack_homolog_celery_ai
+    restart: always
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    entrypoint: ["sh", "./entrypoint.sh"]
+
+    command:
+      [
+        "celery",
+        "-A",
+        "core",
+        "worker",
+        "-l",
+        "info",
+        "-c",
+        "1",
+        "-Q",
+        "ia_queue"
+      ]
+
+    env_file:
+      - ./backend/.env
+
+    volumes:
+      - ./backend:/transportadora_backend
+      - rxtrack_homolog_media_data:/transportadora_backend/media
+
+    depends_on:
+      - redis
+
+    networks:
+      - rxtrack_homolog_network
 
   portainer:
     image: portainer/portainer-ce:latest
-    container_name: qt_homolog_portainer
+    container_name: rxtrack_homolog_portainer
     restart: always
 
     ports:
-      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9010:9000"
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - portainer_data:/data
+      - rxtrack_homolog_portainer_data:/data
 
     command: --admin-password '$$2b$$10$$dNxs1ay/04kVqPd8fPAEIuJ7KbI0c6x3rnRQmHKR4mJliTwtLwBQy'
 
     networks:
-      - qt-network
+      - rxtrack_homolog_network
 
 networks:
-  qt-network:
+  rxtrack_homolog_network:
+    name: rxtrack_homolog_network
+    external: true
 
 volumes:
-  media_data:
-  portainer_data:
+  rxtrack_homolog_media_data:
+  rxtrack_homolog_portainer_data:
