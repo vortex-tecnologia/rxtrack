@@ -20,8 +20,37 @@ from manifesto.models import Manifesto, NotaFiscal, BaixaNF, Ocorrencia
 logger = logging.getLogger(__name__)
 
 
+def _verificar_permissao_sac(user):
+    """
+    Verifica se o usuário tem permissão para o SAC Mobile.
+    Permitido para:
+    - Superusuário
+    - tipo_usuario == 'SAC'
+    - cargo in ['SUPERVISOR', 'GERENTE', 'GESTOR', 'ADMINISTRADOR']
+    Bloqueado para:
+    - tipo_usuario == 'MOTORISTA'
+    - tipo_usuario == 'OPERACIONAL' com cargo 'MEMBRO'
+    """
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    try:
+        perfil = user.motorista_perfil
+        if perfil.tipo_usuario == 'SAC':
+            return True
+        if perfil.cargo in ['SUPERVISOR', 'GERENTE', 'GESTOR', 'ADMINISTRADOR']:
+            return True
+        return False
+    except Exception:
+        return False
+
+
 def app_view(request):
     """Renderiza a página principal do App SAC."""
+    if request.user.is_authenticated and not _verificar_permissao_sac(request.user):
+        from django.shortcuts import render
+        return render(request, 'aplicativo/sac/acesso_negado.html', status=403)
     ocorrencias = Ocorrencia.objects.all().order_by('codigo_tms')
     return render(request, 'aplicativo/sac/index.html', {'ocorrencias': ocorrencias})
 
@@ -352,6 +381,8 @@ def api_search_nf(request):
     """
     Busca inteligente apenas no TMS.
     """
+    if not _verificar_permissao_sac(request.user):
+        return Response({"error": "Acesso não autorizado ao SAC Mobile."}, status=403)
     termo = request.GET.get('termo', '').strip()
     if not termo:
         return Response({"error": "Digite um número, chave ou escaneie o código."}, status=400)
@@ -377,6 +408,8 @@ def api_check_comprovante_sac(request):
     """
     Checa se uma nota possui comprovante no TMS chamando a nova API.
     """
+    if not _verificar_permissao_sac(request.user):
+        return Response({"error": "Acesso não autorizado ao SAC Mobile."}, status=403)
     invoice_key = request.GET.get('invoice_key')
     if not invoice_key:
         return Response({"error": "chave_acesso não informada."}, status=400)
@@ -411,6 +444,8 @@ def api_registrar_baixa_sac(request):
     Registra baixa feita pelo SAC (Pass-Through).
     Faz o upload da imagem para o FTP e enfileira a tarefa para chamar a API da ESL.
     """
+    if not _verificar_permissao_sac(request.user):
+        return Response({"error": "Acesso não autorizado ao SAC Mobile."}, status=403)
     from sac_mobile.tasks import processar_envio_sac_tms_task, processar_canhoto_sac_task
     from manifesto.rotas.baixa import upload_via_ftp
     from .models import HistoricoBaixaSAC
@@ -516,6 +551,8 @@ def api_listar_manifestos_auditoria_sac(request):
     """
     Lista manifestos da filial do SAC para auditoria.
     """
+    if not _verificar_permissao_sac(request.user):
+        return Response({"error": "Acesso não autorizado ao SAC Mobile."}, status=403)
     try:
         perfil = request.user.motorista_perfil
         filial = perfil.filial
@@ -557,6 +594,8 @@ def api_detalhes_manifesto_auditoria_sac(request, manifesto_id):
     """
     Lista notas de um manifesto específico para auditoria no app.
     """
+    if not _verificar_permissao_sac(request.user):
+        return Response({"error": "Acesso não autorizado ao SAC Mobile."}, status=403)
     try:
         notas = NotaFiscal.objects.filter(manifesto_id=manifesto_id).order_by('status')
         
@@ -582,6 +621,8 @@ def api_registrar_baixa_auditoria_sac(request):
     """
     Registra baixa manual pelo app SAC com motivo de auditoria.
     """
+    if not _verificar_permissao_sac(request.user):
+        return Response({"error": "Acesso não autorizado ao SAC Mobile."}, status=403)
     from manifesto.tasks import enviar_baixa_esl_task, enviar_baixa_minuta_task
     from manifesto.rotas.baixa import upload_via_ftp
     
@@ -646,6 +687,8 @@ def api_registrar_baixa_auditoria_sac(request):
 @api_view(['GET', 'PUT'])
 @permission_classes([IsAuthenticated])
 def api_config_rebusca(request):
+    if not _verificar_permissao_sac(request.user):
+        return Response({"error": "Acesso não autorizado ao SAC Mobile."}, status=403)
     try:
         perfil = request.user.motorista_perfil
         filial = perfil.filial
@@ -692,6 +735,8 @@ def api_config_rebusca(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def api_rebusca_agora(request):
+    if not _verificar_permissao_sac(request.user):
+        return Response({"error": "Acesso não autorizado ao SAC Mobile."}, status=403)
     try:
         perfil = request.user.motorista_perfil
         filial = perfil.filial
@@ -699,7 +744,8 @@ def api_rebusca_agora(request):
             return Response({"error": "Usuário sem filial vinculada."}, status=400)
             
         from sac_mobile.tasks import executar_rebusca_filial_task
-        executar_rebusca_filial_task.delay(filial.id, 'MANUAL')
+        schema_name = getattr(request, 'tenant', None) and request.tenant.schema_name or 'public'
+        executar_rebusca_filial_task.delay(filial.id, 'MANUAL', schema_name=schema_name)
         
         return Response({
             "status": "sucesso",

@@ -324,9 +324,24 @@
             if (!authed) return;
 
             const res = await authFetch(`${BASE_URL}/api/auth/me/`);
-            if (res.ok) {
+            if (res && res.ok) {
                 const data = await res.json();
+                const cargosLideranca = ['SUPERVISOR', 'GERENTE', 'GESTOR', 'ADMINISTRADOR'];
+                const ehSac = data.tipo === 'SAC';
+                const ehLideranca = cargosLideranca.includes(data.cargo);
+
+                if (!ehSac && !ehLideranca) {
+                    alert('Acesso negado: Este aplicativo é exclusivo para a equipe de SAC e Supervisão/Gestão.');
+                    localStorage.removeItem('accessToken');
+                    localStorage.removeItem('refreshToken');
+                    localStorage.removeItem('motorista_id');
+                    window.location.href = '/login-sac/';
+                    return;
+                }
                 document.getElementById('usuario-logado-sac').innerText = data.nome;
+            } else {
+                window.location.href = '/login-sac/';
+                return;
             }
 
             modalNotasAuditoria = new bootstrap.Modal(document.getElementById('modalNotasAuditoria'));

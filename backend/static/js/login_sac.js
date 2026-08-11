@@ -54,11 +54,27 @@ async function carregarMotorista(accessToken) {
         }
     });
 
-    if (!res.ok) throw new Error('Erro ao buscar dados do motorista');
+    if (!res.ok) throw new Error('Erro ao buscar dados do usuário');
 
     const data = await res.json();
 
-    if (!data.id) throw new Error('Motorista ID não retornado');
+    if (!data.id) throw new Error('Dados do usuário não retornados');
+
+    // Validação de Permissão para o SAC Mobile:
+    // Permitido apenas: tipo_usuario === 'SAC' OU cargo em ['SUPERVISOR', 'GERENTE', 'GESTOR', 'ADMINISTRADOR']
+    const cargosLideranca = ['SUPERVISOR', 'GERENTE', 'GESTOR', 'ADMINISTRADOR'];
+    const ehSac = data.tipo === 'SAC';
+    const ehLideranca = cargosLideranca.includes(data.cargo);
+
+    if (!ehSac && !ehLideranca) {
+        // Limpa tokens
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('motorista_id');
+        setTokenCookie('qt_access_token', '', -1);
+        setTokenCookie('qt_refresh_token', '', -1);
+        throw new Error('Acesso negado: Este aplicativo é exclusivo para a equipe de SAC e Supervisão/Gestão.');
+    }
 
     // Salva o ID para uso em WebSockets ou filtros de API
     localStorage.setItem('motorista_id', data.id);

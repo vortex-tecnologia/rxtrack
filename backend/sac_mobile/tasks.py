@@ -345,83 +345,110 @@ def processar_canhoto_sac_task(self, historico_id, dados_baixa):
         processar_envio_sac_tms_task.delay(dados_baixa)
         return "Esgotou retries IA"
 @shared_task(bind=True, max_retries=1)
-def executar_rebusca_filial_task(self, filial_id, tipo='AUTOMATICA'):
+def executar_rebusca_filial_task(self, filial_id, tipo='AUTOMATICA', schema_name=None):
     from manifesto.models import Manifesto, ManifestoBuscaLog
     from usuarios.models import Filial
     from sac_mobile.models import LogRebuscaFilial
     from integracoes.registry import get_tms_adapter
     from django.utils import timezone
+    from django_tenants.utils import schema_context
+    from django.db import connection
+    from django.db.models import Q
     import logging
     
     logger = logging.getLogger(__name__)
-    
-    try:
-        filial = Filial.objects.get(id=filial_id)
-    except Filial.DoesNotExist:
-        return "Filial não encontrada."
-        
-    log_rebusca = LogRebuscaFilial.objects.create(
-        filial=filial,
-        tipo=tipo,
-        status='PROCESSANDO'
-    )
-    
-    adapter = get_tms_adapter()
-    if not adapter:
-        log_rebusca.status = 'ERRO'
-        log_rebusca.concluido_em = timezone.now()
-        log_rebusca.save()
-        return "TMS Adapter não encontrado."
-        
-    manifestos = Manifesto.objects.filter(filial=filial, status='EM_TRANSPORTE')
-    detalhes = []
-    
-    for manifesto in manifestos:
-        busca_log = ManifestoBuscaLog.objects.create(
-            numero_manifesto=manifesto.numero_manifesto,
-            motorista=manifesto.motorista,
+    target_schema = schema_name or getattr(connection, 'schema_name', 'public')
+
+    def _executar_no_schema():
+        try:
+            filial = Filial.objects.get(id=filial_id)
+        except Filial.DoesNotExist:
+            logger.error(f"[Rebusca] Filial ID {filial_id} não encontrada no schema '{target_schema}'.")
+            return f"Filial {filial_id} não encontrada no schema {target_schema}."
+            
+        log_rebusca = LogRebuscaFilial.objects.create(
+            filial=filial,
+            tipo=tipo,
             status='PROCESSANDO'
         )
-        try:
-            notas_antes = manifesto.notas_fiscais.count()
-            resultado = adapter.buscar_manifesto_completo(busca_log.id)
-            notas_depois = manifesto.notas_fiscais.count()
+        
+        adapter = get_tms_adapter()
+        if not adapter:
+            log_rebusca.status = 'ERRO'
+            log_rebusca.concluido_em = timezone.now()
+            log_rebusca.save()
+            logger.error(f"[Rebusca] TMS Adapter não configurado para o schema '{target_schema}'.")
+            return "TMS Adapter não encontrado."
             
-            diff = notas_depois - notas_antes
-            inseridas = diff if diff > 0 else 0
-            removidas = abs(diff) if diff < 0 else 0
-            
-            detalhes.append({
-                "manifesto": manifesto.numero_manifesto,
-                "inseridas": inseridas,
-                "removidas": removidas,
-                "resultado": str(resultado)
-            })
-        except Exception as e:
-            logger.error(f"Erro ao buscar manifesto {manifesto.numero_manifesto} na rebusca: {e}")
-            detalhes.append({
-                "manifesto": manifesto.numero_manifesto,
-                "erro": str(e)
-            })
-            
-    log_rebusca.detalhes_manifestos = detalhes
-    log_rebusca.status = 'CONCLUIDO'
-    log_rebusca.concluido_em = timezone.now()
-    log_rebusca.save(update_fields=['detalhes_manifestos', 'status', 'concluido_em'])
-    
-    return f"Rebusca filial {filial.nome} concluída. {len(manifestos)} manifestos verificados."
+        # Busca manifestos em transporte ou ativos não finalizados da filial
+        manifestos = Manifesto.objects.filter(filial=filial).filter(Q(status='EM_TRANSPORTE') | Q(finalizado=False)).distinct()
+        detalhes = []
+        
+        for manifesto in manifestos:
+            busca_log = ManifestoBuscaLog.objects.create(
+                numero_manifesto=manifesto.numero_manifesto,
+                motorista=manifesto.motorista,
+                status='PROCESSANDO'
+            )
+            try:
+                notas_antes = manifesto.notas_fiscais.count()
+                resultado = adapter.buscar_manifesto_completo(busca_log.id)
+                notas_depois = manifesto.notas_fiscais.count()
+                
+                diff = notas_depois - notas_antes
+                inseridas = diff if diff > 0 else 0
+                removidas = abs(diff) if diff < 0 else 0
+                
+                detalhes.append({
+                    "manifesto": manifesto.numero_manifesto,
+                    "inseridas": inseridas,
+                    "removidas": removidas,
+                    "resultado": str(resultado)
+                })
+            except Exception as e:
+                logger.error(f"[Rebusca] Erro ao buscar manifesto {manifesto.numero_manifesto}: {e}")
+                detalhes.append({
+                    "manifesto": manifesto.numero_manifesto,
+                    "erro": str(e)
+                })
+                
+        log_rebusca.detalhes_manifestos = detalhes
+        log_rebusca.status = 'CONCLUIDO'
+        log_rebusca.concluido_em = timezone.now()
+        log_rebusca.save(update_fields=['detalhes_manifestos', 'status', 'concluido_em'])
+        
+        logger.info(f"[Rebusca] Concluída filial {filial.nome} (Schema: {target_schema}). {len(manifestos)} manifestos verificados.")
+        return f"Rebusca filial {filial.nome} concluída. {len(manifestos)} manifestos verificados."
+
+    if target_schema and target_schema != 'public':
+        with schema_context(target_schema):
+            return _executar_no_schema()
+    else:
+        return _executar_no_schema()
 
 
 @shared_task
 def verificar_agendamentos_rebusca_task():
+    from django_tenants.utils import get_tenant_model, schema_context
     from usuarios.models import Filial
     from django.utils import timezone
+    import logging
     
+    logger = logging.getLogger(__name__)
     agora_br = timezone.localtime(timezone.now())
     hora_atual_str = agora_br.strftime('%H:%M')
     
-    filiais = Filial.objects.exclude(horario_rebusca_esl__isnull=True)
-    for filial in filiais:
-        horario_str = filial.horario_rebusca_esl.strftime('%H:%M')
-        if hora_atual_str == horario_str:
-            executar_rebusca_filial_task.delay(filial.id, 'AUTOMATICA')
+    TenantModel = get_tenant_model()
+    tenants = TenantModel.objects.exclude(schema_name='public')
+    
+    for tenant in tenants:
+        try:
+            with schema_context(tenant.schema_name):
+                filiais = Filial.objects.exclude(horario_rebusca_esl__isnull=True)
+                for filial in filiais:
+                    horario_str = filial.horario_rebusca_esl.strftime('%H:%M')
+                    if hora_atual_str == horario_str:
+                        logger.info(f"[Rebusca Automática] Disparando rebusca para filial {filial.nome} (Tenant: {tenant.schema_name}) às {hora_atual_str}")
+                        executar_rebusca_filial_task.delay(filial.id, 'AUTOMATICA', schema_name=tenant.schema_name)
+        except Exception as e:
+            logger.error(f"[Rebusca Automática] Erro no tenant {tenant.schema_name}: {e}")

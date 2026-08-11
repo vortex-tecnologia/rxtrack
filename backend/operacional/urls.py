@@ -52,6 +52,9 @@ urlpatterns = [
     path('configuracao/', views.ConfiguracaoSistemaView.as_view(), name='configuracao_sistema'),
     path('api/configuracao/salvar/', views.salvar_configuracao_view, name='salvar_configuracao'),
     path('api/configuracao/buscar-grupos-whatsapp/', views.buscar_grupos_whatsapp_view, name='buscar_grupos_whatsapp'),
+    path('api/configuracao/rebusca/filial/<int:filial_id>/salvar/', views.salvar_rebusca_filial_view, name='salvar_rebusca_filial'),
+    path('api/configuracao/rebusca/filial/<int:filial_id>/disparar/', views.disparar_rebusca_filial_view, name='disparar_rebusca_filial'),
+    path('api/configuracao/rebusca/filial/<int:filial_id>/logs/', views.obter_logs_rebusca_filial_view, name='obter_logs_rebusca_filial'),
 
     # Notificações de Erros (Centro de Notificações Global)
     path('api/notificacoes/erros/', api_notificacoes_erros, name='api_notificacoes_erros'),

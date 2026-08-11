@@ -186,34 +186,118 @@
             </div>
         </div>
     </div>
+    <!-- 5. REBUSCA AUTOMÁTICA (ESL CLOUD) POR FILIAL -->
+    <div class="col-12 mt-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="fw-bold mb-0 text-primary">
+                        <i class="bi bi-clock-history me-2"></i>⏰ Rebusca Automática (ESL Cloud) por Filial
+                    </h6>
+                    <small class="text-muted">Defina o horário diário em que o robô busca atualizações e canhotos na ESL para os manifestos ativos de cada filial.</small>
+                </div>
+                <span class="badge bg-primary bg-opacity-10 text-primary fw-bold px-3 py-2">
+                    <i class="bi bi-robot me-1"></i> Multi-Filiais
+                </span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr class="small text-muted text-uppercase">
+                                <th class="ps-4">Filial</th>
+                                <th>Cód. TMS</th>
+                                <th style="width: 230px;">Horário da Rebusca</th>
+                                <th>Última Sincronização</th>
+                                <th class="text-end pe-4">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for f in filiais_rebusca %}
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="fw-bold text-dark">{{ f.nome }}</div>
+                                    <small class="text-muted">ID Sistema: #{{ f.id }}</small>
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-dark border">{{ f.id_filial_tms }}</span>
+                                </td>
+                                <td>
+                                    <div class="input-group input-group-sm">
+                                        <input type="time" id="rebusca_time_{{ f.id }}" class="form-control" value="{{ f.horario_rebusca }}" {% if not pode_gerenciar_rebusca %}disabled{% endif %}>
+                                        {% if pode_gerenciar_rebusca %}
+                                        <button class="btn btn-outline-primary" type="button" onclick="salvarHorarioRebusca('{{ f.id }}', '{{ f.nome }}')" title="Salvar Horário">
+                                            <i class="bi bi-check-lg"></i> Salvar
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if f.ultimo_status == 'CONCLUIDO' %}
+                                        <span class="badge bg-success bg-opacity-10 text-success fw-bold me-1">
+                                            <i class="bi bi-check-circle me-1"></i>Concluído
+                                        </span>
+                                    {% elif f.ultimo_status == 'PROCESSANDO' %}
+                                        <span class="badge bg-warning bg-opacity-10 text-warning fw-bold me-1">
+                                            <i class="bi bi-hourglass-split me-1"></i>Processando
+                                        </span>
+                                    {% elif f.ultimo_status == 'ERRO' %}
+                                        <span class="badge bg-danger bg-opacity-10 text-danger fw-bold me-1">
+                                            <i class="bi bi-x-circle me-1"></i>Erro
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary fw-bold me-1">
+                                            Sem registros
+                                        </span>
+                                    {% endif %}
+                                    <small class="text-muted d-block mt-1">{{ f.ultimo_horario }}</small>
+                                </td>
+                                <td class="text-end pe-4">
+                                    {% if pode_gerenciar_rebusca %}
+                                    <button type="button" class="btn btn-sm btn-outline-success me-1" onclick="dispararRebuscaAgora('{{ f.id }}', '{{ f.nome }}')" title="Forçar busca de todos os manifestos ativos desta filial agora">
+                                        <i class="bi bi-arrow-repeat me-1"></i> Sincronizar Agora
+                                    </button>
+                                    {% endif %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="abrirLogsRebuscaFilial('{{ f.id }}', '{{ f.nome }}')" title="Ver Histórico de Logs">
+                                        <i class="bi bi-journal-text me-1"></i> Logs
+                                    </button>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center py-4 text-muted">
+                                    <i class="bi bi-building-slash fs-2 d-block mb-1"></i>
+                                    Nenhuma filial cadastrada.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<!-- MODAL DE GRUPOS DO WHATSAPP -->
-<div class="modal fade" id="modalGruposWhatsapp" tabindex="-1">
-    <div class="modal-dialog modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title fw-bold text-success"><i class="bi bi-whatsapp me-2"></i>Grupos Conectados</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+<!-- MODAL DE LOGS DE REBUSCA DA FILIAL -->
+<div class="modal fade" id="modalLogsRebusca" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold" id="modalLogsRebuscaTitle"><i class="bi bi-journal-text me-2"></i>Histórico de Rebusca ESL</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
-                <div id="loadingGrupos" class="text-center py-4">
-                    <div class="spinner-border text-success" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="text-muted mt-2 small">Buscando grupos na Evolution API...</p>
+            <div class="modal-body p-4">
+                <div id="loadingLogsRebusca" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="text-muted mt-2 small">Carregando histórico de sincronizações...</p>
                 </div>
-                
-                <div id="listaGrupos" class="d-none">
-                    <p class="text-muted small mb-3">Selecione os grupos que deseja adicionar à lista de relatórios diários (22h):</p>
-                    <div class="list-group list-group-flush" id="gruposContainer">
-                        <!-- Renderizado via JS -->
-                    </div>
+                <div id="conteudoLogsRebusca" class="d-none">
+                    <!-- Renderizado via JS -->
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-                <button type="button" class="btn btn-success" onclick="aplicarGruposSelecionados()">Adicionar Selecionados</button>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary px-4 rounded-pill" data-bs-dismiss="modal">Fechar</button>
             </div>
         </div>
     </div>
@@ -397,6 +481,196 @@
         
         modalGrupos.hide();
         Swal.fire('Pronto!', 'JIDs adicionados. Não esqueça de Salvar as Alterações.', 'success');
+    }
+
+    // ===== FUNÇÕES DE REBUSCA POR FILIAL =====
+    async function salvarHorarioRebusca(filialId, filialNome) {
+        const input = document.getElementById(`rebusca_time_${filialId}`);
+        const horario = input ? input.value : '';
+
+        try {
+            const response = await fetch(`/api/configuracao/rebusca/filial/${filialId}/salvar/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({ horario_rebusca: horario })
+            });
+            const data = await response.json();
+            if (data.status === 'sucesso') {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Horário Atualizado!',
+                    text: data.message,
+                    timer: 2000,
+                    showConfirmButton: false,
+                    customClass: { popup: 'rounded-4 shadow' }
+                });
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Erro ao Salvar',
+                    text: data.message || 'Falha ao salvar horário.',
+                    customClass: { popup: 'rounded-4 shadow' }
+                });
+            }
+        } catch (e) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Erro',
+                text: 'Falha na comunicação com o servidor.',
+                customClass: { popup: 'rounded-4 shadow' }
+            });
+        }
+    }
+
+    async function dispararRebuscaAgora(filialId, filialNome) {
+        const result = await Swal.fire({
+            title: `Sincronizar ${filialNome}?`,
+            text: `Deseja forçar a busca de todos os manifestos ativos da filial ${filialNome} na ESL Cloud agora?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#198754',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: '<i class="bi bi-arrow-repeat me-1"></i> Sim, Sincronizar Agora',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true,
+            customClass: { popup: 'rounded-4 shadow' }
+        });
+
+        if (!result.isConfirmed) return;
+
+        Swal.fire({
+            title: 'Sincronizando filial...',
+            text: 'Buscando atualizações de manifestos e canhotos na ESL Cloud.',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        try {
+            const response = await fetch(`/api/configuracao/rebusca/filial/${filialId}/disparar/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            });
+            const data = await response.json();
+            if (data.status === 'sucesso') {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Sincronização Iniciada!',
+                    text: data.message,
+                    customClass: { popup: 'rounded-4 shadow' }
+                });
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Falha na Sincronização',
+                    text: data.message || 'Não foi possível iniciar a sincronização.',
+                    customClass: { popup: 'rounded-4 shadow' }
+                });
+            }
+        } catch (e) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Erro de Conexão',
+                text: 'Falha ao comunicar com o servidor.',
+                customClass: { popup: 'rounded-4 shadow' }
+            });
+        }
+    }
+
+    let modalLogsRebuscaInstance = null;
+    async function abrirLogsRebuscaFilial(filialId, filialNome) {
+        if (!modalLogsRebuscaInstance) {
+            modalLogsRebuscaInstance = new bootstrap.Modal(document.getElementById('modalLogsRebusca'));
+        }
+
+        document.getElementById('modalLogsRebuscaTitle').innerHTML = `<i class="bi bi-journal-text me-2"></i>Logs de Rebusca — Filial ${filialNome}`;
+        document.getElementById('loadingLogsRebusca').classList.remove('d-none');
+        document.getElementById('conteudoLogsRebusca').classList.add('d-none');
+        document.getElementById('conteudoLogsRebusca').innerHTML = '';
+
+        modalLogsRebuscaInstance.show();
+
+        try {
+            const response = await fetch(`/api/configuracao/rebusca/filial/${filialId}/logs/`);
+            const data = await response.json();
+
+            if (data.status === 'sucesso') {
+                const container = document.getElementById('conteudoLogsRebusca');
+                if (!data.logs || data.logs.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary"></i>
+                            <h6>Nenhuma sincronização registrada até o momento.</h6>
+                            <p class="small mb-0">Use o botão "Sincronizar Agora" ou aguarde o horário agendado.</p>
+                        </div>
+                    `;
+                } else {
+                    let html = '<div class="list-group list-group-flush">';
+                    data.logs.forEach(log => {
+                        let badgeClass = 'bg-secondary';
+                        let icon = 'bi-question-circle';
+                        if (log.status === 'CONCLUIDO') { badgeClass = 'bg-success'; icon = 'bi-check-circle-fill'; }
+                        else if (log.status === 'PROCESSANDO') { badgeClass = 'bg-warning text-dark'; icon = 'bi-hourglass-split'; }
+                        else if (log.status === 'ERRO') { badgeClass = 'bg-danger'; icon = 'bi-x-circle-fill'; }
+
+                        let detalhesHtml = '';
+                        if (log.detalhes && Array.isArray(log.detalhes) && log.detalhes.length > 0) {
+                            detalhesHtml = `
+                                <div class="mt-2 bg-light p-2 rounded small border">
+                                    <div class="fw-bold text-dark mb-1">Manifestos Processados (${log.detalhes.length}):</div>
+                                    <ul class="mb-0 ps-3">
+                                        ${log.detalhes.map(d => `
+                                            <li>
+                                                <strong>Manifesto #${d.manifesto}</strong>: 
+                                                ${d.inseridas !== undefined ? `<span class="badge bg-success bg-opacity-10 text-success">+${d.inseridas} novas</span> ` : ''}
+                                                ${d.removidas ? `<span class="badge bg-danger bg-opacity-10 text-danger">-${d.removidas} baixadas</span> ` : ''}
+                                                ${d.erro ? `<span class="text-danger fw-bold">Erro: ${d.erro}</span>` : '<span class="text-muted">OK</span>'}
+                                            </li>
+                                        `).join('')}
+                                    </ul>
+                                </div>
+                            `;
+                        } else {
+                            detalhesHtml = `<small class="text-muted d-block mt-1">Nenhum manifesto ativo encontrado no momento da execução.</small>`;
+                        }
+
+                        html += `
+                            <div class="list-group-item py-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <div>
+                                        <span class="badge ${badgeClass} me-2"><i class="bi ${icon} me-1"></i>${log.status}</span>
+                                        <span class="badge bg-light text-dark border">Tipo: ${log.tipo}</span>
+                                    </div>
+                                    <small class="text-muted fw-bold">${log.criado_em} (Concluído: ${log.concluido_em})</small>
+                                </div>
+                                ${detalhesHtml}
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    container.innerHTML = html;
+                }
+
+                document.getElementById('loadingLogsRebusca').classList.add('d-none');
+                document.getElementById('conteudoLogsRebusca').classList.remove('d-none');
+            } else {
+                document.getElementById('loadingLogsRebusca').classList.add('d-none');
+                document.getElementById('conteudoLogsRebusca').classList.remove('d-none');
+                document.getElementById('conteudoLogsRebusca').innerHTML = `<div class="alert alert-danger">${data.message || 'Erro ao carregar logs.'}</div>`;
+            }
+        } catch (e) {
+            document.getElementById('loadingLogsRebusca').classList.add('d-none');
+            document.getElementById('conteudoLogsRebusca').classList.remove('d-none');
+            document.getElementById('conteudoLogsRebusca').innerHTML = `<div class="alert alert-danger">Erro de conexão ao carregar logs.</div>`;
+        }
     }
 </script>
 {% endblock %}

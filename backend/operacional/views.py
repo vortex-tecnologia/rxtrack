@@ -1312,9 +1312,31 @@ class ConfiguracaoSistemaView(TemplateView):
             if token_invoices:
                 token_invoices = token_invoices[:5] + "*" * 10 + token_invoices[-5:]
 
+        # Filiais para configuração de Rebusca ESL
+        from usuarios.models import Filial
+        from sac_mobile.models import LogRebuscaFilial
+        filiais_qs = Filial.objects.all().order_by('nome')
+        filiais_rebusca = []
+        for f in filiais_qs:
+            ultimo_log = LogRebuscaFilial.objects.filter(filial=f).order_by('-criado_em').first()
+            filiais_rebusca.append({
+                'id': f.id,
+                'nome': f.nome,
+                'id_filial_tms': f.id_filial_tms or '-',
+                'horario_rebusca': f.horario_rebusca_esl.strftime('%H:%M') if f.horario_rebusca_esl else '',
+                'ultimo_status': ultimo_log.status if ultimo_log else 'SEM_REGISTRO',
+                'ultimo_horario': ultimo_log.criado_em.strftime('%d/%m %H:%M') if ultimo_log else 'Nenhuma execução',
+                'ultimo_tipo': ultimo_log.tipo if ultimo_log else '-',
+                'ultimo_concluido': ultimo_log.concluido_em.strftime('%H:%M') if (ultimo_log and ultimo_log.concluido_em) else '-'
+            })
+
+        pode_gerenciar_rebusca = perfil.cargo in ['SUPERVISOR', 'GERENTE', 'GESTOR', 'ADMINISTRADOR'] or self.request.user.is_superuser
+
         context.update({
             'config': config,
             'cargo': perfil.cargo,
+            'pode_gerenciar_rebusca': pode_gerenciar_rebusca,
+            'filiais_rebusca': filiais_rebusca,
             'token_analytics_masked': token_analytics,
             'token_invoices_masked': token_invoices,
             'titulo': "Configuração do Sistema",
@@ -1364,6 +1386,93 @@ def salvar_configuracao_view(request):
         config.save()
         return JsonResponse({'status': 'sucesso', 'message': 'Configurações salvas com sucesso!'})
         
+    except Exception as e:
+        return JsonResponse({'status': 'erro', 'message': str(e)}, status=400)
+
+
+@login_required(login_url='/login/')
+@apenas_operacional
+@require_POST
+def salvar_rebusca_filial_view(request, filial_id):
+    perfil = request.user.motorista_perfil
+    if perfil.cargo not in ['SUPERVISOR', 'GERENTE', 'GESTOR', 'ADMINISTRADOR'] and not request.user.is_superuser:
+        return JsonResponse({'status': 'erro', 'message': 'Acesso negado. Apenas Supervisores, Gerentes e Gestores podem alterar horários de rebusca.'}, status=403)
+    
+    from usuarios.models import Filial
+    try:
+        filial = Filial.objects.get(id=filial_id)
+        data = json.loads(request.body)
+        horario = data.get('horario_rebusca')
+        
+        if not horario:
+            filial.horario_rebusca_esl = None
+        else:
+            from datetime import datetime
+            try:
+                filial.horario_rebusca_esl = datetime.strptime(horario, '%H:%M').time()
+            except ValueError:
+                return JsonResponse({'status': 'erro', 'message': 'Formato de hora inválido. Use HH:MM'}, status=400)
+                
+        filial.save()
+        return JsonResponse({
+            'status': 'sucesso', 
+            'message': f'Horário de rebusca da filial {filial.nome} atualizado para {horario or "Desativado"}!'
+        })
+    except Filial.DoesNotExist:
+        return JsonResponse({'status': 'erro', 'message': 'Filial não encontrada.'}, status=404)
+    except Exception as e:
+        return JsonResponse({'status': 'erro', 'message': str(e)}, status=400)
+
+
+@login_required(login_url='/login/')
+@apenas_operacional
+@require_POST
+def disparar_rebusca_filial_view(request, filial_id):
+    perfil = request.user.motorista_perfil
+    if perfil.cargo not in ['SUPERVISOR', 'GERENTE', 'GESTOR', 'ADMINISTRADOR'] and not request.user.is_superuser:
+        return JsonResponse({'status': 'erro', 'message': 'Acesso negado.'}, status=403)
+    
+    from usuarios.models import Filial
+    try:
+        filial = Filial.objects.get(id=filial_id)
+        from sac_mobile.tasks import executar_rebusca_filial_task
+        schema_name = getattr(request, 'tenant', None) and request.tenant.schema_name or 'public'
+        executar_rebusca_filial_task.delay(filial.id, 'MANUAL', schema_name=schema_name)
+        return JsonResponse({
+            'status': 'sucesso',
+            'message': f'Sincronização imediata da filial {filial.nome} iniciada com sucesso! Os manifestos ativos estão sendo verificados.'
+        })
+    except Filial.DoesNotExist:
+        return JsonResponse({'status': 'erro', 'message': 'Filial não encontrada.'}, status=404)
+    except Exception as e:
+        return JsonResponse({'status': 'erro', 'message': str(e)}, status=400)
+
+
+@login_required(login_url='/login/')
+@apenas_operacional
+def obter_logs_rebusca_filial_view(request, filial_id):
+    from usuarios.models import Filial
+    from sac_mobile.models import LogRebuscaFilial
+    try:
+        filial = Filial.objects.get(id=filial_id)
+        logs = LogRebuscaFilial.objects.filter(filial=filial).order_by('-criado_em')[:15]
+        logs_data = []
+        for log in logs:
+            logs_data.append({
+                'id': log.id,
+                'tipo': log.tipo,
+                'status': log.status,
+                'criado_em': log.criado_em.strftime('%d/%m/%Y %H:%M'),
+                'concluido_em': log.concluido_em.strftime('%H:%M') if log.concluido_em else '-',
+                'detalhes': log.detalhes_manifestos or []
+            })
+        return JsonResponse({
+            'status': 'sucesso',
+            'filial_nome': filial.nome,
+            'logs': logs_data
+        })
+    except Filial.DoesNotExist:
+        return JsonResponse({'status': 'erro', 'message': 'Filial não encontrada.'}, status=404)
     except Exception as e:
         return JsonResponse({'status': 'erro', 'message': str(e)}, status=400)
 
