@@ -49,7 +49,6 @@ def _verificar_permissao_sac(user):
 def app_view(request):
     """Renderiza a página principal do App SAC."""
     if request.user.is_authenticated and not _verificar_permissao_sac(request.user):
-        from django.shortcuts import render
         return render(request, 'aplicativo/sac/acesso_negado.html', status=403)
     ocorrencias = Ocorrencia.objects.all().order_by('codigo_tms')
     return render(request, 'aplicativo/sac/index.html', {'ocorrencias': ocorrencias})
