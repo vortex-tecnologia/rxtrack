@@ -95,25 +95,3 @@
 <div class="modal-footer bg-light border-0">
     <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Fechar</button>
 </div>
-
-<script>
-function aprovarCanhotoManual(baixaId, manifestoId) {
-    if (!confirm("Deseja aprovar manualmente este canhoto e despachar para o TMS?")) return;
-    
-    fetch(`/api/operacional/baixa/${baixaId}/aprovar-manual/`, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': '{{ csrf_token }}',
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(r => r.json())
-    .then(data => {
-        alert(data.message || 'Canhoto aprovado com sucesso!');
-        if (typeof carregarConteudoModalDetalhes === 'function') {
-            carregarConteudoModalDetalhes(manifestoId, false);
-        }
-    })
-    .catch(err => alert('Erro ao aprovar canhoto: ' + err));
-}
-</script>

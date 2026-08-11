@@ -779,6 +779,57 @@
             }, 100);
         });
     });
+
+    // Função global para aprovação manual de canhoto pelo SAC / Operacional
+    window.aprovarCanhotoManual = function(baixaId, manifestoId) {
+        if (!confirm("Deseja aprovar manualmente este canhoto e liberar o despacho para o TMS?")) return;
+        
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        const csrftoken = getCookie('csrftoken') || '';
+
+        fetch(`/api/operacional/baixa/${baixaId}/aprovar-manual/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'sucesso') {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Aprovado!',
+                        text: data.message || 'Canhoto aprovado manualmente com sucesso!',
+                        timer: 2500,
+                        showConfirmButton: false
+                    });
+                } else {
+                    alert(data.message || 'Canhoto aprovado com sucesso!');
+                }
+                if (typeof carregarConteudoModalDetalhes === 'function' && manifestoId) {
+                    carregarConteudoModalDetalhes(manifestoId, false);
+                }
+            } else {
+                alert('Erro: ' + (data.message || 'Falha ao aprovar canhoto.'));
+            }
+        })
+        .catch(err => alert('Erro ao aprovar canhoto: ' + err));
+    };
 </script>
 
     {% block extra_js %}{% endblock %}
