@@ -18,7 +18,7 @@
                 <label class="form-label small fw-bold">Status Atual (Sistema/RXtrack)</label>
                 <select name="status" class="form-select">
                     {% for val, label in manifesto.STATUS_CHOICES %}
-                    <option value="{{ val }}" {% if manifesto.status==val %}selected{% endif %}>{{ label }}</option>
+                    <option value="{{ val }}" {% if manifesto.status == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -53,7 +53,7 @@
                 <label class="form-label small fw-bold">Filial</label>
                 <select name="filial" class="form-select">
                     {% for f in filiais %}
-                    <option value="{{ f.id }}" {% if manifesto.filial.id==f.id %}selected{% endif %}>{{ f.nome }}
+                    <option value="{{ f.id }}" {% if manifesto.filial.id == f.id %}selected{% endif %}>{{ f.nome }}
                     </option>
                     {% endfor %}
                 </select>
