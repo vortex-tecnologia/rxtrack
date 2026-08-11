@@ -171,6 +171,12 @@ class MonitoramentoConsumer(AsyncWebsocketConsumer):
             "dados": event["data"]
         }))
 
+    async def atualizar_cargas(self, event):
+        await self.send(text_data=json.dumps({
+            "type": "atualizar_cargas",
+            "data": event.get("data", {})
+        }))
+
 
 class CargasFretesConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -196,3 +202,9 @@ class CargasFretesConsumer(AsyncWebsocketConsumer):
             "type": "atualizar_cargas",
             "data": event.get("data", {})
         }))
+
+    async def atualizar_painel(self, event):
+        pass
+
+    async def atualizar_status_motorista(self, event):
+        pass
