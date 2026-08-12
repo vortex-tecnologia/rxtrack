@@ -1465,6 +1465,11 @@ class ESLCloudAdapter(BaseTMSAdapter):
             baixas_pendentes_tms = BaixaNF.objects.filter(nota_fiscal__manifesto=manifesto, integrado_tms=False)
             for b in baixas_pendentes_tms:
                 try:
+                    if b.qualidade_canhoto == 'PENDENTE_ANALISE':
+                        b.qualidade_canhoto = 'APROVADO'
+                        b.solicitar_nova_foto = False
+                        b.save(update_fields=['qualidade_canhoto', 'solicitar_nova_foto'])
+
                     if b.nota_fiscal and b.nota_fiscal.tipo_operacao == 'COLETA':
                         self.enviar_coleta(b.id)
                     elif b.nota_fiscal and b.nota_fiscal.chave_acesso:
