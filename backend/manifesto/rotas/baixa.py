@@ -304,7 +304,6 @@ class RegistrarBaixaView(APIView):
                 is_analise_ia_necessaria = bool(
                     not is_retida and
                     url_final_foto and
-                    config_backup.modulo_ia_ativo and
                     config_backup.processar_yolo and
                     is_ocorrencia_01
                 )
@@ -354,7 +353,7 @@ class RegistrarBaixaView(APIView):
                     if config.enviar_tms:
                         enviar_coleta_esl_task.delay(baixa.id)
                     msg_log = "Coleta agendada para TMS (Picks Endpoint)." if config.enviar_tms else "Coleta salva (TMS desligado)."
-                elif is_ocorrencia_01 and not is_retida and url_final_foto and config.modulo_ia_ativo and config.processar_yolo:
+                elif is_ocorrencia_01 and not is_retida and url_final_foto and config.processar_yolo:
                     # SOMENTE Ocorrência 01 COM FOTO vai para o fluxo do Agente IA (YOLO)
                     from AgenteIa.tasks import task_processar_canhoto_ia
                     task_processar_canhoto_ia.delay(baixa.id)
