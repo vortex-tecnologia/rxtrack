@@ -11,7 +11,7 @@ import os
 from ftplib import FTP
 from io import BytesIO
 
-@shared_task(queue='ai_queue')
+@shared_task
 def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
     """
     Interceptor do Agente IA: 
@@ -22,12 +22,13 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
     except BaixaNF.DoesNotExist:
         return
 
-    url_original = baixa.comprovante_foto_url
-    if not url_original:
-        baixa.qualidade_canhoto = 'APROVADO'
-        baixa.solicitar_nova_foto = False
-        baixa.save(update_fields=['qualidade_canhoto', 'solicitar_nova_foto'])
-        return finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
+    try:
+        url_original = baixa.comprovante_foto_url
+        if not url_original:
+            baixa.qualidade_canhoto = 'APROVADO'
+            baixa.solicitar_nova_foto = False
+            baixa.save(update_fields=['qualidade_canhoto', 'solicitar_nova_foto'])
+            return finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
 
     # 1.1 O YOLO/OCR é acionado se a ocorrência estiver na lista de códigos ativadores (ex: 01, 02, 1, 2) ou se for um recadastro de comprovante
     from configuracao.utils import get_config
@@ -251,11 +252,21 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
                         pass
                 finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
     else:
-        # Não é ocorrência 01 (ex: ressalvas, devoluções, coletas): segue fluxo normal
         baixa.qualidade_canhoto = 'APROVADO'
         baixa.solicitar_nova_foto = False
         baixa.save(update_fields=['qualidade_canhoto', 'solicitar_nova_foto'])
         finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
+    except Exception as err:
+        print(f"[IA-GUARDIÃO] Erro inesperado ao processar canhoto da Baixa #{baixa_id}: {err}")
+        try:
+            baixa = BaixaNF.objects.get(id=baixa_id)
+            if baixa.qualidade_canhoto == 'PENDENTE_ANALISE':
+                baixa.qualidade_canhoto = 'APROVADO'
+                baixa.solicitar_nova_foto = False
+                baixa.save(update_fields=['qualidade_canhoto', 'solicitar_nova_foto'])
+                finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
+        except Exception:
+            pass
 
 
 def disparar_notificacao_canhoto_reprovado(baixa):

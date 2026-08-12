@@ -616,7 +616,6 @@ async function atualizarListaViva(numeroManifesto) {
 
                     if (notasComFotoRuim.length > 0) {
                         // Caso 1: Há fotos reprovadas pela IA pendentes de reenvio (ou liberação do SAC)
-                        window._tentativasPollingAnaliseIA = 0;
                         containerFinalizacao.innerHTML = `
                             <div class="card bg-danger bg-opacity-10 border border-danger text-danger mb-4 shadow-sm" style="border-radius: 16px;">
                                 <div class="card-body text-center py-4">
@@ -626,32 +625,20 @@ async function atualizarListaViva(numeroManifesto) {
                                 </div>
                             </div>
                         `;
-                    } else if (notasEmAnaliseIA.length > 0 && window._tentativasPollingAnaliseIA < 3) {
-                        // Caso 2: Fotos sendo processadas pela IA recentemente (polling temporário max 3x)
-                        window._tentativasPollingAnaliseIA++;
-                        containerFinalizacao.innerHTML = `
-                            <div class="card bg-warning bg-opacity-10 border border-warning text-dark mb-4 shadow-sm" style="border-radius: 16px;">
-                                <div class="card-body text-center py-4">
-                                    <div class="spinner-border text-warning mb-2" role="status" style="width: 2.2rem; height: 2.2rem;"></div>
-                                    <h5 class="fw-bold mb-1 text-dark">ANALISANDO IMAGENS PELA IA...</h5>
-                                    <p class="small mb-0 text-muted">Ainda não é possível finalizar o manifesto. Estamos analisando suas últimas imagens enviadas (<strong>${notasEmAnaliseIA.length} foto(s)</strong> em análise). Aguarde a conclusão para liberar.</p>
-                                </div>
-                            </div>
-                        `;
-                        // Auto-refresh a cada 3.5s enquanto a IA analisa
-                        setTimeout(() => {
-                            const mID = manifestoAtual || localStorage.getItem('manifesto_ativo');
-                            if (mID) atualizarListaViva(mID);
-                        }, 3500);
                     } else {
-                        // Caso 3: Todas as notas concluídas e liberadas para finalização
+                        // Caso 2: Todas as notas concluídas e liberadas para finalização
+                        const infoSegundoPlano = (notasEmAnaliseIA.length > 0)
+                            ? `<div class="small mt-2 p-1 rounded bg-white bg-opacity-20 text-white" style="font-size: 0.75rem;"><i class="bi bi-cpu me-1"></i>${notasEmAnaliseIA.length} comprovante(s) em processamento pela IA em segundo plano.</div>`
+                            : '';
+
                         containerFinalizacao.innerHTML = `
                             <div class="card bg-success text-white mb-4 shadow border-0 animate__animated animate__pulse animate__infinite" style="border-radius: 16px;">
                                 <div class="card-body text-center py-4">
                                     <i class="bi bi-flag-fill mb-2" style="font-size: 2rem;"></i>
                                     <h5 class="fw-bold mb-1">ENTREGAS CONCLUÍDAS!</h5>
                                     <p class="small mb-3 opacity-91">Todas as notas deste manifesto foram bipadas e validadas.</p>
-                                    <button class="btn btn-light btn-lg fw-bold text-success w-100 rounded-pill shadow-sm" onclick="abrirModalFinalizacao()">
+                                    ${infoSegundoPlano}
+                                    <button class="btn btn-light btn-lg fw-bold text-success w-100 rounded-pill shadow-sm mt-2" onclick="abrirModalFinalizacao()">
                                         <i class="bi bi-check-all me-1"></i> FINALIZAR MANIFESTO
                                     </button>
                                 </div>
