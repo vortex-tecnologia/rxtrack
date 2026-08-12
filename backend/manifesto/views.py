@@ -63,9 +63,21 @@ class ManifestoFinalizacaoView(APIView):
 
             # 2. Conferência de Fotos em Análise pela IA
             from manifesto.models import BaixaNF
+            from django.utils import timezone
+            from datetime import timedelta
+
+            # Auto-recuperação: Baixas com mais de 45s travadas em PENDENTE_ANALISE são liberadas
+            limite_recente = timezone.now() - timedelta(seconds=45)
+            BaixaNF.objects.filter(
+                nota_fiscal__manifesto=manifesto,
+                qualidade_canhoto='PENDENTE_ANALISE',
+                data_baixa__lt=limite_recente
+            ).update(qualidade_canhoto='APROVADO', solicitar_nova_foto=False)
+
             notas_em_analise = BaixaNF.objects.filter(
                 nota_fiscal__manifesto=manifesto,
-                qualidade_canhoto='PENDENTE_ANALISE'
+                qualidade_canhoto='PENDENTE_ANALISE',
+                solicitar_nova_foto=False
             ).count()
 
             if notas_em_analise > 0:

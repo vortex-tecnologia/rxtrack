@@ -24,6 +24,9 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
 
     url_original = baixa.comprovante_foto_url
     if not url_original:
+        baixa.qualidade_canhoto = 'APROVADO'
+        baixa.solicitar_nova_foto = False
+        baixa.save(update_fields=['qualidade_canhoto', 'solicitar_nova_foto'])
         return finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
 
     # 1.1 O YOLO/OCR é acionado se a ocorrência estiver na lista de códigos ativadores (ex: 01, 02, 1, 2) ou se for um recadastro de comprovante
@@ -45,7 +48,9 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
         print(f"Ocorrência (TMS:{cod_tms}/Ref:{cod_ref}) não está em {codigos_permitidos}. Pulando YOLO/OCR e enviando foto diretamente ao TMS.")
         baixa.ia_yolo_status = False
         baixa.ia_ocr_status = False
-        baixa.save(update_fields=['ia_yolo_status', 'ia_ocr_status'])
+        baixa.qualidade_canhoto = 'APROVADO'
+        baixa.solicitar_nova_foto = False
+        baixa.save(update_fields=['ia_yolo_status', 'ia_ocr_status', 'qualidade_canhoto', 'solicitar_nova_foto'])
         return finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
 
     # 2. Baixa a imagem da URL original para a memória
@@ -54,6 +59,9 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
     img_original = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
     
     if img_original is None:
+        baixa.qualidade_canhoto = 'APROVADO'
+        baixa.solicitar_nova_foto = False
+        baixa.save(update_fields=['qualidade_canhoto', 'solicitar_nova_foto'])
         return finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
 
     # 3. Monta o texto da Tarja Preta
@@ -104,7 +112,9 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
         print(f"YOLO desligado nas configurações. Enviando foto original para TMS.")
         baixa.ia_yolo_status = False
         baixa.ia_ocr_status = False
-        baixa.save()
+        baixa.qualidade_canhoto = 'APROVADO'
+        baixa.solicitar_nova_foto = False
+        baixa.save(update_fields=['ia_yolo_status', 'ia_ocr_status', 'qualidade_canhoto', 'solicitar_nova_foto'])
         if os.path.exists(img_path):
             os.remove(img_path)
         return finalizar_fluxo_tms(baixa)
@@ -224,9 +234,9 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
                 finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
     else:
         # Não é ocorrência 01 (ex: ressalvas, devoluções, coletas): segue fluxo normal
-        baixa.qualidade_canhoto = 'APROVADO' if qualidade_ia == "BOA" else 'PENDENTE_ANALISE'
+        baixa.qualidade_canhoto = 'APROVADO'
         baixa.solicitar_nova_foto = False
-        baixa.save()
+        baixa.save(update_fields=['qualidade_canhoto', 'solicitar_nova_foto'])
         finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
 
 

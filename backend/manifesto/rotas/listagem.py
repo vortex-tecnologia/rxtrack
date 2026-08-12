@@ -122,7 +122,7 @@ class ListarNotasManifestoView(APIView):
                 'ja_baixada': baixa is not None,
                 'solicitar_nova_foto': getattr(baixa, 'solicitar_nova_foto', False) if baixa else False,
                 'tentativa_foto': getattr(baixa, 'tentativa_foto', 1) if baixa else 1,
-                'qualidade_canhoto': getattr(baixa, 'qualidade_canhoto', 'PENDENTE_ANALISE') if baixa else 'PENDENTE_ANALISE',
+                'qualidade_canhoto': getattr(baixa, 'qualidade_canhoto', 'APROVADO') if baixa else 'APROVADO',
                 'dados_baixa': dados_baixa
             })
 

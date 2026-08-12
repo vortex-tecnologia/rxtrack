@@ -594,31 +594,29 @@ async function atualizarListaViva(numeroManifesto) {
             } else if (containerColetiva) { containerColetiva.innerHTML = ''; }
 
             // VERIFICAÇÕES DE QUALIDADE IA E PENDÊNCIAS DE FOTO
-            const notasEmAnaliseIA = notas.filter(n => n.qualidade_canhoto === 'PENDENTE_ANALISE' || (n.dados_baixa && n.dados_baixa.qualidade_canhoto === 'PENDENTE_ANALISE'));
-            const notasComFotoRuim = notas.filter(n => n.solicitar_nova_foto === true || (n.dados_baixa && n.dados_baixa.solicitar_nova_foto === true));
+            const notasEmAnaliseIA = notas.filter(n => {
+                const q = (n.dados_baixa && n.dados_baixa.qualidade_canhoto) || n.qualidade_canhoto;
+                const sol = (n.dados_baixa && n.dados_baixa.solicitar_nova_foto) || n.solicitar_nova_foto;
+                return n.ja_baixada && q === 'PENDENTE_ANALISE' && !sol;
+            });
+            const notasComFotoRuim = notas.filter(n => {
+                const sol = (n.dados_baixa && n.dados_baixa.solicitar_nova_foto) || n.solicitar_nova_foto;
+                return sol === true;
+            });
+
+            if (notasEmAnaliseIA.length === 0) {
+                window._tentativasPollingAnaliseIA = 0;
+            }
 
             // CONTAINER DE FINALIZAÇÃO (BOTÃO MANUAL)
             const containerFinalizacao = document.getElementById('container-finalizacao-manifesto');
             if (containerFinalizacao) {
                 if (notas.length > 0 && totalFinalizadas === notas.length) {
-                    if (notasEmAnaliseIA.length > 0) {
-                        // Caso 1: Todas foram bipadas, mas há fotos sendo processadas pela IA
-                        containerFinalizacao.innerHTML = `
-                            <div class="card bg-warning bg-opacity-10 border border-warning text-dark mb-4 shadow-sm" style="border-radius: 16px;">
-                                <div class="card-body text-center py-4">
-                                    <div class="spinner-border text-warning mb-2" role="status" style="width: 2.2rem; height: 2.2rem;"></div>
-                                    <h5 class="fw-bold mb-1 text-dark">ANALISANDO IMAGENS PELA IA...</h5>
-                                    <p class="small mb-0 text-muted">Ainda não é possível finalizar o manifesto. Estamos analisando suas últimas imagens enviadas (<strong>${notasEmAnaliseIA.length} foto(s)</strong> em análise). Aguarde a conclusão para liberar.</p>
-                                </div>
-                            </div>
-                        `;
-                        // Auto-refresh a cada 4s enquanto a IA analisa
-                        setTimeout(() => {
-                            const mID = manifestoAtual || localStorage.getItem('manifesto_ativo');
-                            if (mID) atualizarListaViva(mID);
-                        }, 4000);
-                    } else if (notasComFotoRuim.length > 0) {
-                        // Caso 2: Há fotos reprovadas pela IA pendentes de reenvio (ou liberação do SAC)
+                    window._tentativasPollingAnaliseIA = window._tentativasPollingAnaliseIA || 0;
+
+                    if (notasComFotoRuim.length > 0) {
+                        // Caso 1: Há fotos reprovadas pela IA pendentes de reenvio (ou liberação do SAC)
+                        window._tentativasPollingAnaliseIA = 0;
                         containerFinalizacao.innerHTML = `
                             <div class="card bg-danger bg-opacity-10 border border-danger text-danger mb-4 shadow-sm" style="border-radius: 16px;">
                                 <div class="card-body text-center py-4">
@@ -628,8 +626,25 @@ async function atualizarListaViva(numeroManifesto) {
                                 </div>
                             </div>
                         `;
+                    } else if (notasEmAnaliseIA.length > 0 && window._tentativasPollingAnaliseIA < 3) {
+                        // Caso 2: Fotos sendo processadas pela IA recentemente (polling temporário max 3x)
+                        window._tentativasPollingAnaliseIA++;
+                        containerFinalizacao.innerHTML = `
+                            <div class="card bg-warning bg-opacity-10 border border-warning text-dark mb-4 shadow-sm" style="border-radius: 16px;">
+                                <div class="card-body text-center py-4">
+                                    <div class="spinner-border text-warning mb-2" role="status" style="width: 2.2rem; height: 2.2rem;"></div>
+                                    <h5 class="fw-bold mb-1 text-dark">ANALISANDO IMAGENS PELA IA...</h5>
+                                    <p class="small mb-0 text-muted">Ainda não é possível finalizar o manifesto. Estamos analisando suas últimas imagens enviadas (<strong>${notasEmAnaliseIA.length} foto(s)</strong> em análise). Aguarde a conclusão para liberar.</p>
+                                </div>
+                            </div>
+                        `;
+                        // Auto-refresh a cada 3.5s enquanto a IA analisa
+                        setTimeout(() => {
+                            const mID = manifestoAtual || localStorage.getItem('manifesto_ativo');
+                            if (mID) atualizarListaViva(mID);
+                        }, 3500);
                     } else {
-                        // Caso 3: Todas as notas concluídas e 100% aprovadas pela IA / SAC
+                        // Caso 3: Todas as notas concluídas e liberadas para finalização
                         containerFinalizacao.innerHTML = `
                             <div class="card bg-success text-white mb-4 shadow border-0 animate__animated animate__pulse animate__infinite" style="border-radius: 16px;">
                                 <div class="card-body text-center py-4">
@@ -897,13 +912,10 @@ function abrirModalFinalizacao() {
     if (rawData) {
         try {
             const notas = JSON.parse(rawData);
-            const notasEmAnalise = notas.filter(n => n.qualidade_canhoto === 'PENDENTE_ANALISE' || (n.dados_baixa && n.dados_baixa.qualidade_canhoto === 'PENDENTE_ANALISE'));
-            if (notasEmAnalise.length > 0) {
-                console.warn('⚠️ Tentativa de finalização com notas em análise de IA.');
-                atualizarListaViva(mID);
-                return;
-            }
-            const notasRuins = notas.filter(n => n.solicitar_nova_foto === true || (n.dados_baixa && n.dados_baixa.solicitar_nova_foto === true));
+            const notasRuins = notas.filter(n => {
+                const sol = (n.dados_baixa && n.dados_baixa.solicitar_nova_foto) || n.solicitar_nova_foto;
+                return sol === true;
+            });
             if (notasRuins.length > 0) {
                 console.warn('⚠️ Tentativa de finalização com fotos ilegíveis pendentes.');
                 atualizarListaViva(mID);

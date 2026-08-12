@@ -299,6 +299,15 @@ class RegistrarBaixaView(APIView):
 
                 nova_tentativa = (baixa_existente.tentativa_foto + 1) if (baixa_existente and baixa_existente.tentativa_foto) else 1
 
+                cod_tms_check = str(ocorrencia.codigo_tms or ocorrencia.codigo_referencia or '').strip()
+                is_analise_ia_necessaria = bool(
+                    not is_retida and
+                    url_final_foto and
+                    config_backup.modulo_ia_ativo and
+                    config_backup.processar_yolo and
+                    (cod_tms_check in config_backup.get_codigos_yolo_list() or is_sucesso)
+                )
+
                 baixa, created = BaixaNF.objects.update_or_create(
                     nota_fiscal=nf,
                     defaults={
@@ -313,7 +322,7 @@ class RegistrarBaixaView(APIView):
                         'data_baixa': data_final_baixa,
                         'tentativa_foto': nova_tentativa,
                         'solicitar_nova_foto': False,
-                        'qualidade_canhoto': 'PENDENTE_ANALISE'
+                        'qualidade_canhoto': 'PENDENTE_ANALISE' if is_analise_ia_necessaria else 'APROVADO'
                     }
                 )
                 
