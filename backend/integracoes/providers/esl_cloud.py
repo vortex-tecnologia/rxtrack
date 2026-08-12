@@ -1460,6 +1460,20 @@ class ESLCloudAdapter(BaseTMSAdapter):
             if not manifesto.manifesto_id_tms:
                 return f"Erro: Manifesto {manifesto.numero_manifesto} sem ID interno do TMS."
 
+            # Garante que 100% das baixas/ocorrências deste manifesto estejam registradas na ESL antes de fechar
+            from manifesto.models import BaixaNF
+            baixas_pendentes_tms = BaixaNF.objects.filter(nota_fiscal__manifesto=manifesto, integrado_tms=False)
+            for b in baixas_pendentes_tms:
+                try:
+                    if b.nota_fiscal and b.nota_fiscal.tipo_operacao == 'COLETA':
+                        self.enviar_coleta(b.id)
+                    elif b.nota_fiscal and b.nota_fiscal.chave_acesso:
+                        self.enviar_baixa_nfe(b.id)
+                    else:
+                        self.enviar_baixa_minuta(b.id)
+                except Exception as b_err:
+                    print(f"⚠️ Aviso ao enviar baixa pendente #{b.id} antes do fechamento do manifesto: {b_err}")
+
             fuso_br = pytz.timezone('America/Sao_Paulo')
             data_fim = manifesto.data_finalizacao or timezone.now()
             data_iso = data_fim.astimezone(fuso_br).strftime('%Y-%m-%dT%H:%M:%S-03:00')

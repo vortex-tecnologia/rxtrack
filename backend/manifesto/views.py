@@ -66,13 +66,23 @@ class ManifestoFinalizacaoView(APIView):
             from django.utils import timezone
             from datetime import timedelta
 
-            # Auto-recuperação: Baixas com mais de 45s travadas em PENDENTE_ANALISE são liberadas
+            # Auto-recuperação: Baixas com mais de 45s travadas em PENDENTE_ANALISE são liberadas E enviadas ao TMS
             limite_recente = timezone.now() - timedelta(seconds=45)
-            BaixaNF.objects.filter(
+            baixas_travadas = BaixaNF.objects.filter(
                 nota_fiscal__manifesto=manifesto,
                 qualidade_canhoto='PENDENTE_ANALISE',
                 data_baixa__lt=limite_recente
-            ).update(qualidade_canhoto='APROVADO', solicitar_nova_foto=False)
+            )
+            for b in baixas_travadas:
+                b.qualidade_canhoto = 'APROVADO'
+                b.solicitar_nova_foto = False
+                b.save(update_fields=['qualidade_canhoto', 'solicitar_nova_foto'])
+                if not b.integrado_tms:
+                    try:
+                        from AgenteIa.tasks import finalizar_fluxo_tms
+                        finalizar_fluxo_tms(b)
+                    except Exception:
+                        pass
 
             notas_em_analise = BaixaNF.objects.filter(
                 nota_fiscal__manifesto=manifesto,
