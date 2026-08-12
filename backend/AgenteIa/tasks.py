@@ -12,11 +12,29 @@ from ftplib import FTP
 from io import BytesIO
 
 @shared_task
-def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
+def task_processar_canhoto_ia(baixa_id, somente_comprovante=False, schema_name=None):
     """
     Interceptor do Agente IA: 
     Processa a foto antes do envio final para o TMS.
+    Roda dentro do schema_context do tenant para compatibilidade com django_tenants.
     """
+    from django_tenants.utils import schema_context
+
+    # Se não recebeu schema_name, tenta descobrir iterando os tenants
+    if not schema_name:
+        from tenants.models import Client
+        for tenant in Client.objects.exclude(schema_name='public'):
+            schema_name = tenant.schema_name
+            break
+        if not schema_name:
+            schema_name = 'public'
+
+    with schema_context(schema_name):
+        _processar_canhoto_ia_interno(baixa_id, somente_comprovante)
+
+
+def _processar_canhoto_ia_interno(baixa_id, somente_comprovante=False):
+    """Lógica interna de processamento da IA (executada dentro do schema_context correto)."""
     try:
         baixa = BaixaNF.objects.get(id=baixa_id)
     except BaixaNF.DoesNotExist:

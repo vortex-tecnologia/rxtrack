@@ -2313,7 +2313,8 @@ def atualizar_foto_baixa_view(request, baixa_id):
 
         # Se YOLO estiver ativo, passa pelo agente IA primeiro
         if config.processar_yolo:
-            task_processar_canhoto_ia.delay(baixa.id, somente_comprovante=True)
+            from django.db import connection
+            task_processar_canhoto_ia.delay(baixa.id, somente_comprovante=True, schema_name=connection.schema_name)
             msg_status = "Nova foto salva! IA (YOLO/OCR) e recadastro no TMS iniciados."
         else:
             enviar_comprovante_esl_task.delay(baixa.id)

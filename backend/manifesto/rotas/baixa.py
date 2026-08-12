@@ -356,7 +356,8 @@ class RegistrarBaixaView(APIView):
                 elif is_ocorrencia_01 and not is_retida and url_final_foto and config.processar_yolo:
                     # SOMENTE Ocorrência 01 COM FOTO vai para o fluxo do Agente IA (YOLO)
                     from AgenteIa.tasks import task_processar_canhoto_ia
-                    task_processar_canhoto_ia.delay(baixa.id)
+                    from django.db import connection
+                    task_processar_canhoto_ia.delay(baixa.id, schema_name=connection.schema_name)
                     msg_log = "Enviada para processamento no Agente IA (YOLO) (Ocorrência 01 - Com Foto)."
                 else:
                     # Demais ocorrências (02, devoluções, ressalvas, etc): Fluxo direto para o TMS (se ativo)
