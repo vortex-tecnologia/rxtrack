@@ -272,12 +272,13 @@ function conectarWebSocket() {
                                 <span id="percent-${d.manifesto_id}">
                                     ${d.porcentagem || 0}</span>%
                             </div>
-                            <div class="d-flex gap-1">
+                            <div class="d-flex gap-2 align-items-center">
                                 <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 position-relative"
                                     onclick="abrirDetalhesManifestoTorre('${d.manifesto_id}')" title="Ver Notas / Itens do Manifesto">
                                     <i class="bi bi-card-list"></i> Manifesto
                                     <span id="badge-ilegivel-${d.manifesto_id}" 
-                                          class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger shadow-sm badge-pulse-alert ${(d.total_ilegivel && d.total_ilegivel > 0) ? '' : 'd-none'}"
+                                          class="position-absolute badge rounded-pill bg-danger shadow-sm badge-pulse-alert ${(d.total_ilegivel && d.total_ilegivel > 0) ? '' : 'd-none'}"
+                                          style="top: -7px; right: -7px;"
                                           title="${d.total_ilegivel || 0} foto(s) de canhoto ilegível(is) precisando de atenção">
                                         <span id="count-ilegivel-${d.manifesto_id}">${d.total_ilegivel || 0}</span>
                                         <span class="visually-hidden">canhotos ilegíveis</span>
