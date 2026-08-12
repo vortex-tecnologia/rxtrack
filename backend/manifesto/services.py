@@ -28,12 +28,19 @@ def enviar_painel(manifesto):
     nome_filial = manifesto.filial.nome if manifesto.filial else "todas"
     grupo_filial = f"painel_monitoramento_{slugify(nome_filial)}"
     
+    from manifesto.models import BaixaNF
+    total_ilegivel = BaixaNF.objects.filter(
+        nota_fiscal__manifesto=manifesto,
+        solicitar_nova_foto=True
+    ).count()
+
     payload = {
         "type": "atualizar_painel",
         "data": {
             "manifesto_id": str(manifesto.numero_manifesto),
             "baixadas": baixadas,
             "porcentagem": porcentagem,
+            "total_ilegivel": total_ilegivel,
             "motorista_nome": manifesto.motorista.nome_completo if manifesto.motorista else "Desconhecido",
             "motorista_categoria": manifesto.motorista.categoria if (manifesto.motorista and manifesto.motorista.categoria) else "EMPRESA",
             "motorista_categoria_display": manifesto.motorista.get_categoria_display() if (manifesto.motorista and hasattr(manifesto.motorista, 'get_categoria_display')) else "Empresa",

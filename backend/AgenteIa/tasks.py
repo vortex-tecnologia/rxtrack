@@ -216,6 +216,12 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
             baixa.solicitar_nova_foto = False
             baixa.save()
             print(f"[IA-GUARDIÃO] Canhoto da Baixa #{baixa.id} (NF {nfe_num}) APROVADO! Enviando ao TMS.")
+            if baixa.nota_fiscal and baixa.nota_fiscal.manifesto:
+                try:
+                    from manifesto.services import enviar_painel
+                    enviar_painel(baixa.nota_fiscal.manifesto)
+                except Exception:
+                    pass
             finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
         else:
             # Foto reprovada (desfocada ou ilegível)
@@ -225,12 +231,24 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
                 baixa.save()
                 print(f"[IA-GUARDIÃO] Canhoto da Baixa #{baixa.id} (NF {nfe_num}) REPROVADO ({qualidade_ia}/{motivo_rejeicao}). Tentativa {baixa.tentativa_foto}/3. Retendo envio ao TMS.")
                 disparar_notificacao_canhoto_reprovado(baixa)
+                if baixa.nota_fiscal and baixa.nota_fiscal.manifesto:
+                    try:
+                        from manifesto.services import enviar_painel
+                        enviar_painel(baixa.nota_fiscal.manifesto)
+                    except Exception:
+                        pass
             else:
                 # 3ª Tentativa atingida: libera envio ao TMS para não travar a rotina
                 baixa.qualidade_canhoto = 'REPROVADO_LIMITE_3X'
                 baixa.solicitar_nova_foto = False
                 baixa.save()
                 print(f"[IA-GUARDIÃO] Baixa #{baixa.id} (NF {nfe_num}) atingiu o limite de 3 tentativas. Liberando envio ao TMS com auditoria.")
+                if baixa.nota_fiscal and baixa.nota_fiscal.manifesto:
+                    try:
+                        from manifesto.services import enviar_painel
+                        enviar_painel(baixa.nota_fiscal.manifesto)
+                    except Exception:
+                        pass
                 finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
     else:
         # Não é ocorrência 01 (ex: ressalvas, devoluções, coletas): segue fluxo normal

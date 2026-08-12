@@ -148,6 +148,20 @@ function conectarWebSocket() {
                     }
                 }
 
+                // Atualiza badge de canhotos ilegíveis em tempo real
+                const badgeIlegivel = document.getElementById(`badge-ilegivel-${mID}`);
+                const countIlegivel = document.getElementById(`count-ilegivel-${mID}`);
+                if (badgeIlegivel && countIlegivel) {
+                    const totalIlegivel = parseInt(d.total_ilegivel || 0);
+                    countIlegivel.innerText = totalIlegivel;
+                    if (totalIlegivel > 0) {
+                        badgeIlegivel.classList.remove('d-none');
+                        badgeIlegivel.setAttribute('title', `${totalIlegivel} foto(s) de canhoto ilegível(is) precisando de atenção`);
+                    } else {
+                        badgeIlegivel.classList.add('d-none');
+                    }
+                }
+
                 // Efeito de flash (pulsada no card) apenas se mudou baixadas ou total
                 if (cardContainer && devePiscar) {
                     const innerCard = cardContainer.querySelector('.card');
@@ -259,9 +273,15 @@ function conectarWebSocket() {
                                     ${d.porcentagem || 0}</span>%
                             </div>
                             <div class="d-flex gap-1">
-                                <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
+                                <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 position-relative"
                                     onclick="abrirDetalhesManifestoTorre('${d.manifesto_id}')" title="Ver Notas / Itens do Manifesto">
                                     <i class="bi bi-card-list"></i> Manifesto
+                                    <span id="badge-ilegivel-${d.manifesto_id}" 
+                                          class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger shadow-sm badge-pulse-alert ${(d.total_ilegivel && d.total_ilegivel > 0) ? '' : 'd-none'}"
+                                          title="${d.total_ilegivel || 0} foto(s) de canhoto ilegível(is) precisando de atenção">
+                                        <span id="count-ilegivel-${d.manifesto_id}">${d.total_ilegivel || 0}</span>
+                                        <span class="visually-hidden">canhotos ilegíveis</span>
+                                    </span>
                                 </button>
                                 <button class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
                                     onclick="abrirRastreio('${d.manifesto_id}', '${d.motorista_nome || ''}', '${d.baixadas || 0}', '${d.total || 0}')">
