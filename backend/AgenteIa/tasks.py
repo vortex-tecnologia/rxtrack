@@ -35,17 +35,17 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False):
 
     cod_ref = str(getattr(baixa.ocorrencia, 'codigo_referencia', '') or '').strip()
     cod_tms = str(getattr(baixa.ocorrencia, 'codigo_tms', '') or '').strip()
-    codigos_permitidos = config.get_codigos_yolo_list()
     
+    # SOMENTE Ocorrência 01 é analisada pela IA (02 - Coleta e outras ocorrências seguem direto)
     is_yolo_habilitado = (
-        cod_ref in codigos_permitidos or
-        cod_tms in codigos_permitidos or
-        baixa.tipo == 'ENTREGA' or
+        cod_ref in ['01', '1'] or
+        cod_tms in ['01', '1'] or
+        (baixa.tipo == 'ENTREGA' and cod_tms not in ['02', '2', '050', '055']) or
         somente_comprovante is True
     )
 
     if not is_yolo_habilitado:
-        print(f"Ocorrência (TMS:{cod_tms}/Ref:{cod_ref}) não está em {codigos_permitidos}. Pulando YOLO/OCR e enviando foto diretamente ao TMS.")
+        print(f"Ocorrência (TMS:{cod_tms}/Ref:{cod_ref}) não é 01 (Entrega). Pulando YOLO/OCR e enviando foto diretamente ao TMS.")
         baixa.ia_yolo_status = False
         baixa.ia_ocr_status = False
         baixa.qualidade_canhoto = 'APROVADO'

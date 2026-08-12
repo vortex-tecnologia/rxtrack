@@ -300,12 +300,13 @@ class RegistrarBaixaView(APIView):
                 nova_tentativa = (baixa_existente.tentativa_foto + 1) if (baixa_existente and baixa_existente.tentativa_foto) else 1
 
                 cod_tms_check = str(ocorrencia.codigo_tms or ocorrencia.codigo_referencia or '').strip()
+                is_ocorrencia_01 = (cod_tms_check in ['01', '1'] or (ocorrencia.tipo == 'ENTREGA' and cod_tms_check not in ['02', '2', '050', '055']))
                 is_analise_ia_necessaria = bool(
                     not is_retida and
                     url_final_foto and
                     config_backup.modulo_ia_ativo and
                     config_backup.processar_yolo and
-                    (cod_tms_check in config_backup.get_codigos_yolo_list() or is_sucesso)
+                    is_ocorrencia_01
                 )
 
                 baixa, created = BaixaNF.objects.update_or_create(
@@ -353,13 +354,13 @@ class RegistrarBaixaView(APIView):
                     if config.enviar_tms:
                         enviar_coleta_esl_task.delay(baixa.id)
                     msg_log = "Coleta agendada para TMS (Picks Endpoint)." if config.enviar_tms else "Coleta salva (TMS desligado)."
-                elif ocorrencia.codigo_tms in config.get_codigos_yolo_list():
-                    # Ocorrências configuráveis: Vai para o fluxo do Agente IA (YOLO) primeiro
+                elif is_ocorrencia_01 and not is_retida and url_final_foto and config.modulo_ia_ativo and config.processar_yolo:
+                    # SOMENTE Ocorrência 01 COM FOTO vai para o fluxo do Agente IA (YOLO)
                     from AgenteIa.tasks import task_processar_canhoto_ia
                     task_processar_canhoto_ia.delay(baixa.id)
-                    msg_log = "Enviada para processamento no Agente IA (YOLO) (Task Ativa)."
+                    msg_log = "Enviada para processamento no Agente IA (YOLO) (Ocorrência 01 - Com Foto)."
                 else:
-                    # Demais ocorrências: Fluxo direto para o TMS (se ativo)
+                    # Demais ocorrências (02, devoluções, ressalvas, etc): Fluxo direto para o TMS (se ativo)
                     if config.enviar_tms:
                         # REGRA: Se tem chave_acesso → endpoint NF-e, senão → endpoint Frete/Minuta
                         # DESPACHO com chave vai pelo endpoint NF-e normal (cada nota individualmente)
