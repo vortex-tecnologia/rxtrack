@@ -625,11 +625,43 @@
             });
     }
 
-    // Reutiliza a função de ontem para abrir os detalhes da NF de dentro do manifesto
-    function verDetalhesNF(chaveAcesso) {
-        // Redireciona para a página de Notas Fiscais
-        // Passando o parâmetro 'q' (ou o nome que você usa no seu filtro de busca)
-        window.location.href = `/notas-fiscais/?q=${chaveAcesso}`;
+    // Abre detalhes da NF em modal inline (sem abrir nova aba)
+    function verDetalhesNF(notaId) {
+        if (!notaId) return;
+
+        const modalElement = document.getElementById('modalGenerico');
+        const modalConteudo = document.getElementById('modalGenericoConteudo');
+        const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+
+        modalConteudo.innerHTML = `
+            <div class="modal-body text-center p-5">
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+                <h6 class="mt-3 text-muted fw-bold">Carregando detalhes da nota...</h6>
+            </div>
+        `;
+        modalInstance.show();
+
+        fetch(`/api/manifesto/detalhes-nota/${notaId}/`)
+            .then(response => {
+                if (!response.ok) throw new Error(`Erro ${response.status}`);
+                return response.text();
+            })
+            .then(html => {
+                modalConteudo.innerHTML = html + `
+                    <div class="modal-footer bg-light border-0">
+                        <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Fechar</button>
+                    </div>
+                `;
+            })
+            .catch(err => {
+                modalConteudo.innerHTML = `
+                    <div class="modal-body text-center p-5">
+                        <i class="bi bi-exclamation-octagon text-danger" style="font-size: 3rem;"></i>
+                        <p class="mt-3 fw-bold">${err.message}</p>
+                        <button class="btn btn-secondary mt-2" data-bs-dismiss="modal">Fechar</button>
+                    </div>
+                `;
+            });
     }
 
     // 3. ADICIONE o novo cronômetro regressivo
