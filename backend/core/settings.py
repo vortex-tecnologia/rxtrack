@@ -139,6 +139,11 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'sac_mobile.tasks.verificar_agendamentos_rebusca_task',
         'schedule': crontab(),  # A cada minuto
     },
+    # Auto-recuperação de baixas travadas em PENDENTE_ANALISE (IA que não processou)
+    'auto-recuperar-baixas-ia': {
+        'task': 'manifesto.tasks_auto_recovery.auto_recuperar_baixas_pendentes_ia',
+        'schedule': crontab(minute='*/2'),  # A cada 2 minutos
+    },
 }
 
 CHANNEL_LAYERS = {
