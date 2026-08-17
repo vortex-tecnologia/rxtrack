@@ -1,5 +1,5 @@
-// UNIFICADO: Versão v1.45
-const CACHE_NAME = 'fluxo-logistica-v1.45';
+// UNIFICADO: Versão v1.46
+const CACHE_NAME = 'fluxo-logistica-v1.46';
 
 const filesToCache = [
     '/app/',
@@ -118,7 +118,7 @@ self.addEventListener('push', function (event) {
     };
 
     event.waitUntil(
-        self.registration.showNotification(data.title || 'Quick Track', options)
+        self.registration.showNotification(data.title || 'RXTrack', options)
     );
 });
 
