@@ -300,8 +300,9 @@ class RegistrarBaixaView(APIView):
                 nova_tentativa = (baixa_existente.tentativa_foto + 1) if (baixa_existente and baixa_existente.tentativa_foto) else 1
 
                 cod_tms_check = str(ocorrencia.codigo_tms or ocorrencia.codigo_referencia or '').strip()
-                is_ocorrencia_01 = (cod_tms_check in ['01', '1'] or (ocorrencia.tipo == 'ENTREGA' and cod_tms_check not in ['02', '2', '050', '055']))
+                is_ocorrencia_01 = (cod_tms_check in ['01', '1', '001'] or (ocorrencia.tipo == 'ENTREGA' and cod_tms_check not in ['02', '2', '002', '050', '055']))
                 is_analise_ia_necessaria = bool(
+                    tipo_operacao == 'ENTREGA' and
                     not is_retida and
                     url_final_foto and
                     config_backup.processar_yolo and

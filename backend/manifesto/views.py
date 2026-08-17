@@ -66,7 +66,23 @@ class ManifestoFinalizacaoView(APIView):
             from django.utils import timezone
             from datetime import timedelta
 
-            # Auto-recuperação: Baixas com mais de 45s travadas em PENDENTE_ANALISE são liberadas E enviadas ao TMS
+            # Auto-recuperação 1: Baixas sem foto ou de operações que não são ENTREGA 01 nunca devem ficar em PENDENTE_ANALISE
+            from django.db.models import Q
+            baixas_sem_ia = BaixaNF.objects.filter(
+                nota_fiscal__manifesto=manifesto,
+                qualidade_canhoto='PENDENTE_ANALISE'
+            ).filter(
+                Q(comprovante_foto_url='') | 
+                Q(comprovante_foto_url__isnull=True) | 
+                ~Q(nota_fiscal__tipo_operacao='ENTREGA') |
+                ~Q(ocorrencia__codigo_tms__in=['1', '01', '001'])
+            )
+            for b in baixas_sem_ia:
+                b.qualidade_canhoto = 'APROVADO'
+                b.solicitar_nova_foto = False
+                b.save(update_fields=['qualidade_canhoto', 'solicitar_nova_foto'])
+
+            # Auto-recuperação 2: Baixas com mais de 45s travadas em PENDENTE_ANALISE são liberadas E enviadas ao TMS
             limite_recente = timezone.now() - timedelta(seconds=45)
             baixas_travadas = BaixaNF.objects.filter(
                 nota_fiscal__manifesto=manifesto,
@@ -87,7 +103,13 @@ class ManifestoFinalizacaoView(APIView):
             notas_em_analise = BaixaNF.objects.filter(
                 nota_fiscal__manifesto=manifesto,
                 qualidade_canhoto='PENDENTE_ANALISE',
-                solicitar_nova_foto=False
+                solicitar_nova_foto=False,
+                nota_fiscal__tipo_operacao='ENTREGA',
+                ocorrencia__codigo_tms__in=['1', '01', '001']
+            ).exclude(
+                comprovante_foto_url=''
+            ).exclude(
+                comprovante_foto_url__isnull=True
             ).count()
 
             if notas_em_analise > 0:

@@ -3,6 +3,26 @@
   <img src="backend/static/images/logo_app.png" alt="Quick Track Logo" width="150" />
 </div>
 
+# Atualizações Aplicadas (17/08/2026) – Versão v2.5.0
+
+## Validação Instantânea V1 de Qualidade de Canhotos no App (PWA & APK)
+- **Pré-Validação Instantânea no Frontend:**
+  - Criação do módulo leve `image_quality_v1.js` utilizando Canvas API nativo (zero dependências externas).
+  - Cálculo de Quality Score (0-100) combinando Nitidez (Laplaciano 40%), Iluminação (25%), Contraste (20%) e Resolução (15%).
+- **Bloqueio Educativo do Botão 'Confirmar Registro':**
+  - O botão permanece travado durante o diagnóstico técnico e em fotos reprovadas, orientando o motorista com dicas objetivas de captura.
+  - Botão ágil para "Tirar nova foto" reaproveitando o fluxo nativo da câmera.
+- **Regra de Negócio Específica (Ocorrência 01 - Entregas):**
+  - Análise aplicada exclusivamente quando a ocorrência 01 for selecionada.
+  - Canhotos retidos e ocorrências de insucesso/devolução não exigem validação de foto.
+- **Otimização Extrema de Memória (Smartphones 4GB RAM):**
+  - Análise sobre cópia temporária reduzida (≤1280px) com consumo transitório < 6MB e descarte imediato.
+  - Micro-operações assíncronas que preservam 100% da fluidez da interface.
+- **Resiliência e Fallback:**
+  - Tratamento de exceções e timeouts que impedem travamentos em campo.
+
+---
+
 # Atualizações Aplicadas (04/08/2026)
 
 **Hora:** 15:15

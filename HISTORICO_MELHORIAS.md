@@ -1,6 +1,34 @@
-# Histórico de Melhorias e Integrações (Realizadas em 19/06/2026)
+# Histórico de Melhorias e Integrações
 
-Este documento registra todas as arquiteturas, melhorias de resiliência e correções de bugs implementadas hoje no projeto **QuickTrack** para facilitar o alinhamento em sessões futuras.
+Este documento registra todas as arquiteturas, melhorias de resiliência e correções de bugs implementadas no projeto **RXTrack** para facilitar o alinhamento em sessões futuras.
+
+---
+
+## Patch v2.5.0 (17/08/2026) – Validação Instantânea V1 de Qualidade de Canhotos no App (PWA & APK)
+* **Objetivo:** Filtrar antecipadamente fotos borradas, escuras ou ilegíveis de comprovantes de entrega diretamente no dispositivo móvel do motorista, antes da confirmação de baixa e do envio ao backend/TMS.
+* **Solução e Arquitetura:**
+  - **Módulo Autônomo Leve ([image_quality_v1.js](file:///c:/Users/Micro/Desktop/RXTrack/backend/static/js/image_quality_v1.js)):**
+    - Desenvolvido exclusivamente com APIs nativas do navegador (`Canvas 2D`, `ImageData`, `createImageBitmap`), com **zero bibliotecas externas** (sem OpenCV.js ou modelos pesados).
+    - **Quality Score Ponderado (0-100):**
+      - *Nitidez (40%):* Variância do Laplaciano sobre matriz grayscale para detecção precisa de desfoque.
+      - *Iluminação (25%):* Média e distribuição de luminosidade (detecção de fotos subexpostas ou superexpostas com flash).
+      - *Contraste (20%):* Desvio padrão da luminância para assegurar legibilidade documental.
+      - *Resolução (15%):* Checagem das dimensões mínimas da imagem original.
+  - **Otimização Extrema de Memória (Celulares 4GB de RAM):**
+    - Redução automática da imagem para resolução de análise de no máximo 1280px via `createImageBitmap`.
+    - Array de grayscale compacto `Uint8Array` (1 byte por pixel vs 4 bytes do RGBA).
+    - Liberação imediata de memória do Canvas e descarte de referências após a extração dos dados (consumo transitório < 6MB).
+    - Execução assíncrona com `requestIdleCallback` / `setTimeout(0)` entre etapas para manter a interface 100% fluida e responsiva.
+  - **Regra de Negócio Específica (Ocorrência 01 - Entrega):**
+    - A validação V1 atua **apenas quando a ocorrência selecionada for 01 (Entrega Realizada)** e a nota **não** estiver marcada como retida.
+    - Ocorrências de insucesso/devolução ou notas com canhoto retido para conferência mantêm o fluxo livre sem bloqueio.
+    - Se o usuário alternar de ocorrência após uma reprovação, o sistema reavalia o estado instantaneamente.
+  - **Experiência do Usuário (UI/UX) & Bloqueio Educativo:**
+    - Barra de progresso real acompanhando as etapas (*Analisando nitidez*, *Analisando iluminação*, *Analisando contraste*).
+    - Durante o processamento ou caso a foto seja reprovada, o botão **'Confirmar Registro'** permanece bloqueado.
+    - Feedback claro em caso de reprovação com dicas contextuais (ex: *"Foto muito desfocada. Segure o celular firme e mais próximo do documento."*) e botão direto para **'Tirar nova foto'**.
+  - **Resiliência e Fallback:**
+    - Timeouts (>15s) ou falhas técnicas liberam o envio automaticamente com log controlado, garantindo que o motorista nunca fique impedido de trabalhar em campo.
 
 ---
 
