@@ -1091,6 +1091,17 @@ async function salvarRegistro() {
             alert("A foto é obrigatória para este código de ocorrência!");
             return;
         }
+        // V1: Proteção extra em salvarRegistro para ocorrência 01
+        if (typeof _deveExecutarAnaliseV1 === 'function' && _deveExecutarAnaliseV1()) {
+            if (_qualityAnaliseAtiva) {
+                alert("Aguarde a conclusão da análise de qualidade da foto.");
+                return;
+            }
+            if (_qualityResultado && !_qualityResultado.approved) {
+                alert("A foto não foi aprovada na análise de qualidade. Por favor, tire uma nova foto mais nítida.");
+                return;
+            }
+        }
     }
 
     // 3. Interface: Fecha modal de preenchimento e abre modal de progresso
@@ -1287,6 +1298,9 @@ async function handleCameraNativa(event) {
     const canvas = document.getElementById('canvas-preview');
     const ctx = canvas.getContext('2d');
 
+    // Guarda referência ao File original para análise V1
+    window._ultimoArquivoFoto = file;
+
     try {
         // createImageBitmap redimensiona NATIVAMENTE pelo browser
         // sem carregar a foto inteira (12MP ~48MB) na RAM do JavaScript.
@@ -1322,6 +1336,10 @@ async function handleCameraNativa(event) {
 
         document.getElementById('label-camera').style.display = 'none';
         document.getElementById('btn-nova-foto').style.display = 'block';
+
+        // V1: Inicia análise de qualidade se ocorrência for 01
+        _tentarAnaliseQualidadeV1(file);
+
     } catch (err) {
         console.error('Erro ao processar foto:', err);
         // Fallback para navegadores muito antigos sem createImageBitmap
@@ -1341,8 +1359,245 @@ async function handleCameraNativa(event) {
             if (texto) { texto.innerText = "Foto capturada com sucesso!"; texto.className = "text-success fw-bold mt-2"; }
             document.getElementById('label-camera').style.display = 'none';
             document.getElementById('btn-nova-foto').style.display = 'block';
+
+            // V1: Inicia análise de qualidade se ocorrência for 01 (fallback path)
+            _tentarAnaliseQualidadeV1(file);
         };
         img.src = imgUrl;
+    }
+}
+
+// =====================================================
+// V1 — ANÁLISE DE QUALIDADE DE FOTO DE CANHOTO
+// =====================================================
+// Estado global da análise V1
+let _qualityAnaliseAtiva = false;  // true enquanto análise está rodando
+let _qualityResultado = null;      // resultado da última análise
+
+/**
+ * Verifica se a ocorrência selecionada é 01 (Entrega) e se não é nota retida.
+ * @returns {boolean} true se a análise V1 deve ser executada
+ */
+function _deveExecutarAnaliseV1() {
+    const selectOc = document.getElementById('select-ocorrencia');
+    const checkRetida = document.getElementById('check-nota-retida');
+    if (!selectOc) return false;
+
+    const cod = selectOc.value;
+    const isOcorrencia01 = (cod === '1' || cod === '01' || cod === '001');
+    const isRetida = checkRetida ? checkRetida.checked : false;
+
+    return isOcorrencia01 && !isRetida;
+}
+
+/**
+ * Tenta iniciar a análise V1 se as condições forem atendidas.
+ * Chamada após a foto ser capturada/selecionada.
+ */
+function _tentarAnaliseQualidadeV1(file) {
+    if (!_deveExecutarAnaliseV1()) {
+        // Não é ocorrência 01 ou é retida: não analisa, botão liberado
+        _resetarEstadoQualidadeV1();
+        return;
+    }
+    _iniciarAnaliseQualidadeV1(file);
+}
+
+/**
+ * Reseta completamente o estado visual e lógico da análise V1.
+ */
+function _resetarEstadoQualidadeV1() {
+    _qualityAnaliseAtiva = false;
+    _qualityResultado = null;
+
+    const container = document.getElementById('quality-analysis-container');
+    const progressBar = document.querySelector('#quality-progress-bar .progress-bar');
+    const stepText = document.getElementById('quality-step-text');
+    const result = document.getElementById('quality-result');
+    const cameraContainer = document.getElementById('camera-container-main');
+    const btnNovaFotoQ = document.getElementById('btn-nova-foto-quality');
+    const btnConfirmar = document.getElementById('btn-confirmar-registro');
+
+    if (container) container.style.display = 'none';
+    if (progressBar) progressBar.style.width = '0%';
+    if (stepText) stepText.innerText = '';
+    if (result) { result.style.display = 'none'; result.innerHTML = ''; result.className = ''; }
+    if (cameraContainer) {
+        cameraContainer.classList.remove('quality-analyzing', 'quality-approved', 'quality-rejected');
+    }
+    if (btnNovaFotoQ) btnNovaFotoQ.style.display = 'none';
+    if (btnConfirmar) {
+        btnConfirmar.disabled = false;
+        btnConfirmar.classList.remove('disabled');
+    }
+}
+
+/**
+ * Executa a análise V1 de qualidade sobre o arquivo de foto.
+ */
+async function _iniciarAnaliseQualidadeV1(file) {
+    // Verifica se o módulo de qualidade está disponível
+    if (!window.ImageQualityV1 || typeof window.ImageQualityV1.analyze !== 'function') {
+        console.warn('[V1 Quality] Módulo ImageQualityV1 não disponível. Liberando botão.');
+        _resetarEstadoQualidadeV1();
+        return;
+    }
+
+    _qualityAnaliseAtiva = true;
+    _qualityResultado = null;
+
+    // Elementos da UI
+    const container = document.getElementById('quality-analysis-container');
+    const progressBar = document.querySelector('#quality-progress-bar .progress-bar');
+    const stepText = document.getElementById('quality-step-text');
+    const result = document.getElementById('quality-result');
+    const cameraContainer = document.getElementById('camera-container-main');
+    const btnNovaFoto = document.getElementById('btn-nova-foto');
+    const btnNovaFotoQ = document.getElementById('btn-nova-foto-quality');
+    const btnConfirmar = document.getElementById('btn-confirmar-registro');
+
+    // Estado inicial: Analisando
+    if (container) container.style.display = 'block';
+    if (progressBar) progressBar.style.width = '0%';
+    if (stepText) stepText.innerText = 'Iniciando análise...';
+    if (result) { result.style.display = 'none'; result.innerHTML = ''; }
+    if (cameraContainer) {
+        cameraContainer.classList.remove('quality-approved', 'quality-rejected');
+        cameraContainer.classList.add('quality-analyzing');
+    }
+    if (btnNovaFoto) btnNovaFoto.style.display = 'none';
+    if (btnNovaFotoQ) btnNovaFotoQ.style.display = 'none';
+
+    // Bloqueia botão Confirmar Registro
+    if (btnConfirmar) {
+        btnConfirmar.disabled = true;
+        btnConfirmar.classList.add('disabled');
+    }
+
+    try {
+        // Callback de progresso: atualiza barra e texto em tempo real
+        const onProgress = (step, percent, message) => {
+            if (progressBar) progressBar.style.width = percent + '%';
+            if (stepText) stepText.innerText = message;
+        };
+
+        const resultado = await window.ImageQualityV1.analyze(file, onProgress);
+        _qualityResultado = resultado;
+        _qualityAnaliseAtiva = false;
+
+        console.log(`[V1 Quality] Resultado: score=${resultado.score}, approved=${resultado.approved}, duration=${resultado.duration}ms`, resultado.metrics);
+
+        // Remove classe de animação
+        if (cameraContainer) cameraContainer.classList.remove('quality-analyzing');
+
+        if (resultado.approved) {
+            // === APROVADO ===
+            if (cameraContainer) cameraContainer.classList.add('quality-approved');
+            if (stepText) stepText.innerText = '';
+            if (result) {
+                result.className = 'result-approved show';
+                result.style.display = 'block';
+                result.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 1.3rem;"></i>
+                        <strong>Foto aprovada</strong>
+                        <span class="quality-score-badge bg-success text-white">Score: ${resultado.score}/100</span>
+                    </div>
+                    <div class="small mt-1 text-muted">Qualidade suficiente para processamento.</div>
+                `;
+            }
+            // Libera botão
+            if (btnConfirmar) {
+                btnConfirmar.disabled = false;
+                btnConfirmar.classList.remove('disabled');
+            }
+            // Mostra botão "Tirar outra foto" padrão
+            if (btnNovaFoto) btnNovaFoto.style.display = 'block';
+
+        } else {
+            // === REPROVADO ===
+            if (cameraContainer) cameraContainer.classList.add('quality-rejected');
+            if (stepText) stepText.innerText = '';
+
+            // Gera HTML dos motivos
+            let motivosHtml = '';
+            if (resultado.issues && resultado.issues.length > 0) {
+                motivosHtml = '<ul class="quality-issues mb-1">';
+                resultado.issues.forEach(issue => {
+                    motivosHtml += `<li>${issue.message}</li>`;
+                });
+                motivosHtml += '</ul>';
+                // Dica principal
+                motivosHtml += `<div class="small fst-italic">${resultado.issues[0].tip}</div>`;
+            }
+
+            if (result) {
+                result.className = 'result-rejected show';
+                result.style.display = 'block';
+                result.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-x-circle-fill text-danger me-2" style="font-size: 1.3rem;"></i>
+                        <strong>Foto não aprovada</strong>
+                        <span class="quality-score-badge bg-danger text-white">Score: ${resultado.score}/100</span>
+                    </div>
+                    ${motivosHtml}
+                `;
+            }
+            // Mantém botão bloqueado
+            if (btnConfirmar) {
+                btnConfirmar.disabled = true;
+                btnConfirmar.classList.add('disabled');
+            }
+            // Mostra botão "Tirar nova foto" vermelho
+            if (btnNovaFotoQ) btnNovaFotoQ.style.display = 'block';
+            if (btnNovaFoto) btnNovaFoto.style.display = 'none';
+        }
+
+    } catch (err) {
+        // === ERRO / FALLBACK ===
+        // Em caso de erro técnico, NÃO trava o app. Libera o botão.
+        console.error('[V1 Quality] Erro na análise de qualidade:', err);
+        _qualityAnaliseAtiva = false;
+        _qualityResultado = null;
+
+        if (cameraContainer) cameraContainer.classList.remove('quality-analyzing');
+        if (stepText) stepText.innerText = '';
+        if (container) container.style.display = 'none';
+
+        // Libera botão (fallback seguro)
+        if (btnConfirmar) {
+            btnConfirmar.disabled = false;
+            btnConfirmar.classList.remove('disabled');
+        }
+        if (btnNovaFoto) btnNovaFoto.style.display = 'block';
+    }
+}
+
+/**
+ * Handler para mudança de ocorrência no select.
+ * Se o usuário mudar de 01 para outra ocorrência (ou vice-versa),
+ * ajusta o estado do botão Confirmar de acordo.
+ */
+function _onOcorrenciaChange() {
+    const canvas = document.getElementById('canvas-preview');
+    const temFoto = canvas && canvas.dataset.temFoto === 'true';
+
+    if (!_deveExecutarAnaliseV1()) {
+        // Mudou para ocorrência diferente de 01 ou marcou retida:
+        // Limpa estado de qualidade e libera botão
+        _resetarEstadoQualidadeV1();
+        return;
+    }
+
+    // Mudou PARA 01 e tem foto: precisa analisar
+    if (temFoto && !_qualityAnaliseAtiva && window._ultimoArquivoFoto) {
+        // Se já tem resultado aprovado anterior, mantém
+        if (_qualityResultado && _qualityResultado.approved) return;
+        // Caso contrário, (re)inicia análise
+        _iniciarAnaliseQualidadeV1(window._ultimoArquivoFoto);
+    } else if (temFoto && !_qualityAnaliseAtiva && !window._ultimoArquivoFoto) {
+        // Tem foto no canvas mas perdeu referência ao file: libera (fallback seguro)
+        _resetarEstadoQualidadeV1();
     }
 }
 
@@ -1617,6 +1872,10 @@ function abrirModalBaixa(numeroNota, chaveAcesso, tipo) {
     cameraLabel.style.display = 'block';
     btnNovaFoto.style.display = 'none';
 
+    // V1: Reset da análise de qualidade
+    _resetarEstadoQualidadeV1();
+    window._ultimoArquivoFoto = null;
+
     // =====================================================
     // 2. CONFIGURAÇÃO DO MODAL COM OS NOVOS DADOS
     // =====================================================
@@ -1684,12 +1943,16 @@ function abrirModalBaixa(numeroNota, chaveAcesso, tipo) {
                 cameraLabel.style.display = 'none';
                 btnNovaFoto.style.display = 'none';
                 campoObs.style.display = 'block';
+                // V1: Nota retida → limpa análise e libera botão
+                _resetarEstadoQualidadeV1();
             } else {
                 if (tipo === 'ENTREGA') {
                     cameraSection.style.display = 'block';
                     cameraLabel.style.display = 'block';
                 }
                 campoObs.style.display = 'none';
+                // V1: Desmarcou retida → reavalia se precisa de análise
+                _onOcorrenciaChange();
             }
         };
     }
@@ -1713,6 +1976,12 @@ function abrirModalBaixa(numeroNota, chaveAcesso, tipo) {
         cameraLabel.style.display = 'block';
         const opt1 = Array.from(selectOc.options).find(o => o.value === '1' || o.value === '01' || o.value === '001');
         if (opt1) selectOc.value = opt1.value;
+    }
+
+    // V1: Listener de mudança de ocorrência para reavaliar necessidade de análise
+    if (selectOc) {
+        selectOc.removeEventListener('change', _onOcorrenciaChange);
+        selectOc.addEventListener('change', _onOcorrenciaChange);
     }
 
     console.log(`[APP LOG abrirModalBaixa] Tipo: "${tipo}", NF: "${numeroNota}", Ocorrência Selecionada no Modal: "${selectOc.value}"`);

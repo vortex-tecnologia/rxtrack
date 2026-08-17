@@ -256,3 +256,126 @@ body {
         font-weight: bold;
     }
 }
+
+/* =====================================================
+   V1 — ANÁLISE DE QUALIDADE DE FOTO DE CANHOTO
+   ===================================================== */
+
+/* Container da análise */
+#quality-analysis-container {
+    margin-top: 10px;
+    padding: 12px;
+    border-radius: 12px;
+    background: #f8f9fa;
+    transition: all 0.3s ease;
+}
+
+/* Estado: Analisando */
+.camera-container.quality-analyzing {
+    border-color: #0d6efd !important;
+    border-style: solid !important;
+    animation: quality-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes quality-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.3); }
+    50% { box-shadow: 0 0 0 8px rgba(13, 110, 253, 0); }
+}
+
+/* Estado: Aprovado */
+.camera-container.quality-approved {
+    border-color: #198754 !important;
+    border-style: solid !important;
+    background-color: #f0fdf4 !important;
+}
+
+/* Estado: Reprovado */
+.camera-container.quality-rejected {
+    border-color: #dc3545 !important;
+    border-style: solid !important;
+    background-color: #fef2f2 !important;
+}
+
+/* Barra de progresso customizada */
+#quality-progress-bar {
+    border-radius: 4px;
+    overflow: hidden;
+    background-color: #e9ecef;
+}
+
+#quality-progress-bar .progress-bar {
+    transition: width 0.3s ease;
+    background: linear-gradient(90deg, #0d6efd, #0dcaf0);
+}
+
+/* Texto da etapa atual */
+#quality-step-text {
+    font-size: 0.78rem;
+    min-height: 1.2em;
+    transition: opacity 0.2s ease;
+}
+
+/* Container do resultado */
+#quality-result {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 0.85rem;
+}
+
+#quality-result.result-approved {
+    background: #d1e7dd;
+    color: #0f5132;
+    border: 1px solid #badbcc;
+}
+
+#quality-result.result-rejected {
+    background: #f8d7da;
+    color: #842029;
+    border: 1px solid #f5c2c7;
+}
+
+#quality-result .quality-score-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-left: 6px;
+}
+
+#quality-result .quality-issues {
+    margin-top: 6px;
+    padding-left: 0;
+    list-style: none;
+    font-size: 0.8rem;
+}
+
+#quality-result .quality-issues li {
+    padding: 2px 0;
+}
+
+#quality-result .quality-issues li::before {
+    content: "• ";
+    color: #dc3545;
+    font-weight: bold;
+}
+
+/* Botão tirar nova foto (pós-reprovação) */
+#btn-nova-foto-quality {
+    margin-top: 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+/* Animação de entrada do resultado */
+@keyframes quality-result-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+#quality-result[style*="display: block"],
+#quality-result.show {
+    animation: quality-result-in 0.3s ease-out;
+}
