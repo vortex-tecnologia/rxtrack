@@ -882,6 +882,89 @@
             });
         });
     };
+
+    // Função global para upload de nova foto de baixa (utilizada em detalhes_nota_modal.html em todas as telas)
+    window.enviarNovaFotoBaixa = function(baixaId, inputEl, notaId) {
+        if (!inputEl || !inputEl.files || !inputEl.files[0]) return;
+        const file = inputEl.files[0];
+        const feedbackEl = document.getElementById(`feedbackFotoBaixa_${baixaId}`);
+
+        function getCookieVal(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        const formData = new FormData();
+        formData.append('foto', file);
+
+        const btn = inputEl.nextElementSibling;
+        const originalText = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Processando Foto & IA...';
+        }
+
+        if (feedbackEl) {
+            feedbackEl.className = 'alert alert-info small mb-2 p-2 rounded d-block';
+            feedbackEl.innerHTML = '<i class="bi bi-cpu me-1"></i>Enviando foto para IA (YOLO/OCR) e TMS...';
+        }
+
+        fetch(`/api/operacional/baixa/${baixaId}/atualizar-foto/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookieVal('csrftoken') || ''
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'sucesso') {
+                if (feedbackEl) {
+                    feedbackEl.className = 'alert alert-success small mb-2 p-2 rounded d-block';
+                    feedbackEl.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i>${data.message}`;
+                }
+                setTimeout(() => {
+                    if (typeof verDetalhesNF === 'function' && notaId) {
+                        verDetalhesNF(notaId);
+                    } else if (typeof abrirDetalhes === 'function' && notaId) {
+                        abrirDetalhes(notaId);
+                    } else {
+                        location.reload();
+                    }
+                }, 1200);
+            } else {
+                if (feedbackEl) {
+                    feedbackEl.className = 'alert alert-danger small mb-2 p-2 rounded d-block';
+                    feedbackEl.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i>${data.message || 'Falha ao atualizar foto.'}`;
+                }
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            if (feedbackEl) {
+                feedbackEl.className = 'alert alert-danger small mb-2 p-2 rounded d-block';
+                feedbackEl.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i>Erro de conexão ao enviar foto.';
+            }
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        });
+    };
 </script>
 
     {% block extra_js %}{% endblock %}
