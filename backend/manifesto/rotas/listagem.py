@@ -93,9 +93,14 @@ class ListarNotasManifestoView(APIView):
                 except Exception:
                     pass
 
+                oc_cod = str(getattr(baixa.ocorrencia, 'codigo_tms', '') or getattr(baixa.ocorrencia, 'codigo_referencia', '') or '').strip() if baixa.ocorrencia else ''
+                is_ret = bool(baixa.observacao and 'retid' in baixa.observacao.lower())
+
                 dados_baixa = {
                     'tipo': baixa.tipo,
                     'ocorrencia': ocorrencia_desc,
+                    'ocorrencia_codigo': oc_cod,
+                    'is_retida': is_ret,
                     'recebedor': baixa.recebedor,
                     'autor': autor_nome,
                     'data': localtime(baixa.data_baixa).strftime('%d/%m/%Y %H:%M') if baixa.data_baixa else None,

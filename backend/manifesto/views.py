@@ -66,7 +66,7 @@ class ManifestoFinalizacaoView(APIView):
             from django.utils import timezone
             from datetime import timedelta
 
-            # Auto-recuperação 1: Baixas sem foto ou de operações que não são ENTREGA 01 nunca devem ficar em PENDENTE_ANALISE
+            # Auto-recuperação 1: Baixas sem foto, retidas ou com ocorrência != 01 nunca passam por IA
             from django.db.models import Q
             baixas_sem_ia = BaixaNF.objects.filter(
                 nota_fiscal__manifesto=manifesto,
@@ -74,7 +74,7 @@ class ManifestoFinalizacaoView(APIView):
             ).filter(
                 Q(comprovante_foto_url='') | 
                 Q(comprovante_foto_url__isnull=True) | 
-                ~Q(nota_fiscal__tipo_operacao='ENTREGA') |
+                Q(observacao__icontains='retid') |
                 ~Q(ocorrencia__codigo_tms__in=['1', '01', '001'])
             )
             for b in baixas_sem_ia:
@@ -104,8 +104,9 @@ class ManifestoFinalizacaoView(APIView):
                 nota_fiscal__manifesto=manifesto,
                 qualidade_canhoto='PENDENTE_ANALISE',
                 solicitar_nova_foto=False,
-                nota_fiscal__tipo_operacao='ENTREGA',
                 ocorrencia__codigo_tms__in=['1', '01', '001']
+            ).exclude(
+                observacao__icontains='retid'
             ).exclude(
                 comprovante_foto_url=''
             ).exclude(

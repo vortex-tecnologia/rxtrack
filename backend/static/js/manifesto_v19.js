@@ -594,19 +594,25 @@ async function atualizarListaViva(numeroManifesto) {
             } else if (containerColetiva) { containerColetiva.innerHTML = ''; }
 
             // VERIFICAÇÕES DE QUALIDADE IA E PENDÊNCIAS DE FOTO
-            // SOMENTE notas de ENTREGA com FOTO e ocorrência 01 passam pela checagem de IA
+            // SOMENTE notas com Ocorrência 01, COM FOTO e NÃO RETIDAS passam pela checagem de IA
             const notasEmAnaliseIA = notas.filter(n => {
                 const q = (n.dados_baixa && n.dados_baixa.qualidade_canhoto) || n.qualidade_canhoto;
                 const sol = (n.dados_baixa && n.dados_baixa.solicitar_nova_foto) || n.solicitar_nova_foto;
                 const temFoto = (n.dados_baixa && n.dados_baixa.foto_url);
-                const isEntrega = (n.tipo_operacao === 'ENTREGA' || !n.tipo_operacao);
-                return n.ja_baixada && isEntrega && temFoto && q === 'PENDENTE_ANALISE' && !sol;
+                const ocCod = n.dados_baixa ? String(n.dados_baixa.ocorrencia_codigo || '').trim() : '';
+                const isOc01 = (ocCod === '1' || ocCod === '01' || ocCod === '001');
+                const isRetida = n.dados_baixa ? Boolean(n.dados_baixa.is_retida) : false;
+
+                return n.ja_baixada && isOc01 && !isRetida && temFoto && q === 'PENDENTE_ANALISE' && !sol;
             });
             const notasComFotoRuim = notas.filter(n => {
                 const sol = (n.dados_baixa && n.dados_baixa.solicitar_nova_foto) || n.solicitar_nova_foto;
                 const temFoto = (n.dados_baixa && n.dados_baixa.foto_url);
-                const isEntrega = (n.tipo_operacao === 'ENTREGA' || !n.tipo_operacao);
-                return isEntrega && temFoto && sol === true;
+                const ocCod = n.dados_baixa ? String(n.dados_baixa.ocorrencia_codigo || '').trim() : '';
+                const isOc01 = (ocCod === '1' || ocCod === '01' || ocCod === '001');
+                const isRetida = n.dados_baixa ? Boolean(n.dados_baixa.is_retida) : false;
+
+                return isOc01 && !isRetida && temFoto && sol === true;
             });
 
             // CONTAINER DE FINALIZAÇÃO (BOTÃO MANUAL)
