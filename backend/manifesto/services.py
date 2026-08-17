@@ -38,6 +38,13 @@ def enviar_painel(manifesto):
     filial_nome = manifesto.filial.nome if manifesto.filial else "Sem Filial"
     filial_slug = slugify(nome_filial)
 
+    # Contagem exata em tempo real dos manifestos em transporte desta filial
+    from manifesto.models import Manifesto
+    if manifesto.filial:
+        total_ativos_filial = Manifesto.objects.filter(filial=manifesto.filial, status='EM_TRANSPORTE').count()
+    else:
+        total_ativos_filial = Manifesto.objects.filter(filial__isnull=True, status='EM_TRANSPORTE').count()
+
     payload = {
         "type": "atualizar_painel",
         "data": {
@@ -45,6 +52,7 @@ def enviar_painel(manifesto):
             "filial_id": filial_id,
             "filial_nome": filial_nome,
             "filial_slug": filial_slug,
+            "total_ativos_filial": total_ativos_filial,
             "baixadas": baixadas,
             "porcentagem": porcentagem,
             "total_ilegivel": total_ilegivel,

@@ -93,22 +93,24 @@ function conectarWebSocket() {
 
                 // Garante que a filial tem um card no cabeçalho (Criação Dinâmica via WS)
                 if (fId) {
-                    garantirCardFilial(fId, fNome, 0);
+                    const contagemExata = (d.total_ativos_filial !== undefined && d.total_ativos_filial !== null) ? d.total_ativos_filial : 0;
+                    garantirCardFilial(fId, fNome, contagemExata);
+                    if (d.total_ativos_filial !== undefined && d.total_ativos_filial !== null) {
+                        atualizarContadorFilial(fId, d.total_ativos_filial);
+                    }
                 }
 
                 if (d.remover) {
                     const card = document.getElementById(`card-mft-${mID}`);
-                    if (card) {
+                    if (card && !card.dataset.removendo) {
+                        card.dataset.removendo = 'true';
                         card.classList.add('fade-out');
                         setTimeout(() => {
                             card.remove();
                             if (typeof aplicarFiltroFilialNaGrid === 'function') {
                                 aplicarFiltroFilialNaGrid();
                             }
-                        }, 600);
-                        if (fId) {
-                            atualizarContadorFilial(fId, -1);
-                        }
+                        }, 500);
                     }
                     return; // Ignora o resto se for remover
                 }
@@ -119,9 +121,6 @@ function conectarWebSocket() {
                 if (!cardContainer) {
                     criarNovoCardManifesto(d);
                     cardContainer = document.getElementById(`card-mft-${mID}`);
-                    if (fId) {
-                        atualizarContadorFilial(fId, 1);
-                    }
                     if (typeof aplicarFiltroFilialNaGrid === 'function') {
                         aplicarFiltroFilialNaGrid();
                     }
@@ -238,13 +237,18 @@ function conectarWebSocket() {
         }
     }
 
-    function atualizarContadorFilial(filialId, delta) {
+    function atualizarContadorFilial(filialId, valorExatoOuDelta) {
         if (!filialId) return;
         const sId = String(filialId);
         const badge = document.getElementById(`badge-count-filial-${sId}`);
         if (badge) {
-            let atual = parseInt(badge.innerText.trim(), 10) || 0;
-            let novo = Math.max(0, atual + delta);
+            let novo;
+            if (typeof valorExatoOuDelta === 'number' && valorExatoOuDelta >= 0) {
+                novo = valorExatoOuDelta;
+            } else {
+                let atual = parseInt(badge.innerText.trim(), 10) || 0;
+                novo = Math.max(0, atual + (valorExatoOuDelta || 0));
+            }
             badge.innerText = novo;
             
             badge.classList.remove('filial-badge-pulse');
