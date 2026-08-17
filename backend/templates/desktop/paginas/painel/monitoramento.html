@@ -29,21 +29,89 @@
     font-weight: 800 !important;
     line-height: 1 !important;
 }
+.card-filial-btn {
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    border-radius: 14px !important;
+    padding: 8px 16px !important;
+    font-size: 0.92rem;
+    user-select: none;
+}
+.card-filial-btn.active-filial-card {
+    background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%) !important;
+    color: #ffffff !important;
+    border: 1px solid #0d6efd !important;
+    box-shadow: 0 4px 14px rgba(13, 110, 253, 0.35) !important;
+    transform: translateY(-1px);
+}
+.card-filial-btn.active-filial-card .badge-filial-count {
+    background-color: #ffffff !important;
+    color: #0d6efd !important;
+}
+.card-filial-btn.inactive-filial-card {
+    background: #ffffff !important;
+    color: #343a40 !important;
+    border: 1px solid #dee2e6 !important;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.04) !important;
+}
+.card-filial-btn.inactive-filial-card:hover {
+    background: #f8f9fa !important;
+    border-color: #0d6efd !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08) !important;
+}
+.card-filial-btn.inactive-filial-card .badge-filial-count {
+    background-color: rgba(13, 110, 253, 0.1) !important;
+    color: #0d6efd !important;
+    border: 1px solid rgba(13, 110, 253, 0.2) !important;
+}
+.filial-badge-pulse {
+    animation: badgePulse 0.6s ease;
+}
+@keyframes badgePulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.35); }
+    100% { transform: scale(1); }
+}
 </style>
 <div class="container-fluid py-4" style="background-color: #f8f9fa; min-height: 100vh;">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div>
             <h2 class="fw-bold text-dark mb-0">Torre de Controle Live</h2>
-            <p class="text-muted"><i class="fas fa-clock me-2"></i>Monitoramento em tempo real</p>
+            <p class="text-muted mb-0"><i class="fas fa-clock me-2"></i>Monitoramento em tempo real</p>
         </div>
-        <div id="status-ws" class="badge rounded-pill bg-success p-2 px-3">
+
+        <!-- CARDS / TABS DE FILIAIS DINÂMICAS -->
+        <div class="d-flex flex-wrap align-items-center gap-2" id="container-filiais-torre">
+            {% for f in filiais %}
+            <button type="button" 
+                    class="card-filial-btn btn {% if f.id == filial_ativa_id %}active-filial-card{% else %}inactive-filial-card{% endif %} d-flex align-items-center gap-2"
+                    id="btn-filial-{{ f.id }}"
+                    data-filial-id="{{ f.id }}"
+                    data-filial-nome="{{ f.nome }}"
+                    onclick="selecionarFilialTorre('{{ f.id }}')">
+                <i class="bi bi-building"></i>
+                <span class="filial-nome-text fw-bold">{{ f.nome }}</span>
+                <span class="badge {% if f.id == filial_ativa_id %}bg-white text-primary{% else %}bg-primary-subtle text-primary border{% endif %} fw-bold rounded-pill px-2 py-1 badge-filial-count" 
+                      id="badge-count-filial-{{ f.id }}">
+                    {{ f.total_ativos }}
+                </span>
+            </button>
+            {% endfor %}
+        </div>
+
+        <div id="status-ws" class="badge rounded-pill bg-success p-2 px-3 shadow-xs">
             <i class="fas fa-circle me-2 animate-pulse"></i>CONECTADO
         </div>
     </div>
 
     <div class="row g-3" id="grid-monitoramento">
         {% for m in manifestos %}
-        <div class="col-12 col-md-6 col-lg-4 col-xl-3" id="card-mft-{{ m.numero_manifesto }}">
+        <div class="col-12 col-md-6 col-lg-4 col-xl-3 manifesto-card-item" 
+             id="card-mft-{{ m.numero_manifesto }}"
+             data-filial-id="{{ m.filial_id|default:'' }}"
+             data-filial-nome="{{ m.filial.nome|default:'' }}"
+             style="{% if filial_ativa_id and m.filial_id != filial_ativa_id %}display: none;{% endif %}">
             <div class="card h-100 border-0 shadow-sm position-relative overflow-hidden" style="border-radius: 15px;">
                 <div class="progress position-absolute top-0 start-0 w-100" style="height: 4px; border-radius: 0;">
                     <div id="progress-bar-{{ m.numero_manifesto }}" class="progress-bar bg-primary" role="progressbar"
@@ -148,15 +216,16 @@
                 </div>
             </div>
         </div>
-        {% empty %}
-        <div class="col-12 text-center py-5 mt-5">
+        {% endfor %}
+
+        <!-- Estado Vazio Dinâmico por Filial -->
+        <div id="empty-state-filial" class="col-12 text-center py-5 mt-5 d-none">
             <div class="d-inline-block mb-3">
                 <i class="bi bi-truck text-secondary" style="font-size: 80px; opacity: 0.4;"></i>
             </div>
             <h5 class="text-muted fw-bold">Nenhum manifesto em transporte no momento</h5>
-            <p class="text-muted small">Os manifestos ativos da sua filial aparecerão aqui automaticamente.</p>
+            <p class="text-muted small">Os manifestos ativos da filial <span id="empty-nome-filial" class="fw-bold text-primary"></span> aparecerão aqui automaticamente.</p>
         </div>
-        {% endfor %}
     </div>
 </div>
 
@@ -338,13 +407,85 @@
     <script>
         // Passagem da variável de filial ativa para o WS (slugificada no backend)
         window.FILIAL_ATIVA = "{{ filial_selecionada|default:'todas' }}";
+        window.filialAtivaTorreId = "{{ filial_ativa_id|default:'' }}";
+
+        function selecionarFilialTorre(filialId) {
+            window.filialAtivaTorreId = String(filialId);
+
+            // 1. Atualiza estilos visuais dos botões de filial no cabeçalho
+            document.querySelectorAll('.card-filial-btn').forEach(btn => {
+                const bId = btn.getAttribute('data-filial-id');
+                const badge = btn.querySelector('.badge-filial-count');
+
+                if (bId === String(filialId)) {
+                    btn.classList.remove('inactive-filial-card');
+                    btn.classList.add('active-filial-card');
+                    if (badge) {
+                        badge.className = 'badge bg-white text-primary fw-bold rounded-pill px-2 py-1 badge-filial-count';
+                    }
+                } else {
+                    btn.classList.remove('active-filial-card');
+                    btn.classList.add('inactive-filial-card');
+                    if (badge) {
+                        badge.className = 'badge bg-primary-subtle text-primary border fw-bold rounded-pill px-2 py-1 badge-filial-count';
+                    }
+                }
+            });
+
+            // 2. Filtra os cards de manifesto na grid
+            aplicarFiltroFilialNaGrid();
+
+            // 3. Atualiza query param na URL silenciosamente
+            try {
+                const url = new URL(window.location);
+                url.searchParams.set('filial', filialId);
+                window.history.replaceState({}, '', url);
+            } catch (e) {}
+        }
+
+        function aplicarFiltroFilialNaGrid() {
+            const grid = document.getElementById('grid-monitoramento');
+            if (!grid) return;
+
+            const cards = grid.querySelectorAll('.manifesto-card-item');
+            let visiveis = 0;
+
+            cards.forEach(card => {
+                const cardFilialId = card.getAttribute('data-filial-id');
+                if (!window.filialAtivaTorreId || cardFilialId === String(window.filialAtivaTorreId)) {
+                    card.style.display = '';
+                    visiveis++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            // Controla estado vazio
+            const emptyStateEl = document.getElementById('empty-state-filial');
+            const emptyNomeFilial = document.getElementById('empty-nome-filial');
+
+            if (visiveis === 0) {
+                if (emptyStateEl) {
+                    const btnAtivo = document.getElementById(`btn-filial-${window.filialAtivaTorreId}`);
+                    const nomeF = btnAtivo ? btnAtivo.getAttribute('data-filial-nome') : 'desta filial';
+                    if (emptyNomeFilial) emptyNomeFilial.textContent = nomeF;
+                    emptyStateEl.classList.remove('d-none');
+                }
+            } else {
+                if (emptyStateEl) {
+                    emptyStateEl.classList.add('d-none');
+                }
+            }
+        }
     </script>
-    <script src="{% static 'desktop/js/monitoramento/ws.js' %}?v=7"></script>
+    <script src="{% static 'desktop/js/monitoramento/ws.js' %}?v=8"></script>
     <script>
         let mapaEntrega = null;
 
         // Inicializa os badges logo que carregar a página
         document.addEventListener("DOMContentLoaded", function () {
+            aplicarFiltroFilialNaGrid();
+
             if (typeof atualizarUltimoSinalTorre === "function") {
                 atualizarUltimoSinalTorre();
                 setInterval(atualizarUltimoSinalTorre, 60000); // Atualiza a cada 1 min

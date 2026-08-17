@@ -1,44 +1,51 @@
 from django.shortcuts import render
-from django.contrib.auth.decorators import login_required # Import correto para funções
+from django.contrib.auth.decorators import login_required
 from django.utils import timezone
-from manifesto.models import Manifesto, NotaFiscal
+from manifesto.models import Manifesto
+from usuarios.models import Filial, Motorista
 from django.db.models import Count, Q
 
-@login_required(login_url='/login/') # Garante que só acessa se estiver logado
+
+@login_required(login_url='/login/')
 def painel_monitoramento(request):
     hoje = timezone.now().date()
     
-    # Filtrar por filial do usuário se aplicável
+    # 1. Identificar a filial do usuário logado (se houver perfil)
     usuario_filial = None
     if request.user.is_authenticated:
         try:
-            from usuarios.models import Motorista
-            perfil = Motorista.objects.get(user=request.user)
-            usuario_filial = perfil.filial
-        except Motorista.DoesNotExist:
+            perfil = getattr(request.user, 'motorista_perfil', None) or Motorista.objects.select_related('filial').filter(user=request.user).first()
+            if perfil:
+                usuario_filial = perfil.filial
+        except Exception:
             pass
 
-    # A filial ativa pro WebSocket (se existir, o slug do nome)
-    from django.utils.text import slugify
-    filial_selecionada = slugify(usuario_filial.nome) if usuario_filial else "todas"
+    # 2. Carregar todas as filiais cadastradas com contagem de manifestos ativos
+    filiais_qs = Filial.objects.all().order_by('nome')
+    filiais_data = []
+    for f in filiais_qs:
+        total_ativos = Manifesto.objects.filter(filial=f, status='EM_TRANSPORTE').count()
+        filiais_data.append({
+            'id': f.id,
+            'nome': f.nome,
+            'total_ativos': total_ativos,
+        })
 
-    # Filtramos apenas os manifestos ativos
-    qs = Manifesto.objects.filter(status='EM_TRANSPORTE')
-    
-    # Prioridade de Filtro: URL param -> Perfil do Usuário -> Vazio
-    sem_filial = not bool(usuario_filial)
+    # 3. Definir qual filial inicia ativa (Prioridade: URL param -> Filial do Usuário -> 1ª Filial da lista)
     filial_param_id = request.GET.get('filial')
+    filial_ativa_id = None
     
-    if filial_param_id == 'todas' or filial_param_id == 'Todas as Filiais':
-        pass
-    elif filial_param_id:
-        qs = qs.filter(filial_id=filial_param_id)
+    if filial_param_id and filial_param_id.isdigit():
+        filial_ativa_id = int(filial_param_id)
     elif usuario_filial:
-        qs = qs.filter(filial=usuario_filial)
-    else:
-        qs = qs.none()
+        filial_ativa_id = usuario_filial.id
+    elif filiais_data:
+        filial_ativa_id = filiais_data[0]['id']
 
-    manifestos = qs.select_related('motorista', 'filial').annotate(
+    # 4. Busca todos os manifestos ativos (todas as filiais) para permitir troca instantânea via JS
+    manifestos = Manifesto.objects.filter(
+        status='EM_TRANSPORTE'
+    ).select_related('motorista', 'filial').annotate(
         total_nfe=Count('notas_fiscais', distinct=True),
         baixadas=Count('notas_fiscais', filter=Q(notas_fiscais__status__in=['BAIXADA', 'OCORRENCIA']), distinct=True),
         total_ilegivel=Count('notas_fiscais__baixa_info', filter=Q(notas_fiscais__baixa_info__solicitar_nova_foto=True), distinct=True)
@@ -46,10 +53,11 @@ def painel_monitoramento(request):
 
     context = {
         'manifestos': manifestos,
+        'filiais': filiais_data,
+        'filial_ativa_id': filial_ativa_id,
         'hoje': hoje,
-        'titulo': 'Painel de Monitoramento',
+        'titulo': 'Torre de Controle Live',
         'usuario_nome': request.user.get_full_name() or request.user.username,
-        'filial_selecionada': filial_selecionada, # Adicionado para o WebSocket
-        'sem_filial': sem_filial,
+        'filial_selecionada': 'todas', # Conecta o socket ao grupo geral para escutar todas as filiais
     }
     return render(request, 'desktop/paginas/painel/monitoramento.html', context)

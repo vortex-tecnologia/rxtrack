@@ -34,10 +34,17 @@ def enviar_painel(manifesto):
         solicitar_nova_foto=True
     ).count()
 
+    filial_id = str(manifesto.filial.id) if manifesto.filial else ""
+    filial_nome = manifesto.filial.nome if manifesto.filial else "Sem Filial"
+    filial_slug = slugify(nome_filial)
+
     payload = {
         "type": "atualizar_painel",
         "data": {
             "manifesto_id": str(manifesto.numero_manifesto),
+            "filial_id": filial_id,
+            "filial_nome": filial_nome,
+            "filial_slug": filial_slug,
             "baixadas": baixadas,
             "porcentagem": porcentagem,
             "total_ilegivel": total_ilegivel,

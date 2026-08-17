@@ -88,12 +88,27 @@ function conectarWebSocket() {
             if (data.dados && data.type !== 'status_motorista') {
                 const d = data.dados;
                 const mID = d.manifesto_id;
+                const fId = d.filial_id ? String(d.filial_id) : '';
+                const fNome = d.filial_nome || '';
+
+                // Garante que a filial tem um card no cabeçalho (Criação Dinâmica via WS)
+                if (fId) {
+                    garantirCardFilial(fId, fNome, 0);
+                }
 
                 if (d.remover) {
                     const card = document.getElementById(`card-mft-${mID}`);
                     if (card) {
                         card.classList.add('fade-out');
-                        setTimeout(() => card.remove(), 600);
+                        setTimeout(() => {
+                            card.remove();
+                            if (typeof aplicarFiltroFilialNaGrid === 'function') {
+                                aplicarFiltroFilialNaGrid();
+                            }
+                        }, 600);
+                        if (fId) {
+                            atualizarContadorFilial(fId, -1);
+                        }
                     }
                     return; // Ignora o resto se for remover
                 }
@@ -104,6 +119,12 @@ function conectarWebSocket() {
                 if (!cardContainer) {
                     criarNovoCardManifesto(d);
                     cardContainer = document.getElementById(`card-mft-${mID}`);
+                    if (fId) {
+                        atualizarContadorFilial(fId, 1);
+                    }
+                    if (typeof aplicarFiltroFilialNaGrid === 'function') {
+                        aplicarFiltroFilialNaGrid();
+                    }
                 }
 
                 let devePiscar = false;
@@ -189,6 +210,49 @@ function conectarWebSocket() {
         }
     };
 
+    function garantirCardFilial(filialId, filialNome, initialCount = 0) {
+        if (!filialId) return;
+        const sId = String(filialId);
+        let btn = document.getElementById(`btn-filial-${sId}`);
+        if (!btn) {
+            const container = document.getElementById('container-filiais-torre');
+            if (container) {
+                const isAtivo = (window.filialAtivaTorreId === sId);
+                const btnHtml = `
+                    <button type="button" 
+                            class="card-filial-btn btn ${isAtivo ? 'active-filial-card' : 'inactive-filial-card'} d-flex align-items-center gap-2"
+                            id="btn-filial-${sId}"
+                            data-filial-id="${sId}"
+                            data-filial-nome="${filialNome || 'Filial'}"
+                            onclick="selecionarFilialTorre('${sId}')">
+                        <i class="bi bi-building"></i>
+                        <span class="filial-nome-text fw-bold">${filialNome || 'Filial'}</span>
+                        <span class="badge ${isAtivo ? 'bg-white text-primary' : 'bg-primary-subtle text-primary border'} fw-bold rounded-pill px-2 py-1 badge-filial-count" 
+                              id="badge-count-filial-${sId}">
+                            ${initialCount}
+                        </span>
+                    </button>
+                `;
+                container.insertAdjacentHTML('beforeend', btnHtml);
+            }
+        }
+    }
+
+    function atualizarContadorFilial(filialId, delta) {
+        if (!filialId) return;
+        const sId = String(filialId);
+        const badge = document.getElementById(`badge-count-filial-${sId}`);
+        if (badge) {
+            let atual = parseInt(badge.innerText.trim(), 10) || 0;
+            let novo = Math.max(0, atual + delta);
+            badge.innerText = novo;
+            
+            badge.classList.remove('filial-badge-pulse');
+            void badge.offsetWidth;
+            badge.classList.add('filial-badge-pulse');
+        }
+    }
+
     function criarNovoCardManifesto(d) {
         const grid = document.getElementById('grid-monitoramento');
         if (!grid) return;
@@ -199,8 +263,13 @@ function conectarWebSocket() {
             emptyMsg.remove();
         }
 
+        const deveEsconder = (window.filialAtivaTorreId && String(d.filial_id) !== String(window.filialAtivaTorreId));
         const html = `
-            <div class="col-12 col-md-6 col-lg-4 col-xl-3" id="card-mft-${d.manifesto_id}">
+            <div class="col-12 col-md-6 col-lg-4 col-xl-3 manifesto-card-item" 
+                 id="card-mft-${d.manifesto_id}"
+                 data-filial-id="${d.filial_id || ''}"
+                 data-filial-nome="${d.filial_nome || ''}"
+                 style="${deveEsconder ? 'display: none;' : ''}">
                 <div class="card h-100 border-0 shadow-sm position-relative overflow-hidden" style="border-radius: 15px;">
                     <div class="progress position-absolute top-0 start-0 w-100" style="height: 4px; border-radius: 0;">
                         <div id="progress-bar-${d.manifesto_id}" class="progress-bar bg-primary" role="progressbar"
