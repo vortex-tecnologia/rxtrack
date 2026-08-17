@@ -299,9 +299,11 @@ class RegistrarBaixaView(APIView):
 
                 nova_tentativa = (baixa_existente.tentativa_foto + 1) if (baixa_existente and baixa_existente.tentativa_foto) else 1
 
+                is_coleta = (tipo_operacao == 'COLETA' or getattr(nf, 'tipo_operacao', '') == 'COLETA')
                 cod_tms_check = str(ocorrencia.codigo_tms or ocorrencia.codigo_referencia or '').strip()
                 is_ocorrencia_01 = cod_tms_check in ['01', '1', '001']
                 is_analise_ia_necessaria = bool(
+                    not is_coleta and
                     not is_retida and
                     url_final_foto and
                     config_backup.processar_yolo and
@@ -311,7 +313,7 @@ class RegistrarBaixaView(APIView):
                 baixa, created = BaixaNF.objects.update_or_create(
                     nota_fiscal=nf,
                     defaults={
-                        'tipo': 'ENTREGA' if is_sucesso else 'OCORRENCIA',
+                        'tipo': 'COLETA' if is_coleta else ('ENTREGA' if is_sucesso else 'OCORRENCIA'),
                         'ocorrencia': ocorrencia,
                         'comprovante_foto_url': url_final_foto, 
                         'comprovante_original_url': url_final_foto if config_backup.armazenar_foto_backup else '', # 👈 Controlado pela flag
@@ -348,12 +350,12 @@ class RegistrarBaixaView(APIView):
                 from configuracao.utils import get_config
                 config = get_config()
                 
-                if tipo_operacao == 'COLETA':
+                if is_coleta:
                     from manifesto.tasks import enviar_coleta_esl_task
                     if config.enviar_tms:
                         enviar_coleta_esl_task.delay(baixa.id)
                     msg_log = "Coleta agendada para TMS (Picks Endpoint)." if config.enviar_tms else "Coleta salva (TMS desligado)."
-                elif is_ocorrencia_01 and not is_retida and url_final_foto and config.processar_yolo:
+                elif is_analise_ia_necessaria:
                     # SOMENTE Ocorrência 01 COM FOTO vai para o fluxo do Agente IA (YOLO)
                     from AgenteIa.tasks import task_processar_canhoto_ia
                     from django.db import connection
