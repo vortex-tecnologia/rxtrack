@@ -9,7 +9,7 @@ from django.conf import settings
 
 from integracoes.base import BaseTMSAdapter
 from usuarios.models import Motorista, Filial
-from manifesto.models import Manifesto, NotaFiscal, ManifestoBuscaLog, BaixaNF
+from manifesto.models import Manifesto, NotaFiscal, ManifestoBuscaLog, BaixaNF, Veiculo, Frete
 from manifesto.services import enviar_painel
 from configuracao.utils import notificar_falha_tms
 
@@ -428,7 +428,6 @@ class ESLCloudAdapter(BaseTMSAdapter):
             logger.info(f"[STATUS_TMS] Manifesto {numero_visual}: status no TMS = '{status_tms}'")
 
             if status_tms == 'closed':
-                from manifesto.models import Manifesto
                 mft_existente = Manifesto.objects.filter(numero_manifesto=numero_visual).first()
                 if mft_existente:
                     mft_existente.status = 'FINALIZADO'
@@ -450,7 +449,6 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     return
 
             # === VEÍCULO (PLACA) ===
-            from manifesto.models import Veiculo
             veiculo_obj = None
             placa_tms = info_tms.get('mft_vie_license_plate')
             if placa_tms:
@@ -597,7 +595,6 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     if dados_frete:
                         seq_code_frete = dados_frete.get('sequence_code')
                         if seq_code_frete:
-                            from manifesto.models import Frete
                             def extrair_decimal(valor):
                                 try: return float(valor) if valor else None
                                 except: return None
