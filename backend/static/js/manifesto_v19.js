@@ -520,11 +520,24 @@ async function atualizarListaViva(numeroManifesto) {
             }
         });
 
+        // 🔍 LOG DETALHADO DO ESTADO DE TODAS AS NOTAS NO CONSOLE (F12)
+        console.log(`📋 [MANIFESTO] ${notas.length} notas carregadas (${totalFinalizadas}/${notas.length} finalizadas):`);
+        console.table(notas.map(n => ({
+            nf: n.numero_nota,
+            status: n.status,
+            baixada: n.ja_baixada ? 'SIM' : 'NÃO',
+            qualidade_ia: (n.dados_baixa && n.dados_baixa.qualidade_canhoto) || n.qualidade_canhoto || '-',
+            ocorrencia: n.dados_baixa ? n.dados_baixa.ocorrencia_codigo : '-',
+            foto: (n.dados_baixa && n.dados_baixa.foto_url) ? 'COM FOTO' : 'SEM FOTO',
+            solicitar_nova_foto: (n.dados_baixa && n.dados_baixa.solicitar_nova_foto) || n.solicitar_nova_foto || false
+        })));
+
+        // SEMPRE ATUALIZA O CONTAINER DE FINALIZAÇÃO E AVALIAÇÃO DE IA
+        atualizarContainerFinalizacaoGeral(notas, totalFinalizadas);
+
         // SE NÃO MUDOU NADA, APENAS ATUALIZA OS CONTADORES E SAI
-        // IMPORTANTE: Só pula se a lista já estiver renderizada na tela!
         const listaJaRenderizada = document.getElementById('input-busca-nfe') !== null;
         if (cacheDadosRaw === novosDadosJSON && listaJaRenderizada) {
-            console.log("ℹ️ Sem alterações. Atualizando apenas contadores.");
             setTimeout(() => {
                 atualizarVisualContadores(contador, notas, totalFinalizadas);
             }, 800);
@@ -593,102 +606,8 @@ async function atualizarListaViva(numeroManifesto) {
                 containerColetiva.innerHTML = `<div class="card bg-primary text-white mb-4 shadow-sm border-0"><div class="card-body d-flex justify-content-between align-items-center"><div><small class="fw-bold opacity-75">OPERAÇÃO FILIAL</small><h6 class="mb-0">Chegada de ${transfPendentes.length} Notas</h6></div><button class="btn btn-light btn-sm fw-bold text-primary px-3" onclick="registrarChegadaColetiva('${numeroManifesto}')">CONFIRMAR CHEGADA</button></div></div>`;
             } else if (containerColetiva) { containerColetiva.innerHTML = ''; }
 
-            // VERIFICAÇÕES DE QUALIDADE IA E PENDÊNCIAS DE FOTO
-            // SOMENTE notas de ENTREGA com Ocorrência 01, COM FOTO e NÃO RETIDAS passam pela checagem de IA
-            const notasEmAnaliseIA = notas.filter(n => {
-                const q = (n.dados_baixa && n.dados_baixa.qualidade_canhoto) || n.qualidade_canhoto;
-                const sol = (n.dados_baixa && n.dados_baixa.solicitar_nova_foto) || n.solicitar_nova_foto;
-                const temFoto = (n.dados_baixa && n.dados_baixa.foto_url);
-                const isColeta = (n.tipo_operacao === 'COLETA');
-                const ocCod = n.dados_baixa ? String(n.dados_baixa.ocorrencia_codigo || '').trim() : '';
-                const isOc01 = (ocCod === '1' || ocCod === '01' || ocCod === '001');
-                const isRetida = n.dados_baixa ? Boolean(n.dados_baixa.is_retida) : false;
-
-                return n.ja_baixada && !isColeta && isOc01 && !isRetida && temFoto && q === 'PENDENTE_ANALISE' && !sol;
-            });
-            const notasComFotoRuim = notas.filter(n => {
-                const sol = (n.dados_baixa && n.dados_baixa.solicitar_nova_foto) || n.solicitar_nova_foto;
-                const temFoto = (n.dados_baixa && n.dados_baixa.foto_url);
-                const isColeta = (n.tipo_operacao === 'COLETA');
-                const ocCod = n.dados_baixa ? String(n.dados_baixa.ocorrencia_codigo || '').trim() : '';
-                const isOc01 = (ocCod === '1' || ocCod === '01' || ocCod === '001');
-                const isRetida = n.dados_baixa ? Boolean(n.dados_baixa.is_retida) : false;
-
-                return !isColeta && isOc01 && !isRetida && temFoto && sol === true;
-            });
-
-            if (notasEmAnaliseIA.length > 0) {
-                console.warn(`⏳ [IA PENDENTE] ${notasEmAnaliseIA.length} nota(s) aguardando avaliação da IA:`, notasEmAnaliseIA.map(n => ({
-                    nf: n.numero_nota,
-                    status_ia: (n.dados_baixa && n.dados_baixa.qualidade_canhoto) || n.qualidade_canhoto,
-                    ocorrencia: n.dados_baixa ? n.dados_baixa.ocorrencia_codigo : '-',
-                    foto: n.dados_baixa ? n.dados_baixa.foto_url : null,
-                    data_baixa: n.dados_baixa ? n.dados_baixa.data : '-'
-                })));
-            }
-
-            if (notasComFotoRuim.length > 0) {
-                console.error(`❌ [IA REPROVADA] ${notasComFotoRuim.length} nota(s) com foto reprovada pela IA:`, notasComFotoRuim.map(n => ({
-                    nf: n.numero_nota,
-                    motivo: (n.dados_baixa && n.dados_baixa.motivo_rejeicao_ia) || 'Ilegível / Fora de Foco',
-                    tentativa: (n.dados_baixa && n.dados_baixa.tentativa_foto) || 1
-                })));
-            }
-
-            // CONTAINER DE FINALIZAÇÃO (BOTÃO MANUAL)
-            const containerFinalizacao = document.getElementById('container-finalizacao-manifesto');
-            if (containerFinalizacao) {
-                if (notas.length > 0 && totalFinalizadas === notas.length) {
-
-                    if (notasComFotoRuim.length > 0) {
-                        // 🔴 CASO 1: Há fotos REPROVADAS pela IA — motorista precisa reenviar
-                        const nfsRuins = notasComFotoRuim.map(n => `NF #${n.numero_nota}`).join(', ');
-                        containerFinalizacao.innerHTML = `
-                            <div class="card bg-danger bg-opacity-10 border border-danger text-danger mb-4 shadow-sm" style="border-radius: 16px;">
-                                <div class="card-body text-center py-4">
-                                    <i class="bi bi-camera-fill fs-2 mb-2 d-block text-danger"></i>
-                                    <h5 class="fw-bold mb-1 text-danger">CANHOTO ILEGÍVEL PENDENTE</h5>
-                                    <p class="small mb-0 text-dark">Você possui <strong>${notasComFotoRuim.length} nota(s)</strong> (${nfsRuins}) com foto reprovada pela IA. Por favor, reenvie uma nova foto ou aguarde liberação pelo SAC.</p>
-                                </div>
-                            </div>
-                        `;
-                    } else if (notasEmAnaliseIA.length > 0) {
-                        // 🟡 CASO 2: Fotos em PROCESSAMENTO pela IA — polling contínuo até zerar
-                        const nfsPendentes = notasEmAnaliseIA.map(n => `NF #${n.numero_nota}`).join(', ');
-                        containerFinalizacao.innerHTML = `
-                            <div class="card bg-warning bg-opacity-10 border border-warning text-dark mb-4 shadow-sm" style="border-radius: 16px;">
-                                <div class="card-body text-center py-4">
-                                    <div class="spinner-border text-warning mb-2" role="status" style="width: 2.2rem; height: 2.2rem;"></div>
-                                    <h5 class="fw-bold mb-1 text-dark">VERIFICANDO COMPROVANTES...</h5>
-                                    <p class="small mb-1 text-dark">A IA está analisando <strong>${notasEmAnaliseIA.length} foto(s)</strong> (${nfsPendentes}).</p>
-                                    <p class="small mb-0 text-muted">O manifesto será liberado para finalização assim que todas forem aprovadas.</p>
-                                </div>
-                            </div>
-                        `;
-                        // Polling contínuo a cada 3s enquanto houver fotos em análise
-                        setTimeout(() => {
-                            const mID = manifestoAtual || localStorage.getItem('manifesto_ativo');
-                            if (mID) atualizarListaViva(mID);
-                        }, 3000);
-                    } else {
-                        // 🟢 CASO 3: Tudo aprovado — libera botão FINALIZAR MANIFESTO
-                        containerFinalizacao.innerHTML = `
-                            <div class="card bg-success text-white mb-4 shadow border-0 animate__animated animate__pulse animate__infinite" style="border-radius: 16px;">
-                                <div class="card-body text-center py-4">
-                                    <i class="bi bi-flag-fill mb-2" style="font-size: 2rem;"></i>
-                                    <h5 class="fw-bold mb-1">ENTREGAS CONCLUÍDAS!</h5>
-                                    <p class="small mb-3 opacity-91">Todas as notas deste manifesto foram bipadas e validadas.</p>
-                                    <button class="btn btn-light btn-lg fw-bold text-success w-100 rounded-pill shadow-sm" onclick="abrirModalFinalizacao()">
-                                        <i class="bi bi-check-all me-1"></i> FINALIZAR MANIFESTO
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                    }
-                } else {
-                    containerFinalizacao.innerHTML = '';
-                }
-            }
+            // Atualiza novamente o container de finalização após montagem do DOM
+            atualizarContainerFinalizacaoGeral(notas, totalFinalizadas);
 
             // FINALIZAÇÃO: ATUALIZA CONTADORES E CACHE
             atualizarVisualContadores(contador, notas, totalFinalizadas);
@@ -698,6 +617,106 @@ async function atualizarListaViva(numeroManifesto) {
             localStorage.setItem(`cache_dados_puros_${numeroManifesto}`, novosDadosJSON);
         }
     } catch (err) { console.error("Erro na atualização viva:", err); }
+// =====================================================
+// FUNÇÃO QUE ATUALIZA O CARD DE FINALIZAÇÃO E IA
+// =====================================================
+function atualizarContainerFinalizacaoGeral(notas, totalFinalizadas) {
+    const containerFinalizacao = document.getElementById('container-finalizacao-manifesto');
+    if (!containerFinalizacao) return;
+
+    if (!notas || notas.length === 0 || totalFinalizadas !== notas.length) {
+        containerFinalizacao.innerHTML = '';
+        return;
+    }
+
+    // Filtra notas em análise de IA
+    const notasEmAnaliseIA = notas.filter(n => {
+        const q = (n.dados_baixa && n.dados_baixa.qualidade_canhoto) || n.qualidade_canhoto;
+        const sol = (n.dados_baixa && n.dados_baixa.solicitar_nova_foto) || n.solicitar_nova_foto;
+        const temFoto = (n.dados_baixa && n.dados_baixa.foto_url);
+        const isColeta = (n.tipo_operacao === 'COLETA');
+        const ocCod = n.dados_baixa ? String(n.dados_baixa.ocorrencia_codigo || '').trim() : '';
+        const isOc01 = (ocCod === '1' || ocCod === '01' || ocCod === '001');
+        const isRetida = n.dados_baixa ? Boolean(n.dados_baixa.is_retida) : false;
+
+        return n.ja_baixada && !isColeta && isOc01 && !isRetida && temFoto && q === 'PENDENTE_ANALISE' && !sol;
+    });
+
+    // Filtra notas com foto reprovada pela IA
+    const notasComFotoRuim = notas.filter(n => {
+        const sol = (n.dados_baixa && n.dados_baixa.solicitar_nova_foto) || n.solicitar_nova_foto;
+        const temFoto = (n.dados_baixa && n.dados_baixa.foto_url);
+        const isColeta = (n.tipo_operacao === 'COLETA');
+        const ocCod = n.dados_baixa ? String(n.dados_baixa.ocorrencia_codigo || '').trim() : '';
+        const isOc01 = (ocCod === '1' || ocCod === '01' || ocCod === '001');
+        const isRetida = n.dados_baixa ? Boolean(n.dados_baixa.is_retida) : false;
+
+        return !isColeta && isOc01 && !isRetida && temFoto && sol === true;
+    });
+
+    if (notasEmAnaliseIA.length > 0) {
+        console.warn(`⏳ [IA PENDENTE] ${notasEmAnaliseIA.length} nota(s) aguardando avaliação da IA:`, notasEmAnaliseIA.map(n => ({
+            nf: n.numero_nota,
+            status_ia: (n.dados_baixa && n.dados_baixa.qualidade_canhoto) || n.qualidade_canhoto,
+            ocorrencia: n.dados_baixa ? n.dados_baixa.ocorrencia_codigo : '-',
+            foto: n.dados_baixa ? n.dados_baixa.foto_url : null,
+            data_baixa: n.dados_baixa ? n.dados_baixa.data : '-'
+        })));
+    }
+
+    if (notasComFotoRuim.length > 0) {
+        console.error(`❌ [IA REPROVADA] ${notasComFotoRuim.length} nota(s) com foto reprovada pela IA:`, notasComFotoRuim.map(n => ({
+            nf: n.numero_nota,
+            motivo: (n.dados_baixa && n.dados_baixa.motivo_rejeicao_ia) || 'Ilegível / Fora de Foco',
+            tentativa: (n.dados_baixa && n.dados_baixa.tentativa_foto) || 1
+        })));
+    }
+
+    if (notasComFotoRuim.length > 0) {
+        // 🔴 CASO 1: Há fotos REPROVADAS pela IA — motorista precisa reenviar
+        const nfsRuins = notasComFotoRuim.map(n => `NF #${n.numero_nota}`).join(', ');
+        containerFinalizacao.innerHTML = `
+            <div class="card bg-danger bg-opacity-10 border border-danger text-danger mb-4 shadow-sm" style="border-radius: 16px;">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-camera-fill fs-2 mb-2 d-block text-danger"></i>
+                    <h5 class="fw-bold mb-1 text-danger">CANHOTO ILEGÍVEL PENDENTE</h5>
+                    <p class="small mb-0 text-dark">Você possui <strong>${notasComFotoRuim.length} nota(s)</strong> (${nfsRuins}) com foto reprovada pela IA. Por favor, reenvie uma nova foto ou aguarde liberação pelo SAC.</p>
+                </div>
+            </div>
+        `;
+    } else if (notasEmAnaliseIA.length > 0) {
+        // 🟡 CASO 2: Fotos em PROCESSAMENTO pela IA — polling contínuo até zerar
+        const nfsPendentes = notasEmAnaliseIA.map(n => `NF #${n.numero_nota}`).join(', ');
+        containerFinalizacao.innerHTML = `
+            <div class="card bg-warning bg-opacity-10 border border-warning text-dark mb-4 shadow-sm" style="border-radius: 16px;">
+                <div class="card-body text-center py-4">
+                    <div class="spinner-border text-warning mb-2" role="status" style="width: 2.2rem; height: 2.2rem;"></div>
+                    <h5 class="fw-bold mb-1 text-dark">VERIFICANDO COMPROVANTES...</h5>
+                    <p class="small mb-1 text-dark">A IA está analisando <strong>${notasEmAnaliseIA.length} foto(s)</strong> (${nfsPendentes}).</p>
+                    <p class="small mb-0 text-muted">O manifesto será liberado para finalização assim que todas forem aprovadas.</p>
+                </div>
+            </div>
+        `;
+        // Polling contínuo a cada 3s enquanto houver fotos em análise
+        setTimeout(() => {
+            const mID = manifestoAtual || localStorage.getItem('manifesto_ativo');
+            if (mID) atualizarListaViva(mID);
+        }, 3000);
+    } else {
+        // 🟢 CASO 3: Tudo aprovado — libera botão FINALIZAR MANIFESTO
+        containerFinalizacao.innerHTML = `
+            <div class="card bg-success text-white mb-4 shadow border-0 animate__animated animate__pulse animate__infinite" style="border-radius: 16px;">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-flag-fill mb-2" style="font-size: 2rem;"></i>
+                    <h5 class="fw-bold mb-1">ENTREGAS CONCLUÍDAS!</h5>
+                    <p class="small mb-3 opacity-91">Todas as notas deste manifesto foram bipadas e validadas.</p>
+                    <button class="btn btn-light btn-lg fw-bold text-success w-100 rounded-pill shadow-sm" onclick="abrirModalFinalizacao()">
+                        <i class="bi bi-check-all me-1"></i> FINALIZAR MANIFESTO
+                    </button>
+                </div>
+            </div>
+        `;
+    }
 }
 
 // FUNÇÃO SIMPLES SÓ PARA OS BADGES DE CIMA
