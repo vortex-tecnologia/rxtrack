@@ -74,6 +74,37 @@ class ListarNotasManifestoView(APIView):
             # 1. Pegamos a última baixa vinculada a esta nota
             baixa = nf.baixa_info.all().last() 
             
+            # 🔍 VERIFICAÇÃO NOTA A NOTA DA ANÁLISE PENDENTE DA IA
+            if baixa and baixa.qualidade_canhoto == 'PENDENTE_ANALISE':
+                oc_cod = str(getattr(baixa.ocorrencia, 'codigo_tms', '') or getattr(baixa.ocorrencia, 'codigo_referencia', '') or '').strip() if baixa.ocorrencia else ''
+                is_01 = oc_cod in ['01', '1', '001'] or (baixa.tipo == 'ENTREGA' and not baixa.ocorrencia)
+                tem_foto = bool(baixa.comprovante_foto_url)
+                is_coleta = (baixa.tipo == 'COLETA' or getattr(nf, 'tipo_operacao', '') == 'COLETA')
+                is_ret = bool(baixa.observacao and 'retid' in baixa.observacao.lower())
+
+                # Regra: SOMENTE 01 COM FOTO vai para IA. Qualquer outra ocorrência ou sem foto é liberada imediatamente.
+                if not is_01 or not tem_foto or is_coleta or is_ret:
+                    baixa.qualidade_canhoto = 'APROVADO'
+                    baixa.solicitar_nova_foto = False
+                    baixa.save(update_fields=['qualidade_canhoto', 'solicitar_nova_foto'])
+                    if not baixa.integrado_tms:
+                        try:
+                            from AgenteIa.tasks import finalizar_fluxo_tms
+                            finalizar_fluxo_tms(baixa)
+                        except Exception:
+                            pass
+                else:
+                    # É 01 COM FOTO: Se estiver parado há mais de 10s, re-enfileira a task no Celery para processar
+                    from datetime import timedelta
+                    if baixa.data_baixa and (timezone.now() - baixa.data_baixa) > timedelta(seconds=10):
+                        try:
+                            from AgenteIa.tasks import task_processar_canhoto_ia
+                            from django.db import connection
+                            task_processar_canhoto_ia.delay(baixa.id, schema_name=connection.schema_name)
+                            print(f"[RE-AVALIAÇÃO-IA] Baixa #{baixa.id} (NF {nf.numero_nota}) re-enfileirada no Celery.")
+                        except Exception as e:
+                            print(f"[RE-AVALIAÇÃO-IA] Erro ao re-enfileirar Baixa #{baixa.id}: {e}")
+
             autor_nome = None
             if baixa:
                 try:

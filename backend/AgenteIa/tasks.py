@@ -55,16 +55,20 @@ def _processar_canhoto_ia_interno(baixa_id, somente_comprovante=False):
         cod_ref = str(getattr(baixa.ocorrencia, 'codigo_referencia', '') or '').strip()
         cod_tms = str(getattr(baixa.ocorrencia, 'codigo_tms', '') or '').strip()
         
-        # SOMENTE Ocorrência 01 é analisada pela IA (02 - Coleta e outras ocorrências seguem direto)
-        is_yolo_habilitado = (
-            cod_ref in ['01', '1'] or
-            cod_tms in ['01', '1'] or
-            (baixa.tipo == 'ENTREGA' and cod_tms not in ['02', '2', '050', '055']) or
-            somente_comprovante is True
+        # SOMENTE Ocorrência 01 COM FOTO é analisada pela IA. Coletas, outras ocorrências ou sem foto são liberadas imediatamente.
+        is_01 = (
+            cod_ref in ['01', '1', '001'] or
+            cod_tms in ['01', '1', '001'] or
+            (baixa.tipo == 'ENTREGA' and not baixa.ocorrencia)
         )
+        tem_foto = bool(url_original)
+        is_coleta = (baixa.tipo == 'COLETA' or (baixa.nota_fiscal and getattr(baixa.nota_fiscal, 'tipo_operacao', '') == 'COLETA'))
+        is_retida = bool(baixa.observacao and 'retid' in baixa.observacao.lower())
+
+        is_yolo_habilitado = (is_01 and tem_foto and not is_coleta and not is_retida) or (somente_comprovante is True and tem_foto)
 
         if not is_yolo_habilitado:
-            print(f"Ocorrência (TMS:{cod_tms}/Ref:{cod_ref}) não é 01 (Entrega). Pulando YOLO/OCR e enviando foto diretamente ao TMS.")
+            print(f"Ocorrência (TMS:{cod_tms}/Ref:{cod_ref}) não é 01 com foto. Pulando YOLO/OCR e aprovando diretamente.")
             baixa.ia_yolo_status = False
             baixa.ia_ocr_status = False
             baixa.qualidade_canhoto = 'APROVADO'
