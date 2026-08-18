@@ -488,6 +488,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             
             GATILHOS = {
                 '122': 'TRANSFERENCIA', 
+                '117': 'TRANSFERENCIA',
                 '119': 'DESPACHO', 
                 '114': 'DESPACHO', 
                 '50': 'DESPACHO', 
@@ -495,6 +496,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 '55': 'DESPACHO', 
                 '055': 'DESPACHO', 
                 '120': 'ENTREGA', 
+                '107': 'ENTREGA',
+                '101': 'ENTREGA',
                 '121': 'RETIRADA'
             }
 
@@ -511,6 +514,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     numero_doc = invoice_data.get("number")
                     freight_id = item.get("freight", {}).get("id") if item.get("freight") else None
                     codigo_oc = str(item.get("occurrence", {}).get("code"))
+                    data_oc = str(item.get("occurrence_at") or item.get("created_at") or "")
                     
                     id_unico = chave if chave else f"MINUTA_{numero_doc}"
 
@@ -519,10 +523,14 @@ class ESLCloudAdapter(BaseTMSAdapter):
                             'chave': chave,
                             'numero': numero_doc,
                             'freight_id': freight_id,
-                            'tipo': GATILHOS.get(codigo_oc, 'ENTREGA')
+                            'tipo': GATILHOS.get(codigo_oc, 'ENTREGA'),
+                            'data_oc': data_oc
                         }
                     elif codigo_oc in GATILHOS:
-                        notas_unicas_dict[id_unico]['tipo'] = GATILHOS.get(codigo_oc)
+                        data_anterior = notas_unicas_dict[id_unico].get('data_oc', '')
+                        if not data_anterior or data_oc >= data_anterior:
+                            notas_unicas_dict[id_unico]['tipo'] = GATILHOS.get(codigo_oc)
+                            notas_unicas_dict[id_unico]['data_oc'] = data_oc
 
                 if data_n.get("paging", {}).get("next_id") is None: break
                 start_cursor = data_n["paging"]["next_id"]
