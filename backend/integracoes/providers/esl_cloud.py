@@ -562,10 +562,41 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     tipo_operacao = dados_base['tipo']
                     freight_id = dados_base['freight_id']
 
+                    # 1. VERIFICA SE A NOTA JÁ EXISTE NO MANIFESTO
+                    if chave:
+                        nota_no_manifesto = NotaFiscal.objects.filter(
+                            manifesto=manifesto_obj, 
+                            numero_nota=str(numero),
+                            chave_acesso=chave
+                        ).first()
+                    else:
+                        nota_no_manifesto = NotaFiscal.objects.filter(
+                            manifesto=manifesto_obj,
+                            numero_nota=str(numero),
+                            chave_acesso__isnull=True
+                        ).first()
+
+                    if nota_no_manifesto:
+                        # NOTA JÁ EXISTE: Não faz requisições extras de endereço/frete na ESL!
+                        update_fields = []
+                        if nota_no_manifesto.tipo_operacao != tipo_operacao:
+                            nota_no_manifesto.tipo_operacao = tipo_operacao
+                            update_fields.append('tipo_operacao')
+                        if freight_id and nota_no_manifesto.freight_id_tms != str(freight_id):
+                            nota_no_manifesto.freight_id_tms = str(freight_id)
+                            update_fields.append('freight_id_tms')
+                        if update_fields:
+                            nota_no_manifesto.save(update_fields=update_fields)
+                            
+                        ids_processadas.append(nota_no_manifesto.id)
+                        total_processadas += 1
+                        continue
+
+                    # 2. NOTA NOVA: Apenas para notas novas busca detalhes de endereço e frete na ESL
                     destinatario = "DADOS NÃO REPASSADOS PELA ESL"
                     endereco = "CONSULTE O DOCUMENTO FÍSICO"
-
                     cep_nota = None
+
                     if chave:
                         time.sleep(2.0)
                         detalhes = self.buscar_detalhes_esl_interno(chave, numero, token_geral)
@@ -615,54 +646,20 @@ class ESLCloudAdapter(BaseTMSAdapter):
                                 }
                             )
 
-                    if chave:
-                        nota_no_manifesto = NotaFiscal.objects.filter(
-                            manifesto=manifesto_obj, 
-                            numero_nota=str(numero),
-                            chave_acesso=chave
-                        ).first()
-
-                        status_final = nota_no_manifesto.status if nota_no_manifesto else 'PENDENTE'
-
-                        nota_obj, _ = NotaFiscal.objects.update_or_create(
-                            manifesto=manifesto_obj,
-                            chave_acesso=chave,
-                            numero_nota=str(numero),
-                            defaults={
-                                'destinatario': destinatario,
-                                'endereco_entrega': endereco,
-                                'cep': cep_nota,
-                                'tipo_operacao': tipo_operacao,
-                                'status': status_final,
-                                'freight_id_tms': str(freight_id) if freight_id else None,
-                                'frete': frete_obj
-                            }
-                        )
-                        ids_processadas.append(nota_obj.id)
-                    else:
-                        nota_no_manifesto = NotaFiscal.objects.filter(
-                            manifesto=manifesto_obj,
-                            numero_nota=str(numero),
-                            chave_acesso__isnull=True
-                        ).first()
-                        
-                        status_final = nota_no_manifesto.status if nota_no_manifesto else 'PENDENTE'
-
-                        nota_obj, _ = NotaFiscal.objects.update_or_create(
-                            manifesto=manifesto_obj,
-                            numero_nota=str(numero),
-                            chave_acesso=None,
-                            defaults={
-                                'destinatario': destinatario,
-                                'endereco_entrega': endereco,
-                                'cep': cep_nota,
-                                'tipo_operacao': tipo_operacao,
-                                'status': status_final,
-                                'freight_id_tms': str(freight_id) if freight_id else None,
-                                'frete': frete_obj
-                            }
-                        )
-                        ids_processadas.append(nota_obj.id)
+                    nota_obj = NotaFiscal.objects.create(
+                        manifesto=manifesto_obj,
+                        chave_acesso=chave if chave else None,
+                        numero_nota=str(numero),
+                        destinatario=destinatario,
+                        endereco_entrega=endereco,
+                        cep=cep_nota,
+                        tipo_operacao=tipo_operacao,
+                        status='PENDENTE',
+                        freight_id_tms=str(freight_id) if freight_id else None,
+                        frete=frete_obj
+                    )
+                    ids_processadas.append(nota_obj.id)
+                    total_processadas += 1
 
                     # 📍 Dispara enriquecimento de geolocalização automática se não tiver coordenadas
                     if nota_obj and (nota_obj.latitude is None or nota_obj.longitude is None):
@@ -671,8 +668,6 @@ class ESLCloudAdapter(BaseTMSAdapter):
                             enriquecer_geolocalizacao_nota_task.delay(nota_obj.id)
                         except Exception as geo_err:
                             logger.warning(f"Erro ao agendar geolocalização para nota #{nota_obj.numero_nota}: {geo_err}")
-
-                    total_processadas += 1
 
                 except Exception as e:
                     logger.warning(f"⚠️ Erro no documento {id_doc}: {e}")
