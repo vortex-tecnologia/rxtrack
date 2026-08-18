@@ -382,7 +382,11 @@ def executar_rebusca_filial_task(self, filial_id, tipo='AUTOMATICA', schema_name
                 logger.error(f"[Rebusca] TMS Adapter não configurado para o schema '{target_schema}'.")
                 return "TMS Adapter não encontrado."
                 
-            # Busca ampla e resiliente de manifestos ativos da filial
+            # Busca ampla de manifestos ativos dos últimos 30 dias da filial
+            import datetime
+            import time
+            limite_dias = timezone.now() - datetime.timedelta(days=30)
+            
             filtro_filial = Q(filial=filial) | Q(motorista__filial=filial)
             if filial.id_filial_tms:
                 filtro_filial |= Q(filial__id_filial_tms=str(filial.id_filial_tms).strip()) | Q(motorista__filial__id_filial_tms=str(filial.id_filial_tms).strip())
@@ -390,8 +394,10 @@ def executar_rebusca_filial_task(self, filial_id, tipo='AUTOMATICA', schema_name
                 filtro_filial |= Q(filial__nome__iexact=filial.nome.strip())
                 
             manifestos = list(Manifesto.objects.filter(filtro_filial).filter(
-                Q(status='EM_TRANSPORTE') | Q(finalizado=False)
-            ).select_related('motorista', 'filial').distinct())
+                status='EM_TRANSPORTE',
+                finalizado=False,
+                data_criacao__gte=limite_dias
+            ).select_related('motorista', 'filial').order_by('-data_criacao').distinct())
             
             detalhes = []
             
@@ -420,13 +426,26 @@ def executar_rebusca_filial_task(self, filial_id, tipo='AUTOMATICA', schema_name
                     inseridas = diff if diff > 0 else 0
                     removidas = abs(diff) if diff < 0 else 0
                     
+                    # Recarrega o log da busca para ver o status final retornado pelo TMS
+                    busca_log.refresh_from_db()
+                    
+                    msg_res = "OK"
+                    if busca_log.status == 'ERRO' and busca_log.mensagem_erro:
+                        msg_res = busca_log.mensagem_erro
+                    elif busca_log.status == 'PROCESSADO' and busca_log.mensagem_erro:
+                        msg_res = busca_log.mensagem_erro
+                    
                     detalhes.append({
                         "manifesto": manifesto.numero_manifesto,
                         "motorista": manifesto.motorista.nome_completo if manifesto.motorista else '-',
                         "inseridas": inseridas,
                         "removidas": removidas,
-                        "resultado": str(resultado) if resultado else "OK"
+                        "resultado": msg_res
                     })
+                    
+                    # Intervalo suave entre requisições para evitar rate limit no TMS
+                    time.sleep(0.4)
+                    
                 except Exception as e:
                     logger.error(f"[Rebusca] Erro ao buscar manifesto {manifesto.numero_manifesto}: {e}")
                     detalhes.append({

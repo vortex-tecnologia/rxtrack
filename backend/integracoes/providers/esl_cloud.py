@@ -428,11 +428,26 @@ class ESLCloudAdapter(BaseTMSAdapter):
             logger.info(f"[STATUS_TMS] Manifesto {numero_visual}: status no TMS = '{status_tms}'")
 
             if status_tms == 'closed':
-                log.status = 'ERRO'
-                log.mensagem_erro = "Este manifesto já foi finalizado no TMS. Não é possível carregar um manifesto ativo."
-                log.save()
-                logger.warning(f"🚫 Manifesto {numero_visual} BLOQUEADO: status 'closed' no TMS.")
-                return
+                from manifesto.models import Manifesto
+                mft_existente = Manifesto.objects.filter(numero_manifesto=numero_visual).first()
+                if mft_existente:
+                    mft_existente.status = 'FINALIZADO'
+                    mft_existente.status_tms = 'closed'
+                    mft_existente.finalizado = True
+                    if not mft_existente.data_finalizacao:
+                        mft_existente.data_finalizacao = timezone.now()
+                    mft_existente.save(update_fields=['status', 'status_tms', 'finalizado', 'data_finalizacao'])
+                    log.status = 'PROCESSADO'
+                    log.mensagem_erro = "Manifesto já finalizado no TMS. Atualizado localmente para finalizado."
+                    log.save(update_fields=['status', 'mensagem_erro'])
+                    logger.info(f"✅ Manifesto {numero_visual} sincronizado como finalizado (status 'closed' no TMS).")
+                    return
+                else:
+                    log.status = 'ERRO'
+                    log.mensagem_erro = "Este manifesto já foi finalizado no TMS. Não é possível carregar um manifesto ativo."
+                    log.save()
+                    logger.warning(f"🚫 Manifesto {numero_visual} BLOQUEADO: status 'closed' no TMS.")
+                    return
 
             # === VEÍCULO (PLACA) ===
             from manifesto.models import Veiculo
