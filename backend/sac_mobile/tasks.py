@@ -447,8 +447,8 @@ def executar_rebusca_filial_task(self, filial_id, tipo='AUTOMATICA', schema_name
                         "resultado": msg_res
                     })
                     
-                    # Intervalo suave entre requisições para evitar rate limit no TMS
-                    time.sleep(0.4)
+                    # Intervalo seguro de 2.0s entre cada manifesto para respeitar a taxa da ESL
+                    time.sleep(2.0)
                     
                 except Exception as e:
                     logger.error(f"[Rebusca] Erro ao buscar manifesto {manifesto.numero_manifesto}: {e}")

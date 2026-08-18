@@ -517,6 +517,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             }
 
             while True:
+                time.sleep(2.0)
                 if start_cursor: params_notas["start"] = start_cursor
                 res_n = requests.get(url_notas, headers={"Authorization": f"Bearer {token_notas}"}, params=params_notas, timeout=30)
                 if res_n.status_code != 200: break
@@ -549,7 +550,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
                 if data_n.get("paging", {}).get("next_id") is None: break
                 start_cursor = data_n["paging"]["next_id"]
-                time.sleep(1.5)
+                time.sleep(2.0)
 
             log.quantidade_notas = len(notas_unicas_dict)
             log.save()
@@ -568,7 +569,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
                     cep_nota = None
                     if chave:
-                        time.sleep(2.1)
+                        time.sleep(2.0)
                         detalhes = self.buscar_detalhes_esl_interno(chave, numero, token_geral)
                         if detalhes:
                             nome_det = detalhes.get('ioe_rpt_name')
@@ -590,7 +591,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                             if cep_val:
                                 cep_nota = str(cep_val).strip()[:10]
 
-                    time.sleep(1.5)
+                    time.sleep(2.0)
                     dados_frete = self.buscar_dados_frete_report_7693(chave, numero, token_geral)
                     frete_obj = None
                     if dados_frete:
