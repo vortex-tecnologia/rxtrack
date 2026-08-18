@@ -617,6 +617,24 @@ async function atualizarListaViva(numeroManifesto) {
                 return !isColeta && isOc01 && !isRetida && temFoto && sol === true;
             });
 
+            if (notasEmAnaliseIA.length > 0) {
+                console.warn(`⏳ [IA PENDENTE] ${notasEmAnaliseIA.length} nota(s) aguardando avaliação da IA:`, notasEmAnaliseIA.map(n => ({
+                    nf: n.numero_nota,
+                    status_ia: (n.dados_baixa && n.dados_baixa.qualidade_canhoto) || n.qualidade_canhoto,
+                    ocorrencia: n.dados_baixa ? n.dados_baixa.ocorrencia_codigo : '-',
+                    foto: n.dados_baixa ? n.dados_baixa.foto_url : null,
+                    data_baixa: n.dados_baixa ? n.dados_baixa.data : '-'
+                })));
+            }
+
+            if (notasComFotoRuim.length > 0) {
+                console.error(`❌ [IA REPROVADA] ${notasComFotoRuim.length} nota(s) com foto reprovada pela IA:`, notasComFotoRuim.map(n => ({
+                    nf: n.numero_nota,
+                    motivo: (n.dados_baixa && n.dados_baixa.motivo_rejeicao_ia) || 'Ilegível / Fora de Foco',
+                    tentativa: (n.dados_baixa && n.dados_baixa.tentativa_foto) || 1
+                })));
+            }
+
             // CONTAINER DE FINALIZAÇÃO (BOTÃO MANUAL)
             const containerFinalizacao = document.getElementById('container-finalizacao-manifesto');
             if (containerFinalizacao) {
@@ -624,23 +642,26 @@ async function atualizarListaViva(numeroManifesto) {
 
                     if (notasComFotoRuim.length > 0) {
                         // 🔴 CASO 1: Há fotos REPROVADAS pela IA — motorista precisa reenviar
+                        const nfsRuins = notasComFotoRuim.map(n => `NF #${n.numero_nota}`).join(', ');
                         containerFinalizacao.innerHTML = `
                             <div class="card bg-danger bg-opacity-10 border border-danger text-danger mb-4 shadow-sm" style="border-radius: 16px;">
                                 <div class="card-body text-center py-4">
                                     <i class="bi bi-camera-fill fs-2 mb-2 d-block text-danger"></i>
                                     <h5 class="fw-bold mb-1 text-danger">CANHOTO ILEGÍVEL PENDENTE</h5>
-                                    <p class="small mb-0 text-dark">Você possui <strong>${notasComFotoRuim.length} nota(s)</strong> com foto reprovada pela IA. Por favor, reenvie uma nova foto (até 3 tentativas) ou aguarde liberação pelo SAC/Operacional para finalizar o manifesto.</p>
+                                    <p class="small mb-0 text-dark">Você possui <strong>${notasComFotoRuim.length} nota(s)</strong> (${nfsRuins}) com foto reprovada pela IA. Por favor, reenvie uma nova foto ou aguarde liberação pelo SAC.</p>
                                 </div>
                             </div>
                         `;
                     } else if (notasEmAnaliseIA.length > 0) {
                         // 🟡 CASO 2: Fotos em PROCESSAMENTO pela IA — polling contínuo até zerar
+                        const nfsPendentes = notasEmAnaliseIA.map(n => `NF #${n.numero_nota}`).join(', ');
                         containerFinalizacao.innerHTML = `
                             <div class="card bg-warning bg-opacity-10 border border-warning text-dark mb-4 shadow-sm" style="border-radius: 16px;">
                                 <div class="card-body text-center py-4">
                                     <div class="spinner-border text-warning mb-2" role="status" style="width: 2.2rem; height: 2.2rem;"></div>
                                     <h5 class="fw-bold mb-1 text-dark">VERIFICANDO COMPROVANTES...</h5>
-                                    <p class="small mb-0 text-muted">A IA está analisando <strong>${notasEmAnaliseIA.length} foto(s)</strong> de comprovante. O manifesto será liberado para finalização assim que todas forem aprovadas.</p>
+                                    <p class="small mb-1 text-dark">A IA está analisando <strong>${notasEmAnaliseIA.length} foto(s)</strong> (${nfsPendentes}).</p>
+                                    <p class="small mb-0 text-muted">O manifesto será liberado para finalização assim que todas forem aprovadas.</p>
                                 </div>
                             </div>
                         `;
