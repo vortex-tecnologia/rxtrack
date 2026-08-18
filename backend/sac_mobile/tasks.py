@@ -439,16 +439,22 @@ def verificar_agendamentos_rebusca_task():
     hora_atual_str = agora_br.strftime('%H:%M')
     
     TenantModel = get_tenant_model()
-    tenants = TenantModel.objects.exclude(schema_name='public')
+    tenants = list(TenantModel.objects.exclude(schema_name='public'))
     
-    for tenant in tenants:
+    schemas_para_verificar = [t.schema_name for t in tenants]
+    if not schemas_para_verificar:
+        schemas_para_verificar = ['public']
+        
+    for schema_name in schemas_para_verificar:
         try:
-            with schema_context(tenant.schema_name):
+            with schema_context(schema_name):
                 filiais = Filial.objects.exclude(horario_rebusca_esl__isnull=True)
                 for filial in filiais:
+                    if not filial.horario_rebusca_esl:
+                        continue
                     horario_str = filial.horario_rebusca_esl.strftime('%H:%M')
                     if hora_atual_str == horario_str:
-                        logger.info(f"[Rebusca Automática] Disparando rebusca para filial {filial.nome} (Tenant: {tenant.schema_name}) às {hora_atual_str}")
-                        executar_rebusca_filial_task.delay(filial.id, 'AUTOMATICA', schema_name=tenant.schema_name)
+                        logger.info(f"⏰ [Rebusca Automática] Disparando rebusca para filial '{filial.nome}' (Schema: {schema_name}) às {hora_atual_str}")
+                        executar_rebusca_filial_task.delay(filial.id, 'AUTOMATICA', schema_name=schema_name)
         except Exception as e:
-            logger.error(f"[Rebusca Automática] Erro no tenant {tenant.schema_name}: {e}")
+            logger.error(f"❌ [Rebusca Automática] Erro no schema {schema_name}: {e}")
