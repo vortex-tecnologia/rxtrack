@@ -372,53 +372,82 @@ def executar_rebusca_filial_task(self, filial_id, tipo='AUTOMATICA', schema_name
             status='PROCESSANDO'
         )
         
-        adapter = get_tms_adapter()
-        if not adapter:
+        try:
+            adapter = get_tms_adapter()
+            if not adapter:
+                log_rebusca.status = 'ERRO'
+                log_rebusca.concluido_em = timezone.now()
+                log_rebusca.detalhes_manifestos = [{"erro": "TMS Adapter não configurado para o schema."}]
+                log_rebusca.save()
+                logger.error(f"[Rebusca] TMS Adapter não configurado para o schema '{target_schema}'.")
+                return "TMS Adapter não encontrado."
+                
+            # Busca ampla e resiliente de manifestos ativos da filial
+            filtro_filial = Q(filial=filial) | Q(motorista__filial=filial)
+            if filial.id_filial_tms:
+                filtro_filial |= Q(filial__id_filial_tms=str(filial.id_filial_tms).strip()) | Q(motorista__filial__id_filial_tms=str(filial.id_filial_tms).strip())
+            if filial.nome:
+                filtro_filial |= Q(filial__nome__iexact=filial.nome.strip())
+                
+            manifestos = list(Manifesto.objects.filter(filtro_filial).filter(
+                Q(status='EM_TRANSPORTE') | Q(finalizado=False)
+            ).select_related('motorista', 'filial').distinct())
+            
+            detalhes = []
+            
+            for manifesto in manifestos:
+                if not manifesto.motorista:
+                    continue
+                    
+                # Garante vínculo de filial correto no manifesto se estava nulo
+                if not manifesto.filial:
+                    manifesto.filial = filial
+                    manifesto.save(update_fields=['filial'])
+                    
+                # update_or_create para respeitar unique_together (numero_manifesto, motorista)
+                busca_log, _ = ManifestoBuscaLog.objects.update_or_create(
+                    numero_manifesto=manifesto.numero_manifesto,
+                    motorista=manifesto.motorista,
+                    defaults={'status': 'PROCESSANDO', 'mensagem_erro': None}
+                )
+                
+                try:
+                    notas_antes = manifesto.notas_fiscais.count()
+                    resultado = adapter.buscar_manifesto_completo(busca_log.id)
+                    notas_depois = manifesto.notas_fiscais.count()
+                    
+                    diff = notas_depois - notas_antes
+                    inseridas = diff if diff > 0 else 0
+                    removidas = abs(diff) if diff < 0 else 0
+                    
+                    detalhes.append({
+                        "manifesto": manifesto.numero_manifesto,
+                        "motorista": manifesto.motorista.nome_completo if manifesto.motorista else '-',
+                        "inseridas": inseridas,
+                        "removidas": removidas,
+                        "resultado": str(resultado) if resultado else "OK"
+                    })
+                except Exception as e:
+                    logger.error(f"[Rebusca] Erro ao buscar manifesto {manifesto.numero_manifesto}: {e}")
+                    detalhes.append({
+                        "manifesto": manifesto.numero_manifesto,
+                        "erro": str(e)
+                    })
+                    
+            log_rebusca.detalhes_manifestos = detalhes
+            log_rebusca.status = 'CONCLUIDO'
+            log_rebusca.concluido_em = timezone.now()
+            log_rebusca.save(update_fields=['detalhes_manifestos', 'status', 'concluido_em'])
+            
+            logger.info(f"[Rebusca] Concluída filial {filial.nome} (Schema: {target_schema}). {len(manifestos)} manifestos verificados.")
+            return f"Rebusca filial {filial.nome} concluída. {len(manifestos)} manifestos verificados."
+        except Exception as ex:
+            logger.error(f"[Rebusca] Erro geral na execução da filial {filial.nome}: {ex}")
             log_rebusca.status = 'ERRO'
             log_rebusca.concluido_em = timezone.now()
+            log_rebusca.detalhes_manifestos = [{"erro": f"Erro interno: {str(ex)}"}]
             log_rebusca.save()
-            logger.error(f"[Rebusca] TMS Adapter não configurado para o schema '{target_schema}'.")
-            return "TMS Adapter não encontrado."
-            
-        # Busca manifestos em transporte ou ativos não finalizados da filial
-        manifestos = Manifesto.objects.filter(filial=filial).filter(Q(status='EM_TRANSPORTE') | Q(finalizado=False)).distinct()
-        detalhes = []
-        
-        for manifesto in manifestos:
-            busca_log = ManifestoBuscaLog.objects.create(
-                numero_manifesto=manifesto.numero_manifesto,
-                motorista=manifesto.motorista,
-                status='PROCESSANDO'
-            )
-            try:
-                notas_antes = manifesto.notas_fiscais.count()
-                resultado = adapter.buscar_manifesto_completo(busca_log.id)
-                notas_depois = manifesto.notas_fiscais.count()
-                
-                diff = notas_depois - notas_antes
-                inseridas = diff if diff > 0 else 0
-                removidas = abs(diff) if diff < 0 else 0
-                
-                detalhes.append({
-                    "manifesto": manifesto.numero_manifesto,
-                    "inseridas": inseridas,
-                    "removidas": removidas,
-                    "resultado": str(resultado)
-                })
-            except Exception as e:
-                logger.error(f"[Rebusca] Erro ao buscar manifesto {manifesto.numero_manifesto}: {e}")
-                detalhes.append({
-                    "manifesto": manifesto.numero_manifesto,
-                    "erro": str(e)
-                })
-                
-        log_rebusca.detalhes_manifestos = detalhes
-        log_rebusca.status = 'CONCLUIDO'
-        log_rebusca.concluido_em = timezone.now()
-        log_rebusca.save(update_fields=['detalhes_manifestos', 'status', 'concluido_em'])
-        
-        logger.info(f"[Rebusca] Concluída filial {filial.nome} (Schema: {target_schema}). {len(manifestos)} manifestos verificados.")
-        return f"Rebusca filial {filial.nome} concluída. {len(manifestos)} manifestos verificados."
+            return f"Erro: {ex}"
 
     if target_schema and target_schema != 'public':
         with schema_context(target_schema):
