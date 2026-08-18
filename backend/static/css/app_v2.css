@@ -263,9 +263,9 @@ body {
 
 /* Container da análise */
 #quality-analysis-container {
-    margin-top: 10px;
-    padding: 12px;
-    border-radius: 12px;
+    margin-top: 4px;
+    padding: 6px 10px;
+    border-radius: 8px;
     background: #f8f9fa;
     transition: all 0.3s ease;
 }
@@ -298,7 +298,7 @@ body {
 
 /* Barra de progresso customizada */
 #quality-progress-bar {
-    border-radius: 4px;
+    border-radius: 3px;
     overflow: hidden;
     background-color: #e9ecef;
 }
@@ -310,17 +310,17 @@ body {
 
 /* Texto da etapa atual */
 #quality-step-text {
-    font-size: 0.78rem;
-    min-height: 1.2em;
+    font-size: 0.75rem;
+    min-height: 1.1em;
     transition: opacity 0.2s ease;
 }
 
 /* Container do resultado */
 #quality-result {
-    margin-top: 8px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    font-size: 0.85rem;
+    margin-top: 4px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    font-size: 0.8rem;
 }
 
 #quality-result.result-approved {
@@ -337,22 +337,23 @@ body {
 
 #quality-result .quality-score-badge {
     display: inline-block;
-    padding: 2px 8px;
-    border-radius: 20px;
-    font-size: 0.7rem;
+    padding: 1px 6px;
+    border-radius: 12px;
+    font-size: 0.68rem;
     font-weight: 700;
-    margin-left: 6px;
+    margin-left: 4px;
 }
 
 #quality-result .quality-issues {
-    margin-top: 6px;
+    margin-top: 4px;
+    margin-bottom: 2px;
     padding-left: 0;
     list-style: none;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
 }
 
 #quality-result .quality-issues li {
-    padding: 2px 0;
+    padding: 1px 0;
 }
 
 #quality-result .quality-issues li::before {
@@ -363,10 +364,10 @@ body {
 
 /* Botão tirar nova foto (pós-reprovação) */
 #btn-nova-foto-quality {
-    margin-top: 8px;
-    border-radius: 10px;
+    margin-top: 4px;
+    border-radius: 8px;
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
 /* Animação de entrada do resultado */

@@ -1340,18 +1340,22 @@ async function handleCameraNativa(event) {
 
         if (icone) {
             icone.className = "bi bi-check-circle-fill text-success";
-            icone.style.fontSize = "3rem";
+            icone.style.fontSize = "2rem";
         }
         if (texto) {
             texto.innerText = "Foto capturada com sucesso!";
-            texto.className = "text-success fw-bold mt-2";
+            texto.className = "text-success fw-bold small mt-1";
         }
 
         document.getElementById('label-camera').style.display = 'none';
-        document.getElementById('btn-nova-foto').style.display = 'block';
-
-        // V1: Inicia análise de qualidade se ocorrência for 01
-        _tentarAnaliseQualidadeV1(file);
+        
+        // Se for análise V1 (ocorrência 01), não exibe botão de tirar outra foto inicialmente
+        if (_deveExecutarAnaliseV1()) {
+            document.getElementById('btn-nova-foto').style.display = 'none';
+            _tentarAnaliseQualidadeV1(file);
+        } else {
+            document.getElementById('btn-nova-foto').style.display = 'block';
+        }
 
     } catch (err) {
         console.error('Erro ao processar foto:', err);
@@ -1368,13 +1372,15 @@ async function handleCameraNativa(event) {
             canvas.dataset.temFoto = "true";
             const icone = document.getElementById('icone-camera');
             const texto = document.getElementById('texto-status-foto');
-            if (icone) { icone.className = "bi bi-check-circle-fill text-success"; icone.style.fontSize = "3rem"; }
-            if (texto) { texto.innerText = "Foto capturada com sucesso!"; texto.className = "text-success fw-bold mt-2"; }
+            if (icone) { icone.className = "bi bi-check-circle-fill text-success"; icone.style.fontSize = "2rem"; }
+            if (texto) { texto.innerText = "Foto capturada com sucesso!"; texto.className = "text-success fw-bold small mt-1"; }
             document.getElementById('label-camera').style.display = 'none';
-            document.getElementById('btn-nova-foto').style.display = 'block';
-
-            // V1: Inicia análise de qualidade se ocorrência for 01 (fallback path)
-            _tentarAnaliseQualidadeV1(file);
+            if (_deveExecutarAnaliseV1()) {
+                document.getElementById('btn-nova-foto').style.display = 'none';
+                _tentarAnaliseQualidadeV1(file);
+            } else {
+                document.getElementById('btn-nova-foto').style.display = 'block';
+            }
         };
         img.src = imgUrl;
     }
@@ -1517,12 +1523,11 @@ async function _iniciarAnaliseQualidadeV1(file) {
                 result.className = 'result-approved show';
                 result.style.display = 'block';
                 result.innerHTML = `
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 1.3rem;"></i>
+                    <div class="d-flex align-items-center justify-content-center">
+                        <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 1.1rem;"></i>
                         <strong>Foto aprovada</strong>
                         <span class="quality-score-badge bg-success text-white">Score: ${resultado.score}/100</span>
                     </div>
-                    <div class="small mt-1 text-muted">Qualidade suficiente para processamento.</div>
                 `;
             }
             // Libera botão
@@ -1530,8 +1535,9 @@ async function _iniciarAnaliseQualidadeV1(file) {
                 btnConfirmar.disabled = false;
                 btnConfirmar.classList.remove('disabled');
             }
-            // Mostra botão "Tirar outra foto" padrão
-            if (btnNovaFoto) btnNovaFoto.style.display = 'block';
+            // NÃO mostra botão "Tirar outra foto" quando aprovado
+            if (btnNovaFoto) btnNovaFoto.style.display = 'none';
+            if (btnNovaFotoQ) btnNovaFotoQ.style.display = 'none';
 
         } else {
             // === REPROVADO ===
@@ -1554,8 +1560,8 @@ async function _iniciarAnaliseQualidadeV1(file) {
                 result.className = 'result-rejected show';
                 result.style.display = 'block';
                 result.innerHTML = `
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-x-circle-fill text-danger me-2" style="font-size: 1.3rem;"></i>
+                    <div class="d-flex align-items-center justify-content-center">
+                        <i class="bi bi-x-circle-fill text-danger me-2" style="font-size: 1.1rem;"></i>
                         <strong>Foto não aprovada</strong>
                         <span class="quality-score-badge bg-danger text-white">Score: ${resultado.score}/100</span>
                     </div>
@@ -1567,7 +1573,7 @@ async function _iniciarAnaliseQualidadeV1(file) {
                 btnConfirmar.disabled = true;
                 btnConfirmar.classList.add('disabled');
             }
-            // Mostra botão "Tirar nova foto" vermelho
+            // Mostra botão "Tirar nova foto" vermelho apenas quando reprovado
             if (btnNovaFotoQ) btnNovaFotoQ.style.display = 'block';
             if (btnNovaFoto) btnNovaFoto.style.display = 'none';
         }

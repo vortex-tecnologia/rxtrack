@@ -1061,22 +1061,22 @@
         </div>
     </div>
 
-    <div class="modal fade" id="modalBaixa" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-        <div class="modal-dialog modal-dialog-centered">
+    <!-- MODAL DE REGISTRO DE OCORRÊNCIA COM CÂMERA INTEGRADA -->
+    <div class="modal fade" id="modalRegistro" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered my-2">
             <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
-                <div class="modal-header bg-primary text-white" style="border-radius: 15px 15px 0 0;">
-                    <h5 class="modal-title fw-bold" id="modal-titulo-nf">Registro Ocorrência</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <div class="modal-header bg-primary text-white py-2 px-3" style="border-radius: 15px 15px 0 0;">
+                    <h6 class="modal-title fw-bold mb-0" id="modal-titulo-nf">Registro Ocorrência</h6>
+                    <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
                 </div>
 
-                <div class="modal-body p-4">
+                <div class="modal-body p-3 py-2">
                     <input type="hidden" id="hidden-chave-nf">
                     <input type="hidden" id="hidden-numero-nf">
 
-                    <div class="mb-3">
-                        <label class="form-label fw-bold"><i class="bi bi-list-check"></i> Selecione a
-                            Ocorrência:</label>
-                        <select class="form-select form-select-lg" id="select-ocorrencia">
+                    <div class="mb-2">
+                        <label class="form-label fw-bold small mb-1"><i class="bi bi-list-check"></i> Selecione a Ocorrência:</label>
+                        <select class="form-select form-select-sm" id="select-ocorrencia">
                             <optgroup label="ENTREGA (Obrigatório Foto)">
                                 {% for oc in sucesso %}
                                 <option value="{{ oc.codigo_tms }}">{{ oc.codigo_tms }} - {{ oc.descricao }}</option>
@@ -1095,79 +1095,77 @@
                         </select>
                     </div>
 
-                    <div class="mb-3" id="campo-recebedor">
-                        <label class="form-label fw-bold"><i class="bi bi-person-fill"></i> Nome do Recebedor:</label>
-                        <input type="text" class="form-control form-control-lg" id="input-recebedor"
+                    <div class="mb-2" id="campo-recebedor">
+                        <label class="form-label fw-bold small mb-1"><i class="bi bi-person-fill"></i> Nome do Recebedor:</label>
+                        <input type="text" class="form-control form-control-sm" id="input-recebedor"
                             placeholder="Quem recebeu a mercadoria?">
                     </div>
 
-                    <hr>
-
-                    <div class="form-check form-switch mb-3">
-                        <input class="form-check-input" type="checkbox" id="check-nota-retida"
-                            style="cursor: pointer; width: 3em; height: 1.5em;">
-                        <label class="form-check-label fw-bold text-danger ms-2" for="check-nota-retida">
+                    <div class="form-check form-switch mb-2 d-flex align-items-center">
+                        <input class="form-check-input my-0" type="checkbox" id="check-nota-retida"
+                            style="cursor: pointer; width: 2.4em; height: 1.2em;">
+                        <label class="form-check-label fw-bold text-danger ms-2 small" for="check-nota-retida">
                             ⚠️ Nota Fiscal Retida ⚠️
                         </label>
                     </div>
 
-                    <div id="campo-observacao" class="mb-3" style="display: none;">
-                        <label class="form-label fw-bold text-primary">Motivo da Retenção (Obrigatório):</label>
-                        <select class="form-select" id="input-observacao">
+                    <div id="campo-observacao" class="mb-2" style="display: none;">
+                        <label class="form-label fw-bold text-primary small mb-1">Motivo da Retenção (Obrigatório):</label>
+                        <select class="form-select form-select-sm" id="input-observacao">
                             <option value="Canhotos retidos para conferência" selected>Canhotos retidos para conferência</option>
                         </select>
                     </div>
 
-                    <div class="camera-container border rounded bg-light text-center p-3 mb-3"
+                    <div class="camera-container border rounded bg-light text-center p-2 mb-2"
                         id="camera-container-main"
-                        style="min-height: 120px; border-style: dashed !important;">
+                        style="min-height: 70px; border-style: dashed !important;">
                         <canvas id="canvas-preview" style="display: none;"></canvas>
 
                         <div id="placeholder-camera"
                             class="d-flex flex-column align-items-center justify-content-center">
                             <div id="wrapper-icone"
-                                class="rounded-circle bg-white shadow-sm d-flex align-items-center justify-content-center mb-2"
-                                style="width: 60px; height: 60px;">
-                                <i id="icone-camera" class="bi bi-camera text-secondary" style="font-size: 1.8rem;"></i>
+                                class="rounded-circle bg-white shadow-sm d-flex align-items-center justify-content-center mb-1"
+                                style="width: 40px; height: 40px;">
+                                <i id="icone-camera" class="bi bi-camera text-secondary" style="font-size: 1.3rem;"></i>
                             </div>
-                            <p id="texto-status-foto" class="text-muted small fw-bold mb-0">Nenhuma foto capturada</p>
+                            <p id="texto-status-foto" class="text-muted small fw-bold mb-0" style="font-size: 0.8rem;">Nenhuma foto capturada</p>
                         </div>
 
                         <!-- V1: Container de Análise de Qualidade -->
                         <div id="quality-analysis-container" style="display: none;">
-                            <div id="quality-progress-bar" class="progress mb-2" style="height: 6px;">
+                            <div id="quality-progress-bar" class="progress mb-1" style="height: 4px;">
                                 <div class="progress-bar progress-bar-striped progress-bar-animated"
                                      role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
                             </div>
-                            <p id="quality-step-text" class="small fw-bold text-primary mb-1"></p>
+                            <p id="quality-step-text" class="small fw-bold text-primary mb-1" style="font-size: 0.78rem;"></p>
                             <div id="quality-result" style="display: none;"></div>
                         </div>
                     </div>
 
-                    <div class="d-grid gap-2">
-                        <label for="camera-nativa" class="btn btn-dark btn-lg shadow-sm" id="label-camera">
+                    <div class="d-grid gap-1">
+                        <label for="camera-nativa" class="btn btn-dark btn-sm fw-bold py-2 shadow-sm" id="label-camera">
                             <i class="bi bi-camera-fill me-2"></i> Abrir Câmera
                         </label>
 
                         <input type="file" id="camera-nativa" accept="image/*" capture="environment" style="display: none;">
 
-                        <label for="camera-nativa" class="btn btn-warning btn-lg shadow-sm" id="btn-nova-foto"
+                        <label for="camera-nativa" class="btn btn-warning btn-sm fw-bold py-2 shadow-sm" id="btn-nova-foto"
                             style="display: none;">
                             <i class="bi bi-arrow-clockwise me-2"></i> Tirar outra foto
                         </label>
 
                         <!-- V1: Botão "Tirar nova foto" pós-reprovação (reutiliza input camera-nativa) -->
-                        <label for="camera-nativa" class="btn btn-danger btn-lg shadow-sm" id="btn-nova-foto-quality"
+                        <label for="camera-nativa" class="btn btn-danger btn-sm fw-bold py-2 shadow-sm" id="btn-nova-foto-quality"
                             style="display: none;">
                             <i class="bi bi-camera-fill me-2"></i> Tirar nova foto
                         </label>
                     </div>
                 </div>
 
-                <div class="modal-footer bg-light" style="border-radius: 0 0 15px 15px;">
-                    <button type="button" class="btn btn-link text-muted fw-bold text-decoration-none"
+                <div class="modal-footer bg-light py-2 px-3" style="border-radius: 0 0 15px 15px;">
+                    <button type="button" class="btn btn-link text-muted fw-bold text-decoration-none small py-1"
                         data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-success btn-lg px-4 fw-bold shadow-sm"
+                    <button type="button" class="btn btn-success px-4 py-2 fw-bold shadow-sm"
                         id="btn-confirmar-registro" onclick="salvarRegistro()">
                         Confirmar Registro <i class="bi bi-check-lg ms-1"></i>
                     </button>
