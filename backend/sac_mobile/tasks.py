@@ -426,14 +426,18 @@ def executar_rebusca_filial_task(self, filial_id, tipo='AUTOMATICA', schema_name
                     inseridas = diff if diff > 0 else 0
                     removidas = abs(diff) if diff < 0 else 0
                     
-                    # Recarrega o log da busca para ver o status final retornado pelo TMS
+                    # Recarrega o manifesto e o log da busca para verificar o estado final
+                    manifesto.refresh_from_db()
                     busca_log.refresh_from_db()
                     
-                    msg_res = "OK"
-                    if busca_log.status == 'ERRO' and busca_log.mensagem_erro:
+                    if manifesto.status == 'FINALIZADO' or manifesto.finalizado:
+                        msg_res = "Fechado no TMS (finalizado no app)"
+                    elif busca_log.status == 'ERRO' and busca_log.mensagem_erro:
                         msg_res = busca_log.mensagem_erro
-                    elif busca_log.status == 'PROCESSADO' and busca_log.mensagem_erro:
-                        msg_res = busca_log.mensagem_erro
+                    elif inseridas > 0 or removidas > 0:
+                        msg_res = f"Atualizado (+{inseridas} novas, -{removidas} baixadas)"
+                    else:
+                        msg_res = "Sincronizado (sem alterações)"
                     
                     detalhes.append({
                         "manifesto": manifesto.numero_manifesto,
