@@ -738,7 +738,21 @@
                                     <td><small>{{ f.whatsapp_sac|default:"—" }}</small></td>
                                     <td class="text-center">
                                         {% if cargo == 'GESTOR' or cargo == 'ADMINISTRADOR' %}
-                                        <button class="btn btn-sm btn-outline-primary" onclick="abrirEditarFilial({{ f.id }}, '{{ f.nome|escapejs }}', '{{ f.logradouro|escapejs }}', '{{ f.numero|escapejs }}', '{{ f.complemento|escapejs }}', '{{ f.bairro|escapejs }}', '{{ f.cidade|escapejs }}', '{{ f.uf|escapejs }}', '{{ f.cep|escapejs }}', {{ f.latitude|default:'null' }}, {{ f.longitude|default:'null' }}, '{{ f.whatsapp_operacional|escapejs }}', '{{ f.whatsapp_sac|escapejs }}')">
+                                        <button class="btn btn-sm btn-outline-primary"
+                                                data-id="{{ f.id }}"
+                                                data-nome="{{ f.nome }}"
+                                                data-logradouro="{{ f.logradouro }}"
+                                                data-numero="{{ f.numero }}"
+                                                data-complemento="{{ f.complemento }}"
+                                                data-bairro="{{ f.bairro }}"
+                                                data-cidade="{{ f.cidade }}"
+                                                data-uf="{{ f.uf }}"
+                                                data-cep="{{ f.cep }}"
+                                                data-lat="{% if f.latitude %}{{ f.latitude|stringformat:'.6f' }}{% endif %}"
+                                                data-lng="{% if f.longitude %}{{ f.longitude|stringformat:'.6f' }}{% endif %}"
+                                                data-whats-op="{{ f.whatsapp_operacional }}"
+                                                data-whats-sac="{{ f.whatsapp_sac }}"
+                                                onclick="abrirEditarFilial(this)">
                                             <i class="bi bi-pencil-fill me-1"></i>Editar
                                         </button>
                                         {% else %}
@@ -765,12 +779,12 @@
 <!-- ═══════ MODAL EDITAR FILIAL ═══════ -->
 <div class="modal fade" id="modalEditarFilial" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
+        <div class="modal-content border-0 shadow rounded-4">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title fw-bold"><i class="bi bi-building me-2"></i><span id="editFilialTitulo">Editar Filial</span></h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body p-4">
                 <input type="hidden" id="editFilialId">
                 
                 <!-- Endereço -->
@@ -849,9 +863,9 @@
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary fw-bold" onclick="salvarFilial()" id="btnSalvarFilial">
+            <div class="modal-footer bg-light rounded-bottom-4">
+                <button type="button" class="btn btn-secondary px-4 rounded-pill" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary px-4 fw-bold rounded-pill" onclick="salvarFilial()" id="btnSalvarFilial">
                     <i class="bi bi-check-lg me-1"></i> Salvar Filial
                 </button>
             </div>
@@ -868,7 +882,24 @@
     let mapaFilial = null;
     let marcadorFilial = null;
 
-    function abrirEditarFilial(id, nome, logradouro, numero, complemento, bairro, cidade, uf, cep, lat, lng, whatsOp, whatsSac) {
+    function abrirEditarFilial(btn) {
+        const id = btn.getAttribute('data-id');
+        const nome = btn.getAttribute('data-nome') || '';
+        const logradouro = btn.getAttribute('data-logradouro') || '';
+        const numero = btn.getAttribute('data-numero') || '';
+        const complemento = btn.getAttribute('data-complemento') || '';
+        const bairro = btn.getAttribute('data-bairro') || '';
+        const cidade = btn.getAttribute('data-cidade') || '';
+        const uf = btn.getAttribute('data-uf') || '';
+        const cep = btn.getAttribute('data-cep') || '';
+        const whatsOp = btn.getAttribute('data-whats-op') || '';
+        const whatsSac = btn.getAttribute('data-whats-sac') || '';
+
+        const rawLat = btn.getAttribute('data-lat');
+        const rawLng = btn.getAttribute('data-lng');
+        const parsedLat = rawLat ? parseFloat(rawLat.replace(',', '.')) : null;
+        const parsedLng = rawLng ? parseFloat(rawLng.replace(',', '.')) : null;
+
         document.getElementById('editFilialId').value = id;
         document.getElementById('editFilialTitulo').innerText = `Editar: ${nome}`;
         document.getElementById('editFilialLogradouro').value = logradouro;
@@ -881,8 +912,8 @@
         document.getElementById('editFilialWhatsOp').value = whatsOp;
         document.getElementById('editFilialWhatsSac').value = whatsSac;
 
-        const defaultLat = (lat !== null && lat !== undefined && !isNaN(lat)) ? lat : -22.7873755;
-        const defaultLng = (lng !== null && lng !== undefined && !isNaN(lng)) ? lng : -43.2886202;
+        const defaultLat = (parsedLat !== null && !isNaN(parsedLat)) ? parsedLat : -22.7873755;
+        const defaultLng = (parsedLng !== null && !isNaN(parsedLng)) ? parsedLng : -43.2886202;
         
         document.getElementById('editFilialLat').value = defaultLat;
         document.getElementById('editFilialLng').value = defaultLng;
@@ -902,7 +933,9 @@
                 attribution: '© OpenStreetMap'
             }).addTo(mapaFilial);
             
-            setTimeout(() => mapaFilial.invalidateSize(), 200);
+            setTimeout(() => {
+                if (mapaFilial) mapaFilial.invalidateSize();
+            }, 300);
 
             marcadorFilial = L.marker([defaultLat, defaultLng], { draggable: true }).addTo(mapaFilial);
             marcadorFilial.bindTooltip("📌 Arraste para posicionar a base", { direction: 'top', offset: [0, -15] });
@@ -927,7 +960,12 @@
     async function buscarCepFilial() {
         const cep = document.getElementById('editFilialCep').value.replace(/\D/g, '');
         if (cep.length !== 8) {
-            alert('CEP inválido. Informe 8 dígitos.');
+            Swal.fire({
+                icon: 'warning',
+                title: 'CEP Inválido',
+                text: 'Informe um CEP válido com 8 dígitos.',
+                customClass: { popup: 'rounded-4 shadow' }
+            });
             return;
         }
 
@@ -936,7 +974,12 @@
             const data = await resp.json();
             
             if (data.erro) {
-                alert('CEP não encontrado.');
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Não Encontrado',
+                    text: 'CEP não localizado nos Correios.',
+                    customClass: { popup: 'rounded-4 shadow' }
+                });
                 return;
             }
 
@@ -971,7 +1014,12 @@
             }
 
         } catch (err) {
-            alert('Erro ao buscar CEP. Tente novamente.');
+            Swal.fire({
+                icon: 'error',
+                title: 'Erro de Conexão',
+                text: 'Não foi possível consultar o CEP. Tente novamente.',
+                customClass: { popup: 'rounded-4 shadow' }
+            });
         }
     }
 
@@ -1000,20 +1048,41 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken')
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken') || '{{ csrf_token }}'
                 },
                 body: JSON.stringify(payload)
             });
             const data = await resp.json();
             
             if (data.status === 'sucesso') {
-                alert(data.message);
+                const modalEl = document.getElementById('modalEditarFilial');
+                const modalInst = bootstrap.Modal.getInstance(modalEl);
+                if (modalInst) modalInst.hide();
+
+                await Swal.fire({
+                    icon: 'success',
+                    title: 'Filial Atualizada!',
+                    text: data.message,
+                    timer: 1800,
+                    showConfirmButton: false,
+                    customClass: { popup: 'rounded-4 shadow' }
+                });
                 location.reload();
             } else {
-                alert('Erro: ' + (data.message || 'Erro desconhecido'));
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Erro ao Salvar',
+                    text: data.message || 'Erro desconhecido ao salvar.',
+                    customClass: { popup: 'rounded-4 shadow' }
+                });
             }
         } catch (err) {
-            alert('Erro de conexão ao salvar filial.');
+            Swal.fire({
+                icon: 'error',
+                title: 'Erro de Conexão',
+                text: 'Falha na comunicação com o servidor ao salvar filial.',
+                customClass: { popup: 'rounded-4 shadow' }
+            });
         } finally {
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Salvar Filial';
