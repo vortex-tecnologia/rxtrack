@@ -38,10 +38,19 @@ def api_notificacoes_erros(request):
 
     notificacoes = []
     for log in ultimos_erros:
+        msg_bruta = log.mensagem or "Erro retornado da ESL"
+        if "HTTPSConnectionPool" in msg_bruta or "ConnectTimeout" in msg_bruta or "Max retries exceeded" in msg_bruta:
+            msg_formatada = "Falha temporária de comunicação/timeout com a ESL Cloud."
+        else:
+            msg_formatada = msg_bruta[:200]
+
+        titulo_notif = f"Erro na Nota Fiscal {log.numero_nota} - #{log.manifesto_numero}" if log.numero_nota else f"Erro no Manifesto #{log.manifesto_numero}"
+
         notificacoes.append({
             'id': log.id,
-            'titulo': f"Erro na Nota Fiscal {log.numero_nota} - #{log.manifesto_numero}",
-            'mensagem': log.mensagem[:150] if log.mensagem else "Erro retornado da ESL",
+            'titulo': titulo_notif,
+            'mensagem': msg_formatada,
+            'mensagem_completa': msg_bruta,
             'tipo': log.tipo,
             'hora': localtime(log.criado_em).strftime('%d/%m %H:%M'),
             'numero_nota': log.numero_nota,

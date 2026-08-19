@@ -216,11 +216,14 @@
         margin-bottom: 2px;
     }
     .notif-item .notif-msg {
-        font-size: 0.72rem;
+        font-size: 0.73rem;
         color: #6c757d;
-        white-space: nowrap;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
         overflow: hidden;
-        text-overflow: ellipsis;
+        word-break: break-word;
+        line-height: 1.3;
     }
     .notif-item .notif-time {
         font-size: 0.65rem;
@@ -724,7 +727,7 @@
 
                 data.notificacoes.forEach(n => {
                     html += `
-                        <div class="notif-item" onclick="visualizarNotificacao(event, ${n.id}, '/notas-fiscais/?q=${n.numero_nota}')">
+                        <div class="notif-item" onclick="visualizarNotificacao(event, ${n.id}, '/notas-fiscais/?q=${n.numero_nota}')" title="${(n.mensagem_completa || n.mensagem || '').replace(/"/g, '&quot;')}">
                             <div class="notif-icon">
                                 <i class="bi bi-exclamation-circle-fill"></i>
                             </div>
