@@ -855,6 +855,11 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
             nf = baixa.nota_fiscal
             
+            # --- PROTEÇÃO DE IDEMPOTÊNCIA: Se já foi integrada com sucesso, não envia de novo ---
+            if baixa.integrado_tms:
+                logger.info(f"⏭️ Baixa #{baixa_id} (NF {nf.numero_nota}) já integrada ao TMS com sucesso. Pulando reenvio.")
+                return f"Baixa {baixa_id} já integrada previamente."
+            
             # --- DESPACHO SEM CHAVE: Usa endpoint de Frete (Minuta) ---
             # REGRA: Se tem chave_acesso, SEMPRE usa o endpoint de NF-e (normal).
             # O endpoint de Frete/Minuta só é usado quando NÃO há chave de acesso.
@@ -1255,6 +1260,12 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 'nota_fiscal__manifesto__motorista'
             ).get(id=baixa_id)
             nf = baixa.nota_fiscal
+            
+            # --- PROTEÇÃO DE IDEMPOTÊNCIA: Se já foi integrada com sucesso, não envia de novo ---
+            if baixa.integrado_tms:
+                logger.info(f"⏭️ Baixa de Minuta #{baixa_id} (NF {nf.numero_nota}) já integrada ao TMS. Pulando reenvio.")
+                return f"Baixa de Minuta {baixa_id} já integrada previamente."
+
             freight_id = nf.freight_id_tms
             manifesto = nf.manifesto
             
@@ -1425,6 +1436,11 @@ class ESLCloudAdapter(BaseTMSAdapter):
             baixa = BaixaNF.objects.select_related('nota_fiscal', 'ocorrencia', 'nota_fiscal__manifesto').get(id=baixa_id)
             nf = baixa.nota_fiscal
             manifesto = nf.manifesto
+            
+            # --- PROTEÇÃO DE IDEMPOTÊNCIA: Se já foi integrada com sucesso, não envia de novo ---
+            if baixa.integrado_tms:
+                logger.info(f"⏭️ Coleta #{baixa_id} (NF/Coleta {nf.numero_nota}) já integrada ao TMS. Pulando reenvio.")
+                return f"Coleta {baixa_id} já integrada previamente."
             
             identificador = (nf.numero_coleta or nf.freight_id_tms or nf.numero_nota or "").strip()
             

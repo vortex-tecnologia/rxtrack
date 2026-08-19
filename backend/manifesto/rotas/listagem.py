@@ -93,17 +93,6 @@ class ListarNotasManifestoView(APIView):
                             finalizar_fluxo_tms(baixa)
                         except Exception:
                             pass
-                else:
-                    # É 01 COM FOTO: Se estiver parado há mais de 10s, re-enfileira a task no Celery para processar
-                    from datetime import timedelta
-                    if baixa.data_baixa and (timezone.now() - baixa.data_baixa) > timedelta(seconds=10):
-                        try:
-                            from AgenteIa.tasks import task_processar_canhoto_ia
-                            from django.db import connection
-                            task_processar_canhoto_ia.delay(baixa.id, schema_name=connection.schema_name)
-                            print(f"[RE-AVALIAÇÃO-IA] Baixa #{baixa.id} (NF {nf.numero_nota}) re-enfileirada no Celery.")
-                        except Exception as e:
-                            print(f"[RE-AVALIAÇÃO-IA] Erro ao re-enfileirar Baixa #{baixa.id}: {e}")
 
             autor_nome = None
             if baixa:
