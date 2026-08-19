@@ -474,11 +474,29 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 filial_obj.id_filial_tms = str(id_filial_tms)
                 filial_obj.save(update_fields=['id_filial_tms'])
 
+            # --- FILIAL DE OPERAÇÃO (base física de onde o caminhão sai) ---
+            # Determinada pelo mft_uer_crn_id (filial do emissor do manifesto na ESL)
+            filial_operacao_obj = None
+            id_filial_operacao_tms = info_tms.get('mft_uer_crn_id')
+            if id_filial_operacao_tms:
+                filial_operacao_obj = Filial.objects.filter(
+                    id_filial_tms=str(id_filial_operacao_tms)
+                ).first()
+                if not filial_operacao_obj:
+                    # Cria filial com nome do operador como referência temporária
+                    nome_emissor = info_tms.get('mft_uer_name', '').strip().upper()
+                    filial_operacao_obj, _ = Filial.objects.get_or_create(
+                        id_filial_tms=str(id_filial_operacao_tms),
+                        defaults={'nome': nome_emissor or f'BASE {id_filial_operacao_tms}'}
+                    )
+                    logger.info(f"🏢 Nova filial de operação criada: {filial_operacao_obj.nome} (TMS ID: {id_filial_operacao_tms})")
+
             manifesto_obj, _ = Manifesto.objects.update_or_create(
                 numero_manifesto=numero_visual,
                 defaults={
                     'motorista': motorista, 
                     'filial': filial_obj,
+                    'filial_operacao': filial_operacao_obj,
                     'status': 'EM_TRANSPORTE',
                     'status_tms': status_tms if status_tms in ('pending', 'in_transit') else 'in_transit',
                     'manifesto_id_tms': info_tms.get('id'), 

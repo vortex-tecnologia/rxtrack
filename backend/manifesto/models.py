@@ -216,6 +216,17 @@ class Manifesto(models.Model):
         verbose_name="Filial"
     )
 
+    # Filial de Operação — Base física de onde o caminhão sai (determinada pelo mft_uer_crn_id da ESL)
+    # Usada na Torre de Controle (abas) e no Rastreamento (ponto de partida do mapa)
+    filial_operacao = models.ForeignKey(
+        Filial,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='manifestos_operacao',
+        verbose_name="Filial de Operação (Base)"
+    )
+
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,

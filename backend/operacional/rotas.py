@@ -223,11 +223,12 @@ def api_rastreio_manifesto(request, manifesto_id):
     # Ordenar os pontos pelo horário da baixa para o rastro fazer sentido
     pontos = sorted(pontos, key=lambda x: x['horario'])
 
-    # Coordenadas da base RDexpresso (Ponto de partida)
+    # Ponto de partida: usa filial de operação (com fallback para filial fiscal, depois hardcoded)
+    filial_base = manifesto.filial_operacao or manifesto.filial
     dados_filial = {
-        'nome': manifesto.filial.nome if manifesto.filial else "RDexpresso",
-        'lat': -22.7873755, 
-        'lng': -43.2886202
+        'nome': filial_base.nome if filial_base else "Base",
+        'lat': filial_base.latitude if filial_base and filial_base.latitude else -22.7873755,
+        'lng': filial_base.longitude if filial_base and filial_base.longitude else -43.2886202,
     }
 
     # Posição atual do veículo (enviada pelo GPS nativo Java)

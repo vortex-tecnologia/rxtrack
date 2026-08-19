@@ -56,6 +56,10 @@ urlpatterns = [
     path('api/configuracao/rebusca/filial/<int:filial_id>/disparar/', views.disparar_rebusca_filial_view, name='disparar_rebusca_filial'),
     path('api/configuracao/rebusca/filial/<int:filial_id>/logs/', views.obter_logs_rebusca_filial_view, name='obter_logs_rebusca_filial'),
 
+    # Gestão de Filiais (Endereço, Geolocalização)
+    path('api/filiais/', views.api_listar_filiais, name='api_listar_filiais'),
+    path('api/filiais/<int:filial_id>/salvar/', views.api_salvar_filial, name='api_salvar_filial'),
+
     # Notificações de Erros (Centro de Notificações Global)
     path('api/notificacoes/erros/', api_notificacoes_erros, name='api_notificacoes_erros'),
     path('api/notificacoes/marcar-lidas/', api_marcar_notificacoes_lidas, name='api_marcar_notificacoes_lidas'),

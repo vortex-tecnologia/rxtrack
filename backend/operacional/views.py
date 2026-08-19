@@ -1332,11 +1332,34 @@ class ConfiguracaoSistemaView(TemplateView):
 
         pode_gerenciar_rebusca = perfil.cargo in ['SUPERVISOR', 'GERENTE', 'GESTOR', 'ADMINISTRADOR'] or self.request.user.is_superuser
 
+        # Filiais para aba de Gestão (Endereço, Geolocalização, WhatsApp)
+        filiais_gestao = []
+        for f in filiais_qs:
+            filiais_gestao.append({
+                'id': f.id,
+                'nome': f.nome,
+                'id_filial_tms': f.id_filial_tms or '-',
+                'logradouro': f.logradouro or '',
+                'numero': f.numero or '',
+                'complemento': f.complemento or '',
+                'bairro': f.bairro or '',
+                'cidade': f.cidade or '',
+                'uf': f.uf or '',
+                'cep': f.cep or '',
+                'latitude': f.latitude,
+                'longitude': f.longitude,
+                'whatsapp_operacional': f.whatsapp_operacional or '',
+                'whatsapp_sac': f.whatsapp_sac or '',
+                'endereco_completo': f.endereco_completo or 'Sem endereço cadastrado',
+                'tem_coordenadas': bool(f.latitude and f.longitude),
+            })
+
         context.update({
             'config': config,
             'cargo': perfil.cargo,
             'pode_gerenciar_rebusca': pode_gerenciar_rebusca,
             'filiais_rebusca': filiais_rebusca,
+            'filiais_gestao': filiais_gestao,
             'token_analytics_masked': token_analytics,
             'token_invoices_masked': token_invoices,
             'titulo': "Configuração do Sistema",
@@ -2361,3 +2384,96 @@ def aprovar_canhoto_manual_view(request, baixa_id):
         'message': f'Canhoto da NF {baixa.nota_fiscal.numero_nota} aprovado manualmente e despachado para o TMS!'
     })
 
+
+# ──────────────────────────────────────────────────────────────
+#  API GESTÃO DE FILIAIS (Endereço, Geolocalização, WhatsApp)
+# ──────────────────────────────────────────────────────────────
+
+@login_required(login_url='/login/')
+@apenas_operacional
+def api_listar_filiais(request):
+    """Retorna todas as filiais com dados de endereço e geolocalização."""
+    from usuarios.models import Filial
+    filiais = Filial.objects.all().order_by('nome')
+    data = []
+    for f in filiais:
+        data.append({
+            'id': f.id,
+            'nome': f.nome,
+            'id_filial_tms': f.id_filial_tms or '',
+            'logradouro': f.logradouro or '',
+            'numero': f.numero or '',
+            'complemento': f.complemento or '',
+            'bairro': f.bairro or '',
+            'cidade': f.cidade or '',
+            'uf': f.uf or '',
+            'cep': f.cep or '',
+            'latitude': f.latitude,
+            'longitude': f.longitude,
+            'whatsapp_operacional': f.whatsapp_operacional or '',
+            'whatsapp_sac': f.whatsapp_sac or '',
+            'endereco_completo': f.endereco_completo or 'Sem endereço cadastrado',
+        })
+    return JsonResponse({'filiais': data})
+
+
+@login_required(login_url='/login/')
+@apenas_operacional
+@require_POST
+def api_salvar_filial(request, filial_id):
+    """Salva os dados de endereço, geolocalização e WhatsApp de uma filial."""
+    perfil = request.user.motorista_perfil
+    if perfil.cargo not in ['GESTOR', 'ADMINISTRADOR']:
+        return JsonResponse({'status': 'erro', 'message': 'Acesso negado. Apenas Gestores/Administradores.'}, status=403)
+
+    from usuarios.models import Filial
+    try:
+        filial = Filial.objects.get(id=filial_id)
+    except Filial.DoesNotExist:
+        return JsonResponse({'status': 'erro', 'message': 'Filial não encontrada.'}, status=404)
+
+    try:
+        data = json.loads(request.body)
+        
+        # Atualiza campos de endereço
+        filial.logradouro = data.get('logradouro', filial.logradouro)
+        filial.numero = data.get('numero', filial.numero)
+        filial.complemento = data.get('complemento', filial.complemento)
+        filial.bairro = data.get('bairro', filial.bairro)
+        filial.cidade = data.get('cidade', filial.cidade)
+        filial.uf = data.get('uf', filial.uf)
+        filial.cep = data.get('cep', filial.cep)
+        
+        # Atualiza WhatsApp
+        filial.whatsapp_operacional = data.get('whatsapp_operacional', filial.whatsapp_operacional)
+        filial.whatsapp_sac = data.get('whatsapp_sac', filial.whatsapp_sac)
+        
+        # Se latitude/longitude vieram do frontend (pin arrastado no mapa), usa diretamente
+        lat = data.get('latitude')
+        lng = data.get('longitude')
+        if lat is not None and lng is not None:
+            try:
+                filial.latitude = float(lat)
+                filial.longitude = float(lng)
+            except (ValueError, TypeError):
+                pass
+        else:
+            # Limpa coordenadas para forçar re-geocodificação no save()
+            filial.latitude = None
+            filial.longitude = None
+        
+        filial.save()
+        
+        return JsonResponse({
+            'status': 'sucesso',
+            'message': f'Filial "{filial.nome}" atualizada com sucesso!',
+            'filial': {
+                'id': filial.id,
+                'nome': filial.nome,
+                'latitude': filial.latitude,
+                'longitude': filial.longitude,
+                'endereco_completo': filial.endereco_completo or 'Sem endereço',
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'status': 'erro', 'message': f'Erro ao salvar: {str(e)}'}, status=500)

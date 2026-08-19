@@ -53,7 +53,14 @@ class NotificacaoPushLogAdmin(admin.ModelAdmin):
 
 @admin.register(Filial)
 class FilialAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'id_filial_tms', 'whatsapp_operacional', 'whatsapp_sac', 'horario_rebusca_esl')
+    list_display = ('nome', 'id_filial_tms', 'cidade', 'uf', 'latitude', 'longitude', 'whatsapp_operacional', 'whatsapp_sac', 'horario_rebusca_esl')
     list_editable = ('whatsapp_operacional', 'whatsapp_sac')
-    search_fields = ('nome', 'id_filial_tms')
+    search_fields = ('nome', 'id_filial_tms', 'cidade', 'uf')
+    list_filter = ('uf',)
+    fieldsets = (
+        ('Identificação', {'fields': ('nome', 'id_filial_tms', 'horario_rebusca_esl')}),
+        ('Endereço', {'fields': ('cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf')}),
+        ('Geolocalização', {'fields': ('latitude', 'longitude'), 'description': 'Preenchido automaticamente ao salvar se o endereço estiver correto.'}),
+        ('WhatsApp', {'fields': ('whatsapp_operacional', 'whatsapp_sac')}),
+    )
 

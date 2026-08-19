@@ -300,6 +300,19 @@ class Filial(models.Model):
     id_filial_tms = models.CharField(max_length=50, blank=True, null=True)
     horario_rebusca_esl = models.TimeField(null=True, blank=True, verbose_name="Horário da Rebusca Automática (ESL)")
     
+    # --- ENDEREÇO COMPLETO DA BASE/GALPÃO ---
+    logradouro = models.CharField(max_length=255, blank=True, null=True, verbose_name="Logradouro")
+    numero = models.CharField(max_length=20, blank=True, null=True, verbose_name="Número")
+    complemento = models.CharField(max_length=100, blank=True, null=True, verbose_name="Complemento")
+    bairro = models.CharField(max_length=100, blank=True, null=True, verbose_name="Bairro")
+    cidade = models.CharField(max_length=100, blank=True, null=True, verbose_name="Cidade")
+    uf = models.CharField(max_length=2, blank=True, null=True, verbose_name="UF")
+    cep = models.CharField(max_length=9, blank=True, null=True, verbose_name="CEP")
+    
+    # --- GEOLOCALIZAÇÃO (Preenchida automaticamente pelo backend via CEP/Endereço) ---
+    latitude = models.FloatField(null=True, blank=True, verbose_name="Latitude")
+    longitude = models.FloatField(null=True, blank=True, verbose_name="Longitude")
+    
     # WhatsApp — Informar a partir do DDD (ex: 21999999999). O sistema adiciona o 55 automaticamente.
     whatsapp_operacional = models.CharField(
         max_length=20, blank=True, null=True,
@@ -323,6 +336,34 @@ class Filial(models.Model):
                     return nums
                 return f"55{nums}"
         return None
+
+    @property
+    def endereco_completo(self):
+        """Retorna o endereço formatado para exibição."""
+        partes = [p for p in [self.logradouro, self.numero, self.bairro, self.cidade, self.uf] if p]
+        return ', '.join(partes) if partes else None
+
+    def save(self, *args, **kwargs):
+        """
+        Ao salvar, se o endereço foi preenchido/alterado e lat/lng estão vazios,
+        tenta geocodificar automaticamente usando o geocoding.py existente.
+        """
+        # Detecta se deve tentar geocodificar (endereço presente mas sem coordenadas)
+        tem_endereco = bool(self.cep or (self.logradouro and self.cidade))
+        sem_coordenadas = not self.latitude or not self.longitude
+        
+        if tem_endereco and sem_coordenadas:
+            try:
+                from common.geocoding import buscar_lat_lng_endereco
+                endereco_texto = self.endereco_completo
+                lat, lng = buscar_lat_lng_endereco(cep=self.cep, endereco=endereco_texto)
+                if lat and lng:
+                    self.latitude = lat
+                    self.longitude = lng
+            except Exception:
+                pass  # Nunca bloqueia o save por falha de geocodificação
+        
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.nome

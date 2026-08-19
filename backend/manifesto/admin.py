@@ -111,8 +111,8 @@ class WebhookEventoManifestoESLAdmin(admin.ModelAdmin):
     marcar_como_erro.short_description = "Marcar como ERRO"
 @admin.register(Manifesto)
 class ManifestoAdmin(ModelAdmin):
-    list_display = ("numero_manifesto", "motorista", "status", "status_tms", "veiculo", "data_criacao")
-    list_filter = ("status", "status_tms", "finalizado")
+    list_display = ("numero_manifesto", "motorista", "filial", "filial_operacao", "status", "status_tms", "veiculo", "data_criacao")
+    list_filter = ("status", "status_tms", "finalizado", "filial", "filial_operacao")
     search_fields = ("numero_manifesto", "motorista__nome_completo", "veiculo__placa")
 
 @admin.register(Veiculo)
