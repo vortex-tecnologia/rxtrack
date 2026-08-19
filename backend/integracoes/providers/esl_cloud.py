@@ -1092,6 +1092,38 @@ class ESLCloudAdapter(BaseTMSAdapter):
             # --- AUTO-BYPASS PARA TRATATIVAS DE CT-E MÚLTIPLAS NOTAS ---
             # Se der 422 dizendo que o CT-e não permite alteração e a ocorrência que estamos mandando é uma ocorrência (não entrega)
             detalhe_lower = detalhe_erro.lower()
+
+            # 1. IDEMPOTÊNCIA: Se a ocorrência já existe na ESL (já foi cadastrada com sucesso antes)
+            eh_ja_existe = (
+                status == 422 and (
+                    "já existe" in detalhe_lower or
+                    "ja existe" in detalhe_lower or
+                    "já cadastrada" in detalhe_lower or
+                    "ja cadastrada" in detalhe_lower or
+                    "já se encontra" in detalhe_lower or
+                    "ja se encontra" in detalhe_lower or
+                    "já finalizad" in detalhe_lower or
+                    "ja finalizad" in detalhe_lower
+                )
+            )
+            if eh_ja_existe:
+                logger.info(f"✅ NF {nf.numero_nota}: Ocorrência já registrada previamente no TMS (ESL Cloud). Marcando como sucesso (Idempotência).")
+                baixa.log_erro_tms = "Sucesso: Ocorrência já registrada previamente no TMS (ESL Cloud)."
+                baixa.processado_tms = True
+                baixa.integrado_tms = True
+                baixa.data_integracao = timezone.now()
+                baixa.save()
+                
+                # Auto-resolução na Torre de Erros
+                try:
+                    from operacional.services import resolver_erros_automaticamente
+                    resolver_erros_automaticamente(manifesto.numero_manifesto, nf.numero_nota, manifesto.filial)
+                except Exception as e:
+                    logger.error(f"Erro auto-resolucao ja_existe: {e}")
+                
+                return f"Baixa {baixa_id} integrada (Já existia no TMS)."
+
+            # 2. TRATATIVA DE CT-E MULTI-NOTAS
             eh_tratativa_cte = (
                 status == 422 and (
                     "não permite alteração de status" in detalhe_erro or
@@ -1325,9 +1357,41 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
         except Exception as e:
             payload_str = f" | Payload: {json.dumps(payload)}" if payload else ""
+            status_code = getattr(getattr(e, 'response', None), 'status_code', None)
+            response_text = getattr(getattr(e, 'response', None), 'text', '')
+            detalhe_lower = (response_text or str(e)).lower()
+
+            eh_ja_existe = (
+                status_code == 422 and (
+                    "já existe" in detalhe_lower or
+                    "ja existe" in detalhe_lower or
+                    "já cadastrada" in detalhe_lower or
+                    "ja cadastrada" in detalhe_lower or
+                    "já se encontra" in detalhe_lower or
+                    "ja se encontra" in detalhe_lower or
+                    "não permite alteração" in detalhe_lower or
+                    "nao permite alteracao" in detalhe_lower
+                )
+            )
+            if eh_ja_existe:
+                logger.info(f"✅ Minuta {nf.numero_nota}: Ocorrência já registrada previamente no TMS (ESL). Marcando como sucesso (Idempotência).")
+                baixa.processado_tms = True
+                baixa.integrado_tms = True
+                baixa.data_integracao = timezone.now()
+                baixa.log_erro_tms = "Sucesso: Baixa de Minuta já registrada previamente no TMS (ESL Cloud)."
+                baixa.save()
+                
+                try:
+                    from operacional.services import resolver_erros_automaticamente
+                    resolver_erros_automaticamente(nf.manifesto.numero_manifesto, nf.numero_nota, nf.manifesto.filial)
+                except Exception as auto_e:
+                    logger.error(f"Erro auto-resolucao minuta ja_existe: {auto_e}")
+                
+                return f"Baixa de Minuta {nf.numero_nota} integrada (Já existia no TMS)."
+
             msg_falha = f"Erro na integração da Minuta: {str(e)}{payload_str}"
-            if hasattr(e, 'response') and e.response is not None:
-                msg_falha = f"Erro na integração da Minuta ({e.response.status_code}): {e.response.text}{payload_str}"
+            if status_code:
+                msg_falha = f"Erro na integração da Minuta ({status_code}): {response_text}{payload_str}"
             baixa.log_erro_tms = msg_falha[:500]
             baixa.integrado_tms = False
             baixa.save()
