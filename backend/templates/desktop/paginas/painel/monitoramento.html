@@ -287,7 +287,7 @@
     </div>
 </div>
 
-<!-- Modal Detalhes da NF (abre inline sem nova aba) -->
+<!-- Modal Detalhes da NF (abre limpo sem sobrepor o modal de manifesto) -->
 <div class="modal fade" id="modalDetalhesNotaTorre" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow" style="border-radius: 20px; overflow: hidden; background-color: #fff;">
@@ -297,8 +297,11 @@
                     <!-- Carregado dinamicamente via AJAX -->
                 </div>
             </div>
-            <div class="modal-footer bg-light border-0">
-                <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Fechar</button>
+            <div class="modal-footer bg-light border-0 d-flex justify-content-between">
+                <button type="button" class="btn btn-outline-primary px-3 rounded-pill d-none" id="btnVoltarManifestoTorre" onclick="fecharDetalhesNotaEVoltar()">
+                    <i class="bi bi-arrow-left me-1"></i> Voltar ao Manifesto
+                </button>
+                <button type="button" class="btn btn-secondary px-4 rounded-pill ms-auto" data-bs-dismiss="modal">Fechar</button>
             </div>
         </div>
     </div>
@@ -633,6 +636,7 @@
         // MODAL DE DETALHES / GESTÃO DO MANIFESTO (TORRE LIVE)
         // =====================================================
         let manifestoAbertoDetalhesId = null;
+        let manifestoOrigemId = null;
 
         function abrirDetalhesManifestoTorre(manifestoId) {
             manifestoAbertoDetalhesId = manifestoId.toString();
@@ -687,6 +691,16 @@
         function verDetalhesNF(notaId) {
             if (!notaId) return;
 
+            // Se o modal do manifesto estiver aberto, esconde ele para não sobrepor
+            const modalManEl = document.getElementById('modalDetalhesManifestoTorre');
+            if (modalManEl && modalManEl.classList.contains('show')) {
+                manifestoOrigemId = manifestoAbertoDetalhesId;
+                const modalManInst = bootstrap.Modal.getInstance(modalManEl);
+                if (modalManInst) {
+                    modalManInst.hide();
+                }
+            }
+
             const modalEl = document.getElementById('modalDetalhesNotaTorre');
             const modalConteudo = document.getElementById('conteudoModalNotaTorre');
             const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
@@ -699,6 +713,15 @@
                 </div>
             `;
             modalInstance.show();
+
+            const btnVoltar = document.getElementById('btnVoltarManifestoTorre');
+            if (btnVoltar) {
+                if (manifestoOrigemId) {
+                    btnVoltar.classList.remove('d-none');
+                } else {
+                    btnVoltar.classList.add('d-none');
+                }
+            }
 
             fetch(`/api/manifesto/detalhes-nota/${notaId}/`)
                 .then(response => {
@@ -719,11 +742,34 @@
                 });
         }
 
+        function fecharDetalhesNotaEVoltar() {
+            const modalEl = document.getElementById('modalDetalhesNotaTorre');
+            const modalInst = bootstrap.Modal.getInstance(modalEl);
+            if (modalInst) {
+                modalInst.hide();
+            }
+        }
+
         document.addEventListener("DOMContentLoaded", function () {
+            const modalNotaEl = document.getElementById('modalDetalhesNotaTorre');
+            if (modalNotaEl) {
+                modalNotaEl.addEventListener('hidden.bs.modal', function () {
+                    if (manifestoOrigemId) {
+                        const idParaReabrir = manifestoOrigemId;
+                        manifestoOrigemId = null;
+                        setTimeout(() => {
+                            abrirDetalhesManifestoTorre(idParaReabrir);
+                        }, 250);
+                    }
+                });
+            }
+
             const modalDetEl = document.getElementById('modalDetalhesManifestoTorre');
             if (modalDetEl) {
                 modalDetEl.addEventListener('hidden.bs.modal', function () {
-                    manifestoAbertoDetalhesId = null;
+                    if (!manifestoOrigemId) {
+                        manifestoAbertoDetalhesId = null;
+                    }
                 });
             }
         });
