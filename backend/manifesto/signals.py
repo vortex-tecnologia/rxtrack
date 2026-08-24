@@ -154,7 +154,8 @@ def notificar_ws_cargas_manifesto(sender, instance, **kwargs):
     def disparar():
         try:
             from manifesto.services import notificar_atualizacao_cargas_fretes
-            notificar_atualizacao_cargas_fretes(instance.filial)
+            filial_efetiva = instance.filial_operacao or instance.filial
+            notificar_atualizacao_cargas_fretes(filial_efetiva)
         except Exception as e:
             print(f"❌ Erro no signal WS Manifesto: {e}")
     transaction.on_commit(disparar)
@@ -166,8 +167,11 @@ def notificar_ws_cargas_notafiscal(sender, instance, **kwargs):
     def disparar():
         try:
             from manifesto.services import notificar_atualizacao_cargas_fretes
-            filial = instance.manifesto.filial if (instance.manifesto and hasattr(instance.manifesto, 'filial')) else None
-            notificar_atualizacao_cargas_fretes(filial)
+            if instance.manifesto:
+                filial_efetiva = getattr(instance.manifesto, 'filial_operacao', None) or getattr(instance.manifesto, 'filial', None)
+            else:
+                filial_efetiva = None
+            notificar_atualizacao_cargas_fretes(filial_efetiva)
         except Exception as e:
             print(f"❌ Erro no signal WS NotaFiscal: {e}")
     transaction.on_commit(disparar)
@@ -179,10 +183,11 @@ def notificar_ws_cargas_baixanf(sender, instance, **kwargs):
     def disparar():
         try:
             from manifesto.services import notificar_atualizacao_cargas_fretes
-            filial = None
+            filial_efetiva = None
             if instance.nota_fiscal and instance.nota_fiscal.manifesto:
-                filial = instance.nota_fiscal.manifesto.filial
-            notificar_atualizacao_cargas_fretes(filial)
+                mft = instance.nota_fiscal.manifesto
+                filial_efetiva = mft.filial_operacao or mft.filial
+            notificar_atualizacao_cargas_fretes(filial_efetiva)
         except Exception as e:
             print(f"❌ Erro no signal WS BaixaNF: {e}")
     transaction.on_commit(disparar)

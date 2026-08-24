@@ -24,8 +24,10 @@ def enviar_painel(manifesto):
     
     from django.utils.text import slugify
     
-    # Define o grupo da filial usando o slug do nome (trata caracteres como acentos/espaços)
-    nome_filial = manifesto.filial.nome if manifesto.filial else "todas"
+    # Usa filial_operacao (base do emissor) com fallback para filial (fiscal)
+    # Isso garante consistência com a view e o template da Torre de Controle
+    filial_efetiva = manifesto.filial_operacao or manifesto.filial
+    nome_filial = filial_efetiva.nome if filial_efetiva else "todas"
     grupo_filial = f"painel_monitoramento_{slugify(nome_filial)}"
     
     from manifesto.models import BaixaNF
@@ -34,16 +36,23 @@ def enviar_painel(manifesto):
         solicitar_nova_foto=True
     ).count()
 
-    filial_id = str(manifesto.filial.id) if manifesto.filial else ""
-    filial_nome = manifesto.filial.nome if manifesto.filial else "Sem Filial"
+    filial_id = str(filial_efetiva.id) if filial_efetiva else ""
+    filial_nome = filial_efetiva.nome if filial_efetiva else "Sem Filial"
     filial_slug = slugify(nome_filial)
 
     # Contagem exata em tempo real dos manifestos em transporte desta filial
+    # Usa a mesma lógica da view: filial_operacao com fallback para filial
     from manifesto.models import Manifesto
-    if manifesto.filial:
-        total_ativos_filial = Manifesto.objects.filter(filial=manifesto.filial, status='EM_TRANSPORTE').count()
+    from django.db.models import Q
+    if filial_efetiva:
+        total_ativos_filial = Manifesto.objects.filter(
+            Q(filial_operacao=filial_efetiva) | (Q(filial_operacao__isnull=True) & Q(filial=filial_efetiva)),
+            status='EM_TRANSPORTE'
+        ).count()
     else:
-        total_ativos_filial = Manifesto.objects.filter(filial__isnull=True, status='EM_TRANSPORTE').count()
+        total_ativos_filial = Manifesto.objects.filter(
+            filial_operacao__isnull=True, filial__isnull=True, status='EM_TRANSPORTE'
+        ).count()
 
     payload = {
         "type": "atualizar_painel",
@@ -86,7 +95,7 @@ def enviar_painel(manifesto):
 
     # ⚡ Transmite em tempo real para o SAC Live também!
     try:
-        notificar_atualizacao_cargas_fretes(manifesto.filial if manifesto else None)
+        notificar_atualizacao_cargas_fretes(filial_efetiva if manifesto else None)
     except Exception as sac_err:
         print(f"❌ Erro ao notificar SAC no enviar_painel: {sac_err}")
 
