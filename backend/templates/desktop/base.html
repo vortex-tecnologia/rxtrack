@@ -968,7 +968,217 @@
             }
         });
     };
+
+    // Funções globais para Deletar Ocorrência (utilizadas em detalhes_nota_modal.html em todas as telas)
+    window.confirmarDeletarOcorrencia = function(notaId, numeroNfe, descricaoOcorrencia, jaIntegrado) {
+        const modalEl = document.getElementById('modalDeletarOcorrencia');
+        if (!modalEl) {
+            console.error('Modal modalDeletarOcorrencia não encontrado.');
+            return;
+        }
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        
+        // Reseta estado do modal
+        const stepConf = document.getElementById('deloc-confirmacao');
+        const stepLoad = document.getElementById('deloc-loading');
+        const stepRes = document.getElementById('deloc-resultado');
+        const motivoEl = document.getElementById('delocMotivo');
+        const feedbackEl = document.getElementById('delocFeedback');
+
+        if (stepConf) stepConf.style.display = 'block';
+        if (stepLoad) stepLoad.style.display = 'none';
+        if (stepRes) stepRes.style.display = 'none';
+        if (motivoEl) motivoEl.value = '';
+        if (feedbackEl) feedbackEl.classList.add('d-none');
+        
+        // Preenche dados
+        const nfeEl = document.getElementById('delocNumeroNfe');
+        const descEl = document.getElementById('delocDescricaoOc');
+        if (nfeEl) nfeEl.innerText = `NF: ${numeroNfe}`;
+        if (descEl) descEl.innerText = descricaoOcorrencia || 'Sem descrição';
+        
+        // Mostra aviso se já integrado no TMS
+        const avisoTms = document.getElementById('delocAvisoTms');
+        if (avisoTms) {
+            if (jaIntegrado) {
+                avisoTms.classList.remove('d-none');
+            } else {
+                avisoTms.classList.add('d-none');
+            }
+        }
+        
+        // Configura ação do botão confirmar
+        const btnConf = document.getElementById('btnConfirmarDeletarOcorrencia');
+        if (btnConf) {
+            btnConf.onclick = function() {
+                window.executarDeletarOcorrencia(notaId);
+            };
+        }
+        
+        modal.show();
+    };
+
+    window.executarDeletarOcorrencia = function(notaId) {
+        const motivoEl = document.getElementById('delocMotivo');
+        const motivo = motivoEl ? motivoEl.value.trim() : '';
+        const feedback = document.getElementById('delocFeedback');
+        
+        // Validação do motivo
+        if (!motivo || motivo.length < 5) {
+            if (feedback) {
+                feedback.innerText = 'O motivo é obrigatório e deve ter pelo menos 5 caracteres.';
+                feedback.classList.remove('d-none');
+            }
+            if (motivoEl) motivoEl.focus();
+            return;
+        }
+        
+        if (feedback) feedback.classList.add('d-none');
+        
+        const stepConf = document.getElementById('deloc-confirmacao');
+        const stepLoad = document.getElementById('deloc-loading');
+        const stepRes = document.getElementById('deloc-resultado');
+        
+        if (stepConf) stepConf.style.display = 'none';
+        if (stepLoad) stepLoad.style.display = 'block';
+
+        function getCookieVal(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookieVal('csrftoken') || '';
+        
+        fetch(`/api/nota-fiscal/deletar-ocorrencia/${notaId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ motivo: motivo })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (stepLoad) stepLoad.style.display = 'none';
+            if (stepRes) stepRes.style.display = 'block';
+            
+            const iconDiv = document.getElementById('deloc-icon');
+            const titulo = document.getElementById('deloc-titulo');
+            const mensagem = document.getElementById('deloc-mensagem');
+            
+            if (data.success) {
+                if (iconDiv) iconDiv.innerHTML = '<i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>';
+                if (titulo) {
+                    titulo.innerText = 'Ocorrência Excluída!';
+                    titulo.className = 'mt-3 fw-bold text-success';
+                }
+                if (mensagem) mensagem.innerText = data.message;
+                // Recarrega a página para refletir as mudanças
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                if (iconDiv) iconDiv.innerHTML = '<i class="bi bi-x-circle-fill text-danger" style="font-size: 3rem;"></i>';
+                if (titulo) {
+                    titulo.innerText = 'Não foi possível excluir';
+                    titulo.className = 'mt-3 fw-bold text-danger';
+                }
+                if (mensagem) mensagem.innerText = data.message;
+            }
+        })
+        .catch(error => {
+            if (stepLoad) stepLoad.style.display = 'none';
+            if (stepRes) stepRes.style.display = 'block';
+            const iconDiv = document.getElementById('deloc-icon');
+            const titulo = document.getElementById('deloc-titulo');
+            const mensagem = document.getElementById('deloc-mensagem');
+            if (iconDiv) iconDiv.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning" style="font-size: 3rem;"></i>';
+            if (titulo) titulo.innerText = 'Erro de Conexão';
+            if (mensagem) mensagem.innerText = 'Não foi possível contatar o servidor.';
+        });
+    };
 </script>
+
+<!-- Modal Global para Confirmar Exclusão de Ocorrência (utilizado em detalhes_nota_modal.html em todas as telas) -->
+<div class="modal fade" id="modalDeletarOcorrencia" tabindex="-1" data-bs-backdrop="static" style="z-index: 1070;">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-exclamation-triangle-fill me-2"></i>Excluir Ocorrência</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4" id="corpoModalDeletarOcorrencia">
+                <!-- Step 1: Confirmação -->
+                <div id="deloc-confirmacao">
+                    <div class="text-center mb-3">
+                        <i class="bi bi-trash text-danger" style="font-size: 3rem;"></i>
+                        <h5 class="mt-2 fw-bold">Deletar Ocorrência Registrada?</h5>
+                    </div>
+
+                    <div class="bg-light p-3 rounded border mb-3">
+                        <div class="row g-2 small">
+                            <div class="col-6">
+                                <span class="text-muted d-block" style="font-size: 0.65rem;">NF-E</span>
+                                <strong class="text-danger" id="delocNumeroNfe"></strong>
+                            </div>
+                            <div class="col-6">
+                                <span class="text-muted d-block" style="font-size: 0.65rem;">Ocorrência</span>
+                                <strong id="delocDescricaoOc"></strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="delocAvisoTms" class="alert alert-warning py-2 small d-none">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        <strong>Atenção:</strong> Esta ocorrência já foi transmitida ao TMS ESL. A exclusão reverterá apenas no nosso sistema.
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-danger">
+                            <i class="bi bi-pencil-square me-1"></i>Motivo da Exclusão <span class="text-danger">*</span>
+                        </label>
+                        <textarea id="delocMotivo" class="form-control" rows="3" 
+                                  placeholder="Informe o motivo da exclusão desta ocorrência (mínimo 5 caracteres)..."
+                                  required minlength="5"></textarea>
+                        <div class="form-text small">Este registro ficará no log de auditoria do sistema.</div>
+                    </div>
+
+                    <div id="delocFeedback" class="alert alert-danger py-2 small d-none"></div>
+
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-secondary flex-fill py-2 fw-bold" data-bs-dismiss="modal">CANCELAR</button>
+                        <button class="btn btn-danger flex-fill py-2 fw-bold" id="btnConfirmarDeletarOcorrencia">
+                            <i class="bi bi-trash me-1"></i>CONFIRMAR EXCLUSÃO
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 2: Loading -->
+                <div id="deloc-loading" style="display: none;" class="text-center py-4">
+                    <div class="spinner-border text-danger" style="width: 3rem; height: 3rem;" role="status"></div>
+                    <h5 class="mt-4 fw-bold text-danger">Excluindo ocorrência...</h5>
+                    <p class="text-muted">Aguarde enquanto o registro é removido e a nota é revertida.</p>
+                </div>
+
+                <!-- Step 3: Resultado -->
+                <div id="deloc-resultado" style="display: none;" class="text-center py-4">
+                    <div id="deloc-icon"></div>
+                    <h5 class="mt-3 fw-bold" id="deloc-titulo"></h5>
+                    <p class="text-muted" id="deloc-mensagem"></p>
+                    <button class="btn btn-dark px-4" data-bs-dismiss="modal">FECHAR</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
     {% block extra_js %}{% endblock %}
 </body>
