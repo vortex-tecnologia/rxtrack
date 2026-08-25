@@ -195,7 +195,10 @@ from manifesto.models import Manifesto, NotaFiscal
 
 def api_rastreio_manifesto(request, manifesto_id):
     # Busca o manifesto pelo número operacional (ex: 58134)
-    manifesto = get_object_or_404(Manifesto, numero_manifesto=manifesto_id)
+    manifesto = get_object_or_404(
+        Manifesto.objects.select_related('filial', 'filial_operacao', 'motorista', 'motorista__filial'),
+        numero_manifesto=manifesto_id
+    )
     
     # Buscamos as notas do manifesto que possuem registro de baixa com GPS
     # Usamos baixa_info (related_name) para chegar na latitude/longitude
@@ -223,8 +226,25 @@ def api_rastreio_manifesto(request, manifesto_id):
     # Ordenar os pontos pelo horário da baixa para o rastro fazer sentido
     pontos = sorted(pontos, key=lambda x: x['horario'])
 
-    # Ponto de partida: usa filial de operação (com fallback para filial fiscal, depois hardcoded)
-    filial_base = manifesto.filial_operacao or manifesto.filial
+    # Ponto de partida: usa filial_operacao (base do emissor/criador do manifesto)
+    # Se filial_operacao não tiver lat/lng cadastrado, usa filial do motorista como fallback
+    filial_base = manifesto.filial_operacao
+    fallback_usado = 'filial_operacao'
+    
+    if not filial_base or not filial_base.latitude or not filial_base.longitude:
+        # Fallback: filial do motorista (quem criou o manifesto)
+        if manifesto.motorista and manifesto.motorista.filial:
+            mot_filial = manifesto.motorista.filial
+            if mot_filial.latitude and mot_filial.longitude:
+                filial_base = mot_filial
+                fallback_usado = 'motorista.filial'
+        
+        if not filial_base or not filial_base.latitude or not filial_base.longitude:
+            # Último fallback: filial fiscal
+            if manifesto.filial and manifesto.filial.latitude and manifesto.filial.longitude:
+                filial_base = manifesto.filial
+                fallback_usado = 'filial_fiscal'
+
     dados_filial = {
         'nome': filial_base.nome if filial_base else "Base",
         'lat': filial_base.latitude if filial_base and filial_base.latitude else -22.7873755,
@@ -242,9 +262,21 @@ def api_rastreio_manifesto(request, manifesto_id):
             'last_seen': localtime(manifesto.ultimo_acesso).strftime('%H:%M') if manifesto.ultimo_acesso else None
         }
 
+    # DEBUG TEMPORÁRIO — remover depois de validar
+    fo = manifesto.filial_operacao
+    mf = manifesto.motorista.filial if manifesto.motorista and hasattr(manifesto.motorista, 'filial') else None
+    ff = manifesto.filial
+    debug_info = {
+        'fallback_usado': fallback_usado,
+        'filial_operacao': f"{fo.nome} (id={fo.id}, lat={fo.latitude}, lng={fo.longitude})" if fo else None,
+        'motorista_filial': f"{mf.nome} (id={mf.id}, lat={mf.latitude}, lng={mf.longitude})" if mf else None,
+        'filial_fiscal': f"{ff.nome} (id={ff.id}, lat={ff.latitude}, lng={ff.longitude})" if ff else None,
+    }
+
     return JsonResponse({
         'filial': dados_filial,
         'pontos': pontos,
         'motorista': manifesto.motorista.nome_completo if manifesto.motorista else "Motorista não identificado",
-        'posicao_atual': posicao_atual
+        'posicao_atual': posicao_atual,
+        '_debug': debug_info,
     })
