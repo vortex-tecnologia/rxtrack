@@ -516,10 +516,8 @@
                     mapaEntrega = null;
                 }
 
-                const latFilial = -22.7873755;
-                const lngFilial = -43.2886202;
-
-                mapaEntrega = L.map('mapaRastreio').setView([latFilial, lngFilial], 13);
+                // Inicializa o mapa com centro temporário (será ajustado pela API)
+                mapaEntrega = L.map('mapaRastreio').setView([-22.9, -43.2], 8);
 
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
                     attribution: '&copy; CARTO',
@@ -558,9 +556,17 @@
                         return res.json();
                     })
                     .then(data => {
+                        // Usa lat/lng da filial retornada pela API (filial_operacao com fallback)
+                        const latFilial = data.filial ? data.filial.lat : -22.7873755;
+                        const lngFilial = data.filial ? data.filial.lng : -43.2886202;
+                        const nomeFilial = data.filial ? data.filial.nome : 'Base';
+
+                        // Centraliza o mapa na filial correta
+                        mapaEntrega.setView([latFilial, lngFilial], 13);
+
                         let pontosParaRota = [`${lngFilial},${latFilial}`];
 
-                        L.marker([latFilial, lngFilial]).bindPopup("<b>Filial RDexpresso</b>").addTo(mapaEntrega);
+                        L.marker([latFilial, lngFilial]).bindPopup(`<b>${nomeFilial}</b>`).addTo(mapaEntrega);
 
                         // Plotar pontos de entrega (notas baixadas)
                         if (data.pontos && data.pontos.length > 0) {
@@ -592,7 +598,7 @@
                             // Centraliza o mapa no caminhão
                             mapaEntrega.setView(caminhaoLatLng, 15);
                         } else {
-                            // Sem posição GPS conhecida — mostra mensagem no centro
+                            // Sem posição GPS conhecida — mostra mensagem no centro da filial
                             L.popup()
                                 .setLatLng([latFilial, lngFilial])
                                 .setContent('<b>Aguardando primeiro sinal de GPS...</b>')
