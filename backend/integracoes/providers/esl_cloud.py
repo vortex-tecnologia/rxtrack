@@ -555,14 +555,21 @@ class ESLCloudAdapter(BaseTMSAdapter):
                             'chave': chave,
                             'numero': numero_doc,
                             'freight_id': freight_id,
-                            'tipo': GATILHOS.get(codigo_oc, 'ENTREGA'),
-                            'data_oc': data_oc
+                            'tipo': GATILHOS.get(codigo_oc, None),  # None se não for um gatilho
+                            'data_oc_tipo': data_oc if codigo_oc in GATILHOS else ''  # data do gatilho que definiu o tipo
                         }
-                    elif codigo_oc in GATILHOS:
-                        data_anterior = notas_unicas_dict[id_unico].get('data_oc', '')
-                        if not data_anterior or data_oc >= data_anterior:
-                            notas_unicas_dict[id_unico]['tipo'] = GATILHOS.get(codigo_oc)
-                            notas_unicas_dict[id_unico]['data_oc'] = data_oc
+                    else:
+                        # Atualiza freight_id se veio nesta ocorrência e estava vazio
+                        if freight_id and not notas_unicas_dict[id_unico].get('freight_id'):
+                            notas_unicas_dict[id_unico]['freight_id'] = freight_id
+                        
+                        # Só usa ocorrências do GATILHOS para definir tipo_operacao
+                        # Sempre pega a ocorrência GATILHO mais recente por data
+                        if codigo_oc in GATILHOS:
+                            data_tipo_anterior = notas_unicas_dict[id_unico].get('data_oc_tipo', '')
+                            if not data_tipo_anterior or data_oc >= data_tipo_anterior:
+                                notas_unicas_dict[id_unico]['tipo'] = GATILHOS[codigo_oc]
+                                notas_unicas_dict[id_unico]['data_oc_tipo'] = data_oc
 
                 if data_n.get("paging", {}).get("next_id") is None: break
                 start_cursor = data_n["paging"]["next_id"]
@@ -577,7 +584,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 try:
                     chave = dados_base['chave']
                     numero = dados_base['numero']
-                    tipo_operacao = dados_base['tipo']
+                    tipo_operacao = dados_base['tipo'] or 'ENTREGA'  # Default ENTREGA se nenhum gatilho definiu
                     freight_id = dados_base['freight_id']
 
                     # 1. VERIFICA SE A NOTA JÁ EXISTE NO MANIFESTO
