@@ -529,10 +529,9 @@
                 // Inicializa o mapa com centro temporário (será ajustado pela API)
                 mapaEntrega = L.map('mapaRastreio').setView([-22.9, -43.2], 8);
 
-                L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                    attribution: '&copy; CARTO',
-                    subdomains: 'abcd',
-                    maxZoom: 20
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                    maxZoom: 19
                 }).addTo(mapaEntrega);
 
                 setTimeout(() => { mapaEntrega.invalidateSize(); }, 200);

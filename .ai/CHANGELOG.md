@@ -19,6 +19,7 @@
 ### Alterado
 - **`manifesto/signals.py`**: Removido signal genérico `manifesto_atualizado` que disparava `enviar_painel()` em TODA atualização do modelo Manifesto. Causava broadcasts desnecessários a cada heartbeat GPS (30s × N motoristas). Todos os cenários reais permanecem cobertos por signals específicos e chamadas explícitas.
 - **Torre de Controle Live (`monitoramento.html`, `ws.js`, `services.py`, `views_painel.py`, `detalhes_manifesto_modal.html`)**: Adicionada exibição do ícone de veículo (caminhão/carro) e placa ao lado do número do manifesto (entre o `#` e a categoria do motorista) tanto no carregamento inicial quanto via WebSocket real-time.
+- **Mapas de Rastreio (`monitoramento.html`, `manifesto.html`)**: Substituído o provedor de tiles CartoDB (que passou a exigir API key e exibia marca d'água "API KEY REQUIRED") pelo provedor oficial gratuito e sem marca d'água **OpenStreetMap** (`tile.openstreetmap.org`).
 
 ### Análise
 - Auditoria completa da arquitetura do projeto (Etapas 1-12)
