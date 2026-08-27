@@ -24,11 +24,14 @@ def manifesto_criado(sender, instance, created, **kwargs):
             lambda: enviar_painel(instance)
         )
 
-@receiver(post_save, sender=Manifesto)
-def manifesto_atualizado(sender, instance, **kwargs):
-    transaction.on_commit(
-        lambda: enviar_painel(instance)
-    )
+# REMOVIDO: Signal genérico que disparava enviar_painel em TODA atualização do Manifesto.
+# Isso causava broadcasts desnecessários a cada heartbeat do motorista (ultimo_acesso, bateria, etc).
+# Todos os casos reais já estão cobertos:
+#   - Criação: signal manifesto_criado (acima)
+#   - Baixa: signal atualizar_painel_monitoramento (BaixaNF)
+#   - Nova NF: signal atualizar_painel_quando_criar_nota (NotaFiscal)
+#   - Finalização: chamada explícita em views.py
+# A bateria e último acesso continuam atualizando via WebSocket heartbeat (status_motorista).
 
 @receiver(post_save, sender=NotaFiscal)
 def atualizar_painel_quando_criar_nota(sender, instance, created, **kwargs):
