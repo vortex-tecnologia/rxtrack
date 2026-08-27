@@ -65,6 +65,8 @@ def enviar_painel(manifesto):
             "baixadas": baixadas,
             "porcentagem": porcentagem,
             "total_ilegivel": total_ilegivel,
+            "placa_veiculo": manifesto.veiculo.placa if (manifesto.veiculo and manifesto.veiculo.placa) else None,
+            "tipo_veiculo": manifesto.veiculo.tipo if (manifesto.veiculo and manifesto.veiculo.tipo) else None,
             "motorista_nome": manifesto.motorista.nome_completo if manifesto.motorista else "Desconhecido",
             "motorista_categoria": manifesto.motorista.categoria if (manifesto.motorista and manifesto.motorista.categoria) else "EMPRESA",
             "motorista_categoria_display": manifesto.motorista.get_categoria_display() if (manifesto.motorista and hasattr(manifesto.motorista, 'get_categoria_display')) else "Empresa",

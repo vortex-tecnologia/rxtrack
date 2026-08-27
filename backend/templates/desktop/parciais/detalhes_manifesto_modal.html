@@ -16,7 +16,19 @@
                         </div>
                         <div class="ms-3">
                             <p class="text-muted small mb-0">Motorista Responsável</p>
-                            <h6 class="mb-0 fw-bold">{{ manifesto.motorista.nome_completo }}</h6>
+                            <h6 class="mb-0 fw-bold d-flex align-items-center gap-2">
+                                {{ manifesto.motorista.nome_completo }}
+                                {% if manifesto.veiculo and manifesto.veiculo.placa %}
+                                    <span class="badge bg-white text-dark border px-2 py-1" style="font-size: 0.7rem;" title="Veículo: {{ manifesto.veiculo.placa }}{% if manifesto.veiculo.tipo %} ({{ manifesto.veiculo.get_tipo_display }}){% endif %}">
+                                        {% if manifesto.veiculo.tipo in 'TRUCK,CARRETA,CAVALO' %}
+                                            <i class="fas fa-truck text-secondary me-1"></i>
+                                        {% else %}
+                                            <i class="fas fa-car text-secondary me-1"></i>
+                                        {% endif %}
+                                        {{ manifesto.veiculo.placa }}
+                                    </span>
+                                {% endif %}
+                            </h6>
                         </div>
                     </div>
                 </div>

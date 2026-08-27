@@ -299,6 +299,12 @@ function conectarWebSocket() {
                                     </h6>
                                     <div class="d-flex flex-wrap align-items-center gap-1 mt-0">
                                         <small class="text-muted text-nowrap" style="font-size: 0.78rem;">#${d.manifesto_id}</small>
+                                        ${d.placa_veiculo ? `
+                                            <span class="badge bg-light text-dark border px-1 py-0 d-inline-flex align-items-center gap-1" style="font-size: 0.62rem; font-weight: 600; border-radius: 4px;" title="Veículo: ${d.placa_veiculo}">
+                                                <i class="fas ${['TRUCK', 'CARRETA', 'CAVALO'].includes(d.tipo_veiculo) ? 'fa-truck' : 'fa-car'} text-secondary" style="font-size: 0.6rem;"></i>
+                                                ${d.placa_veiculo}
+                                            </span>
+                                        ` : ''}
                                         ${d.motorista_categoria === 'AGREGADO' ?
                 `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-1 py-0" style="font-size: 0.6rem; font-weight: 700; border-radius: 4px;">AGREGADO</span>` :
                 d.motorista_categoria === 'DEDICADO' ?

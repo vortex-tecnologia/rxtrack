@@ -139,6 +139,16 @@
                                 </h6>
                                 <div class="d-flex flex-wrap align-items-center gap-1 mt-0">
                                     <small class="text-muted text-nowrap" style="font-size: 0.78rem;">#{{ m.numero_manifesto }}</small>
+                                    {% if m.veiculo and m.veiculo.placa %}
+                                        <span class="badge bg-light text-dark border px-1 py-0 d-inline-flex align-items-center gap-1" style="font-size: 0.62rem; font-weight: 600; border-radius: 4px;" title="Veículo: {{ m.veiculo.placa }}{% if m.veiculo.tipo %} ({{ m.veiculo.get_tipo_display }}){% endif %}">
+                                            {% if m.veiculo.tipo in 'TRUCK,CARRETA,CAVALO' %}
+                                                <i class="fas fa-truck text-secondary" style="font-size: 0.6rem;"></i>
+                                            {% else %}
+                                                <i class="fas fa-car text-secondary" style="font-size: 0.6rem;"></i>
+                                            {% endif %}
+                                            {{ m.veiculo.placa }}
+                                        </span>
+                                    {% endif %}
                                     {% if m.motorista.categoria == 'AGREGADO' %}
                                         <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-1 py-0" style="font-size: 0.6rem; font-weight: 700; border-radius: 4px;">
                                             AGREGADO
