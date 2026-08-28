@@ -109,6 +109,7 @@
         {% for m in manifestos %}
         <div class="col-12 col-md-6 col-lg-4 col-xl-3 manifesto-card-item" 
              id="card-mft-{{ m.numero_manifesto }}"
+             data-status="{{ m.status }}"
              data-filial-id="{% firstof m.filial_operacao_id m.filial_id '' %}"
              data-filial-nome="{% if m.filial_operacao %}{{ m.filial_operacao.nome }}{% elif m.filial %}{{ m.filial.nome }}{% endif %}"
              style="{% if filial_ativa_id %}{% with efetiva_id=m.filial_operacao_id|default:m.filial_id %}{% if efetiva_id != filial_ativa_id %}display: none;{% endif %}{% endwith %}{% endif %}">
@@ -181,6 +182,7 @@
                         </div>
 
                         <div id="sinal-torre-{{ m.numero_manifesto }}" class="last-seen-torre"
+                            data-status="{{ m.status }}"
                             data-iso="{% if m.ultimo_acesso %}{{ m.ultimo_acesso|date:'c' }}{% endif %}"
                             data-criacao="{{ m.data_criacao|date:'c' }}">
                             <!-- JS will render this -->

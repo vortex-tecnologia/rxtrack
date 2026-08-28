@@ -148,6 +148,13 @@ function conectarWebSocket() {
                 const percentEl = document.getElementById(`percent-${mID}`);
                 if (percentEl) percentEl.innerText = d.porcentagem;
 
+                // Atualiza status do manifesto
+                if (d.status) {
+                    if (cardContainer) cardContainer.setAttribute('data-status', d.status);
+                    const elTorre = document.getElementById(`sinal-torre-${mID}`);
+                    if (elTorre) elTorre.setAttribute('data-status', d.status);
+                }
+
                 // Atualiza a hora do sinal na torre
                 if (d.ultimo_acesso_iso) {
                     const elTorre = document.getElementById(`sinal-torre-${mID}`);
@@ -271,6 +278,7 @@ function conectarWebSocket() {
         const html = `
             <div class="col-12 col-md-6 col-lg-4 col-xl-3 manifesto-card-item" 
                  id="card-mft-${d.manifesto_id}"
+                 data-status="${d.status || 'AGUARDANDO'}"
                  data-filial-id="${d.filial_id || ''}"
                  data-filial-nome="${d.filial_nome || ''}"
                  style="${deveEsconder ? 'display: none;' : ''}">
@@ -328,6 +336,7 @@ function conectarWebSocket() {
                             </div>
 
                             <div id="sinal-torre-${d.manifesto_id}" class="last-seen-torre" 
+                                 data-status="${d.status || 'AGUARDANDO'}"
                                  data-iso="${d.ultimo_acesso_iso || ''}"
                                  data-criacao="${d.data_criacao_iso || ''}">
                                 <!-- JS will render this -->
@@ -540,6 +549,21 @@ function atualizarUltimoSinalTorre() {
             } catch (e) {
                 console.error('Erro na data de criação', e);
             }
+        }
+
+        const statusManifesto = elSinal.getAttribute('data-status') || (card.getAttribute('data-status'));
+        if (statusManifesto === 'AGUARDANDO') {
+            elSinal.innerHTML = `
+                <div style="border: 1px solid #ffc107; background-color: rgba(255, 193, 7, 0.15); border-radius: 20px; padding: 2px 10px; display: inline-block; min-width: 80px; text-align: center;">
+                    <i class="fas fa-hourglass-half" style="color: #b78103; font-size: 9px; vertical-align: middle; margin-right: 4px;"></i>
+                    <span style="color: #856404; font-weight: bold; font-size: 11px;">AGUARDANDO</span>
+                </div>
+                <div style="font-size: 11px; color: #6c757d; margin-top: 4px; text-align: center; font-weight: 500;">
+                    Não iniciado
+                </div>
+            `;
+            card.classList.remove('card-danger-pulse', 'card-warning-pulse');
+            return;
         }
 
         const isoDate = elSinal.getAttribute('data-iso');

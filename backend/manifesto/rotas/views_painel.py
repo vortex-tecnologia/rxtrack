@@ -20,14 +20,14 @@ def painel_monitoramento(request):
         except Exception:
             pass
 
-    # 2. Carregar todas as filiais cadastradas com contagem de manifestos ativos
+    # 2. Carregar todas as filiais cadastradas com contagem de manifestos ativos (em transporte + aguardando)
     #    Usa filial_operacao (base física) com fallback para filial (fiscal)
     filiais_qs = Filial.objects.all().order_by('nome')
     filiais_data = []
     for f in filiais_qs:
         total_ativos = Manifesto.objects.filter(
             Q(filial_operacao=f) | (Q(filial_operacao__isnull=True) & Q(filial=f)),
-            status='EM_TRANSPORTE'
+            status__in=['AGUARDANDO', 'EM_TRANSPORTE']
         ).count()
         filiais_data.append({
             'id': f.id,
@@ -46,14 +46,14 @@ def painel_monitoramento(request):
     elif filiais_data:
         filial_ativa_id = filiais_data[0]['id']
 
-    # 4. Busca todos os manifestos ativos (todas as filiais) para permitir troca instantânea via JS
+    # 4. Busca todos os manifestos ativos (AGUARDANDO e EM_TRANSPORTE) de todas as filiais
     manifestos = Manifesto.objects.filter(
-        status='EM_TRANSPORTE'
+        status__in=['AGUARDANDO', 'EM_TRANSPORTE']
     ).select_related('motorista', 'filial', 'filial_operacao', 'veiculo').annotate(
         total_nfe=Count('notas_fiscais', distinct=True),
         baixadas=Count('notas_fiscais', filter=Q(notas_fiscais__status__in=['BAIXADA', 'OCORRENCIA']), distinct=True),
         total_ilegivel=Count('notas_fiscais__baixa_info', filter=Q(notas_fiscais__baixa_info__solicitar_nova_foto=True), distinct=True)
-    ).order_by('filial', 'motorista__user__first_name')
+    ).order_by('status', 'filial', 'motorista__user__first_name')
 
     context = {
         'manifestos': manifestos,

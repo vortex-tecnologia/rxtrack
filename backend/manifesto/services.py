@@ -13,8 +13,8 @@ def enviar_painel(manifesto):
     porcentagem = int((baixadas / total) * 100) if total else 0
     total_notas = total
 
-    remover = manifesto.status != 'EM_TRANSPORTE'
-    print("WS ENVIANDO -> TOTAL:", total, "BAIXADAS:", baixadas)
+    remover = manifesto.status not in ['AGUARDANDO', 'EM_TRANSPORTE']
+    print("WS ENVIANDO -> TOTAL:", total, "BAIXADAS:", baixadas, "STATUS:", manifesto.status)
 
     from django.utils.timezone import localtime
     
@@ -40,24 +40,24 @@ def enviar_painel(manifesto):
     filial_nome = filial_efetiva.nome if filial_efetiva else "Sem Filial"
     filial_slug = slugify(nome_filial)
 
-    # Contagem exata em tempo real dos manifestos em transporte desta filial
-    # Usa a mesma lógica da view: filial_operacao com fallback para filial
+    # Contagem exata em tempo real dos manifestos ativos (aguardando + em transporte) desta filial
     from manifesto.models import Manifesto
     from django.db.models import Q
     if filial_efetiva:
         total_ativos_filial = Manifesto.objects.filter(
             Q(filial_operacao=filial_efetiva) | (Q(filial_operacao__isnull=True) & Q(filial=filial_efetiva)),
-            status='EM_TRANSPORTE'
+            status__in=['AGUARDANDO', 'EM_TRANSPORTE']
         ).count()
     else:
         total_ativos_filial = Manifesto.objects.filter(
-            filial_operacao__isnull=True, filial__isnull=True, status='EM_TRANSPORTE'
+            filial_operacao__isnull=True, filial__isnull=True, status__in=['AGUARDANDO', 'EM_TRANSPORTE']
         ).count()
 
     payload = {
         "type": "atualizar_painel",
         "data": {
             "manifesto_id": str(manifesto.numero_manifesto),
+            "status": manifesto.status,
             "filial_id": filial_id,
             "filial_nome": filial_nome,
             "filial_slug": filial_slug,
