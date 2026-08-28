@@ -4,6 +4,27 @@ Este documento registra todas as arquiteturas, melhorias de resiliência e corre
 
 ---
 
+## Patch v2.6.0 (28/08/2026) – Webhook TMS JSON Direto, Normalizador Comprovei/SSW, Resolução Inteligente de Manifestos e Controle de Bases
+
+* **Objetivo:** Permitir o recebimento direto de manifestos e rotas enviados pelo Webservice/TMS em formato JSON (Envelope SOAP convertido), mapeando 100% dos dados para o App (Manifesto, Motorista, Filial, Veículo com Placa, Notas Fiscais com CEP e Frete completo), com resolução de ID interno vs Número Visual e controle de ativação gradual de filiais.
+* **Solução e Arquitetura:**
+  - **Módulo Normalizador (`backend/integracoes/normalizers.py`):**
+    - Identifica automaticamente se o payload recebido é do tipo `Envelope.Body.uploadRoute.Rotas.Rota`.
+    - Normaliza a estrutura para o formato interno do RXTrack, extraindo com segurança motorista (CPF/Nome), veículo (placa), filial, paradas (notas fiscais com CEP) e frete (modal, peso, volumes, valor, embarcador).
+  - **Webhook Unificado com Dupla Autenticação (`backend/manifesto/rotas/webhook.py`):**
+    - Valida prioritariamente o header padrão `Authorization: Token ...` (Django Rest Framework) com controle de consumo mensal.
+    - Fallback para validação da credencial no body (`Envelope.Header.Credenciais.Senha`).
+  - **Busca e Resolução Inteligente de Manifestos (`backend/manifesto/tasks.py` & `esl_cloud.py`):**
+    - *Cache Local Prioritário:* Se o manifesto já existir no banco (por número visual ou ID interno TMS), atualiza a rota direto **sem fazer nenhuma requisição HTTP à ESL**.
+    - *Resolução Sob Demanda:* Se o manifesto for novo no sistema, o método `resolver_numero_visual_manifesto` consulta o report de validação da ESL Analytics para descobrir o `sequence_code` (Número Visual real) a partir do ID interno de banco da ESL.
+  - **Controle de Ativação Gradual por Base (`Filial.operacao_ativa`):**
+    - Campo booleano configurável no Django Admin (`/admin/usuarios/filial/`).
+    - Se a filial estiver desmarcada, o webhook descarta a criação de rotas com status `IGNORADO_FILIAL_INATIVA`, evitando poluição de dados nas bases que ainda não utilizam o app.
+  - **Limpeza Automática de Fila (> 48h):**
+    - Task agendada Celery Beat (`limpar_manifestos_antigos_aguardando_task`) que roda diariamente à 01:00 AM cancelando rotas que ficaram mais de 48h com status `AGUARDANDO`.
+
+---
+
 ## Patch v2.5.0 (17/08/2026) – Validação Instantânea V1 de Qualidade de Canhotos no App (PWA & APK)
 * **Objetivo:** Filtrar antecipadamente fotos borradas, escuras ou ilegíveis de comprovantes de entrega diretamente no dispositivo móvel do motorista, antes da confirmação de baixa e do envio ao backend/TMS.
 * **Solução e Arquitetura:**

@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-08-28
+
+### Criado
+- **`backend/integracoes/normalizers.py`**: Módulo normalizador para detectar e converter payloads do TMS no formato Envelope SOAP JSON (`Envelope.Body.uploadRoute.Rotas.Rota`) para o formato interno do RXTrack. Extrai Manifesto, Motorista, Filial, Veículo (Placa), Notas Fiscais (com CEP) e dados completos de Frete (Modal, Peso, Volumes, Valor, Embarcador).
+- **`backend/usuarios/migrations/0025_filial_operacao_ativa.py`**: Migration adicionando campo `operacao_ativa` no model `Filial`.
+
+### Alterado
+- **`backend/manifesto/rotas/webhook.py`**: Webhook adaptado para suportar auto-detecção de formato de payload (Envelope vs Plano) e aceitar autenticação via Header DRF Token (`Authorization: Token ...`) ou Credenciais no payload.
+- **`backend/manifesto/tasks.py`**:
+  - `processar_webhook_manifesto_task`:
+    - Adicionado suporte a cadastro/vínculo automático de `Veiculo` (placa).
+    - Adicionado salvamento de `cep` na `NotaFiscal` e disparo de geocodificação automática (`enriquecer_geolocalizacao_nota_task`).
+    - **Busca Inteligente**: Se o manifesto já existir no banco (por `numero_manifesto` visual ou `manifesto_id_tms`), atualiza a rota direto sem bater na ESL. Se for novo, consulta a ESL Analytics para resolver o ID interno (`id`) para o Número Visual (`sequence_code`).
+    - **Trava de Base**: Ignora manifestos de filiais com `operacao_ativa=False` com log `IGNORADO_FILIAL_INATIVA`.
+  - `limpar_manifestos_antigos_aguardando_task`: Task periódica (Celery Beat diário à 01:00 AM) para cancelar rotas em `AGUARDANDO` há mais de 48h.
+- **`backend/integracoes/providers/esl_cloud.py`**: Adicionado método `resolver_numero_visual_manifesto(id_tms)` que consulta o report de validação da ESL para obter `sequence_code` pelo `id` de banco.
+- **`backend/usuarios/models.py` & `admin.py`**: Adicionado campo e filtro editável `operacao_ativa` na `Filial` para controle de ativação gradual de bases no app.
+- **`backend/core/settings.py`**: Adicionado `TMS_WEBHOOK_SECRET` e agendamento da task `limpar-manifestos-antigos-aguardando`.
+
+---
+
 ## 2026-08-27
 
 ### Criado

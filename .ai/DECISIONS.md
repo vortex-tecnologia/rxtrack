@@ -64,3 +64,22 @@
 **Decisão**: Remover signal genérico `manifesto_atualizado` que disparava `enviar_painel()` em TODA atualização do Manifesto.  
 **Motivo**: Cada heartbeat GPS (30s × N motoristas) disparava um broadcast desnecessário para todos os clientes da Torre de Controle. Todos os casos reais já são cobertos por signals específicos (BaixaNF, criação, NotaFiscal) e chamadas explícitas (finalização).  
 **Impacto**: Redução significativa de broadcasts no Redis/Channels. Sem perda de funcionalidade (bateria e último acesso já atualizam via heartbeat WS direto).
+
+---
+
+## DEC-008
+
+**Data**: 2026-08-28  
+**Decisão**: Criar módulo de normalização (`integracoes/normalizers.py`) para processar payloads do TMS no formato Envelope SOAP JSON.  
+**Motivo**: O TMS/Webservice de terceiros envia a estrutura Comprovei serializada em JSON (`Envelope -> Body -> uploadRoute -> Rotas`). Em vez de criar endpoints separados e fragmentar o sistema, o endpoint unificado `/api/webhook/tms/` detecta o formato e normaliza internamente.  
+**Impacto**: Mantém compatibilidade com payloads existentes e aceita o padrão Comprovei/SSW sem quebrar integrações anteriores.
+
+---
+
+## DEC-009
+
+**Data**: 2026-08-28  
+**Decisão**: Cache local prioritário com resolução sob demanda de ID interno para Número Visual via ESL Analytics.  
+**Motivo**: O TMS envia o `id` interno de banco da ESL (`6765484`) e não o número visual (`sequence_code`). Para evitar chamadas redundantes à API da ESL a cada atualização de rota via webhook, o sistema primeiro busca no banco local por `numero_manifesto` ou `manifesto_id_tms`. Somente se o manifesto for novo no sistema é feita a consulta na ESL.  
+**Impacto**: Economia massiva de requisições à ESL e atualizações de rotas em tempo real no app.
+
