@@ -375,14 +375,17 @@ def processar_webhook_manifesto_task(self, event_id):
                     else:
                         num_coleta = str(id_tms) if id_tms else None
 
-                filtros_busca = {'manifesto': manifesto_obj}
-                if id_tms:
-                    filtros_busca['freight_id_tms'] = str(id_tms)
-                elif chave_nfe:
-                    filtros_busca['chave_acesso'] = chave_nfe
-                else:
-                    filtros_busca['numero_nota'] = numero_item
-                    filtros_busca['tipo_operacao'] = tipo_item
+                # 🔍 BUSCA INTELIGENTE DA NOTA NO MANIFESTO:
+                # 1º: Pelo número da nota (garante match perfeito com notas puxadas manualmente)
+                # 2º: Pela chave de acesso (se informada)
+                # 3º: Pelo ID da parada no TMS (freight_id_tms)
+                nota_obj = None
+                if numero_item:
+                    nota_obj = NotaFiscal.objects.filter(manifesto=manifesto_obj, numero_nota=numero_item).first()
+                if not nota_obj and chave_nfe:
+                    nota_obj = NotaFiscal.objects.filter(manifesto=manifesto_obj, chave_acesso=chave_nfe).first()
+                if not nota_obj and id_tms:
+                    nota_obj = NotaFiscal.objects.filter(manifesto=manifesto_obj, freight_id_tms=str(id_tms)).first()
 
                 frete_obj = None
                 if id_tms:
@@ -407,25 +410,53 @@ def processar_webhook_manifesto_task(self, event_id):
                         }
                     )
 
-                # CEP do destinatário (Novo: antes não era salvo)
+                # CEP do destinatário
                 cep_dest = str(dest.get('cep', '')).strip().replace('-', '') if dest.get('cep') else None
 
-                nota_obj, created_nota = NotaFiscal.objects.update_or_create(
-                    **filtros_busca,
-                    defaults={
-                        'destinatario': str(dest.get('nome', 'NÃO INFORMADO')).upper(),
-                        'endereco_entrega': endereco,
-                        'tipo_operacao': tipo_item,
-                        'freight_id_tms': str(id_tms) if id_tms else None,
-                        'numero_nota': numero_item,
-                        'chave_acesso': chave_nfe,
-                        'numero_coleta': num_coleta,
-                        'numero_cte': normalizar_valor(item.get('numero_cte')),
-                        'chave_cte': chave_cte,
-                        'frete': frete_obj,
-                        'cep': cep_dest,
-                    }
-                )
+                if nota_obj:
+                    # ✅ NOTA JÁ EXISTE NO MANIFESTO: APENAS COMPLETA DADOS FALTANTES
+                    # NUNCA sobrescreve o status de notas que já foram entregues (BAIXADA) ou com OCORRÊNCIA!
+                    campos_update = []
+                    if id_tms and nota_obj.freight_id_tms != str(id_tms):
+                        nota_obj.freight_id_tms = str(id_tms)
+                        campos_update.append('freight_id_tms')
+                    if chave_nfe and not nota_obj.chave_acesso:
+                        nota_obj.chave_acesso = chave_nfe
+                        campos_update.append('chave_acesso')
+                    if cep_dest and not nota_obj.cep:
+                        nota_obj.cep = cep_dest
+                        campos_update.append('cep')
+                    if frete_obj and not nota_obj.frete:
+                        nota_obj.frete = frete_obj
+                        campos_update.append('frete')
+                    if dest.get('nome') and (not nota_obj.destinatario or nota_obj.destinatario == 'NÃO INFORMADO'):
+                        nota_obj.destinatario = str(dest.get('nome')).upper()
+                        campos_update.append('destinatario')
+                    if endereco and (not nota_obj.endereco_entrega or 'CONSULTE' in nota_obj.endereco_entrega):
+                        nota_obj.endereco_entrega = endereco
+                        campos_update.append('endereco_entrega')
+
+                    if campos_update:
+                        nota_obj.save(update_fields=campos_update)
+                    created_nota = False
+                else:
+                    # 🆕 NOTA NOVA NO MANIFESTO: CRIA COMO PENDENTE
+                    nota_obj = NotaFiscal.objects.create(
+                        manifesto=manifesto_obj,
+                        numero_nota=numero_item,
+                        chave_acesso=chave_nfe,
+                        tipo_operacao=tipo_item,
+                        destinatario=str(dest.get('nome', 'NÃO INFORMADO')).upper(),
+                        endereco_entrega=endereco,
+                        cep=cep_dest,
+                        freight_id_tms=str(id_tms) if id_tms else None,
+                        numero_coleta=num_coleta,
+                        numero_cte=normalizar_valor(item.get('numero_cte')),
+                        chave_cte=chave_cte,
+                        frete=frete_obj,
+                        status='PENDENTE'
+                    )
+                    created_nota = True
 
                 # 🌍 Geocodificação automática: busca lat/lng pelo CEP (se nota nova e com CEP)
                 if created_nota and cep_dest:
