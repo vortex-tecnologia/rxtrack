@@ -375,17 +375,24 @@ def processar_webhook_manifesto_task(self, event_id):
                     else:
                         num_coleta = str(id_tms) if id_tms else None
 
-                # 🔍 BUSCA INTELIGENTE DA NOTA NO MANIFESTO:
-                # 1º: Pelo número da nota (garante match perfeito com notas puxadas manualmente)
-                # 2º: Pela chave de acesso (se informada)
-                # 3º: Pelo ID da parada no TMS (freight_id_tms)
+                # 🔍 BUSCA INTELIGENTE DENTRO DESTE MANIFESTO ESPECÍFICO:
                 nota_obj = None
-                if numero_item:
-                    nota_obj = NotaFiscal.objects.filter(manifesto=manifesto_obj, numero_nota=numero_item).first()
-                if not nota_obj and chave_nfe:
-                    nota_obj = NotaFiscal.objects.filter(manifesto=manifesto_obj, chave_acesso=chave_nfe).first()
-                if not nota_obj and id_tms:
-                    nota_obj = NotaFiscal.objects.filter(manifesto=manifesto_obj, freight_id_tms=str(id_tms)).first()
+                if tipo_item == 'COLETA':
+                    # 📦 Coleta: busca por número de coleta ou número do item no mesmo manifesto
+                    if num_coleta:
+                        nota_obj = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='COLETA', numero_coleta=num_coleta).first()
+                    if not nota_obj and numero_item:
+                        nota_obj = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='COLETA', numero_nota=numero_item).first()
+                    if not nota_obj and id_tms:
+                        nota_obj = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='COLETA', freight_id_tms=str(id_tms)).first()
+                else:
+                    # 📄 Entrega: busca por chave de acesso ou número da NF no mesmo manifesto
+                    if chave_nfe:
+                        nota_obj = NotaFiscal.objects.filter(manifesto=manifesto_obj, chave_acesso=chave_nfe).first()
+                    if not nota_obj and numero_item:
+                        nota_obj = NotaFiscal.objects.filter(manifesto=manifesto_obj, numero_nota=numero_item).first()
+                    if not nota_obj and id_tms:
+                        nota_obj = NotaFiscal.objects.filter(manifesto=manifesto_obj, freight_id_tms=str(id_tms)).first()
 
                 frete_obj = None
                 if id_tms:

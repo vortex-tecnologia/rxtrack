@@ -14,10 +14,10 @@ class Command(BaseCommand):
         total_manifestos_afetados = 0
 
         for mft in manifestos:
-            # Agrupa por numero_nota dentro deste manifesto
+            # Agrupa por numero_nota dentro deste manifesto específico
             duplicadas_info = (
                 NotaFiscal.objects.filter(manifesto=mft)
-                .values('numero_nota')
+                .values('numero_nota', 'tipo_operacao')
                 .annotate(qtd=Count('id'))
                 .filter(qtd__gt=1)
             )
@@ -29,8 +29,9 @@ class Command(BaseCommand):
 
             for item in duplicadas_info:
                 num_nota = item['numero_nota']
+                tipo_op = item['tipo_operacao']
                 notas_mesmo_num = list(
-                    NotaFiscal.objects.filter(manifesto=mft, numero_nota=num_nota).order_by('id')
+                    NotaFiscal.objects.filter(manifesto=mft, numero_nota=num_nota, tipo_operacao=tipo_op).order_by('id')
                 )
 
                 # Prioriza manter notas que já têm baixa (BAIXADA ou OCORRENCIA)
