@@ -12,58 +12,89 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def desembrulhar_payload(payload: dict) -> dict:
+    """Se o payload vier dentro de uma chave 'payload' ou 'data', desembrulha."""
+    if not isinstance(payload, dict):
+        return {}
+    if 'payload' in payload and isinstance(payload['payload'], dict):
+        return payload['payload']
+    if 'data' in payload and isinstance(payload['data'], dict):
+        return payload['data']
+    return payload
+
+
+def extrair_rota(payload: dict) -> dict | None:
+    """Busca o nó Rota em qualquer nível do payload JSON."""
+    if not isinstance(payload, dict):
+        return None
+    
+    p = desembrulhar_payload(payload)
+
+    # 1. Envelope.Body.uploadRoute.Rotas.Rota
+    if 'Envelope' in p:
+        body = p.get('Envelope', {}).get('Body', {})
+        upload = body.get('uploadRoute', {})
+        rotas = upload.get('Rotas', {})
+        if 'Rota' in rotas:
+            return rotas['Rota']
+    
+    # 2. Body.uploadRoute.Rotas.Rota
+    if 'Body' in p:
+        upload = p.get('Body', {}).get('uploadRoute', {})
+        rotas = upload.get('Rotas', {})
+        if 'Rota' in rotas:
+            return rotas['Rota']
+
+    # 3. uploadRoute.Rotas.Rota
+    if 'uploadRoute' in p:
+        rotas = p.get('uploadRoute', {}).get('Rotas', {})
+        if 'Rota' in rotas:
+            return rotas['Rota']
+
+    # 4. Rotas.Rota
+    if 'Rotas' in p:
+        rotas = p.get('Rotas', {})
+        if 'Rota' in rotas:
+            return rotas['Rota']
+
+    # 5. Rota direta
+    if 'Rota' in p:
+        return p['Rota']
+
+    return None
+
+
 def is_formato_tms_envelope(payload: dict) -> bool:
     """
     Detecta se o payload recebido está no formato do TMS (Envelope SOAP convertido em JSON).
-    Retorna True se encontrar a estrutura Envelope.Body.uploadRoute.Rotas.Rota
+    Retorna True se encontrar a estrutura de Rota.
     """
-    try:
-        envelope = payload.get('Envelope', {})
-        body = envelope.get('Body', {})
-        upload = body.get('uploadRoute', {})
-        rotas = upload.get('Rotas', {})
-        return 'Rota' in rotas
-    except (AttributeError, TypeError):
-        return False
+    return extrair_rota(payload) is not None
 
 
 def extrair_credencial_tms(payload: dict) -> str:
     """
     Extrai a senha de autenticação do JSON do TMS.
-    Localização: Envelope.Header.Credenciais.Senha
+    Localização: Envelope.Header.Credenciais.Senha ou Header.Credenciais.Senha
     """
+    p = desembrulhar_payload(payload)
     try:
-        return payload.get('Envelope', {}).get('Header', {}).get('Credenciais', {}).get('Senha', '')
+        if 'Envelope' in p:
+            return p.get('Envelope', {}).get('Header', {}).get('Credenciais', {}).get('Senha', '')
+        if 'Header' in p:
+            return p.get('Header', {}).get('Credenciais', {}).get('Senha', '')
     except (AttributeError, TypeError):
-        return ''
+        pass
+    return ''
 
 
 def normalizar_json_tms(payload: dict) -> dict:
     """
     Converte o JSON do TMS (formato Comprovei/SSW) para o formato interno do RXTrack.
-    
-    Formato TMS (entrada):
-        Envelope.Body.uploadRoute.Rotas.Rota {
-            @numero, Data, TipoRota,
-            Motorista { Nome, Usuario, PlacaVeiculo },
-            Transportadora { Razao, Codigo },
-            Base { Origem { CEP, Rua, Cidade, Estado, ... } },
-            Paradas { Parada [ { Tipo, @numero, Cliente {...}, Documento {...}, SKUs {...} } ] }
-        }
-    
-    Formato interno (saída):
-        {
-            filial: { id_tms, nome },
-            motorista: { cpf, nome },
-            manifesto: { numero, id_tms },
-            veiculo: { placa },           ← NOVO
-            itens: [ { tipo, id_tms, numero_item, chave_item, destinatario: {...}, ... } ]
-        }
     """
-    try:
-        rota = payload['Envelope']['Body']['uploadRoute']['Rotas']['Rota']
-    except (KeyError, TypeError) as e:
-        raise ValueError(f"Estrutura do JSON TMS inválida: {e}")
+    rota = extrair_rota(payload)
+    if not rota:
+        raise ValueError("Estrutura do JSON TMS inválida: Nó 'Rota' não encontrado.")
 
     # ─── TRANSPORTADORA → FILIAL ───
     transportadora = rota.get('Transportadora', {})
