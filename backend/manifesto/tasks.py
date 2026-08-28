@@ -126,16 +126,26 @@ def processar_webhook_manifesto_task(self, event_id):
             id_f_tms = f_data.get('id_tms') or f_data.get('Codigo')
             filial_nome = str(f_data.get('nome') or f_data.get('Razao') or 'FILIAL WEBHOOK').upper().strip()
             
+            # Busca inteligente: primeiro por código/CNPJ, depois por Razão Social
+            filial_obj = None
             if id_f_tms:
-                filial_obj, _ = Filial.objects.get_or_create(
-                    id_filial_tms=str(id_f_tms),
-                    defaults={'nome': filial_nome, 'operacao_ativa': True}
-                )
-            else:
+                filial_obj = Filial.objects.filter(id_filial_tms=str(id_f_tms)).first()
+            if not filial_obj and filial_nome:
+                # Tenta match exato ou por prefixo (ex: RD EXPRESSO TRANSPORTES -> RD EXPRESSO)
+                filial_obj = Filial.objects.filter(nome__iexact=filial_nome).first()
+                if not filial_obj:
+                    primeiro_nome = filial_nome.split('-')[0].split()[0:2]
+                    termo_busca = " ".join(primeiro_nome)
+                    filial_obj = Filial.objects.filter(nome__icontains=termo_busca).first()
+
+            if not filial_obj:
                 filial_obj, _ = Filial.objects.get_or_create(
                     nome=filial_nome,
-                    defaults={'operacao_ativa': True}
+                    defaults={'id_filial_tms': str(id_f_tms) if id_f_tms else None, 'operacao_ativa': True}
                 )
+            elif id_f_tms and not filial_obj.id_filial_tms:
+                filial_obj.id_filial_tms = str(id_f_tms)
+                filial_obj.save(update_fields=['id_filial_tms'])
 
             # 1b. Filial de Operação / Base de Atuação Física (de onde o caminhão realmente sai)
             filial_operacao_obj = None
