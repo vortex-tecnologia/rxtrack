@@ -299,6 +299,11 @@ class Filial(models.Model):
     nome = models.CharField(max_length=100)
     id_filial_tms = models.CharField(max_length=50, blank=True, null=True)
     horario_rebusca_esl = models.TimeField(null=True, blank=True, verbose_name="Horário da Rebusca Automática (ESL)")
+    operacao_ativa = models.BooleanField(
+        default=True,
+        verbose_name="Operação Ativa no App",
+        help_text="Se desmarcado, o webhook ignorará novos manifestos desta filial para evitar acúmulo de rotas não utilizadas."
+    )
     
     # --- ENDEREÇO COMPLETO DA BASE/GALPÃO ---
     logradouro = models.CharField(max_length=255, blank=True, null=True, verbose_name="Logradouro")

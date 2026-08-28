@@ -379,6 +379,43 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 raise task.retry(exc=exc)
             raise
 
+    def resolver_numero_visual_manifesto(self, id_tms):
+        """
+        Busca o número visual (sequence_code) na ESL a partir do ID interno do manifesto (id).
+        Usado pelo Webhook quando recebe um manifesto novo pelo ID interno para descobrir o número visual.
+        """
+        try:
+            if not self.config or not self.config.token_analytics or not self.config.report_validacao:
+                return None
+
+            token_geral = self.config.token_analytics
+            headers_geral = {"Content-Type": "application/json", "Authorization": f"Bearer {token_geral}"}
+            url_valida = f"https://{self.config.dominio_esl}/api/analytics/reports/{self.config.report_validacao}/data"
+            
+            id_busca = int(id_tms) if str(id_tms).isdigit() else id_tms
+            payload_busca = {
+                "search": {
+                    "manifests": {
+                        "id": id_busca,
+                        "service_date": "2024-01-01 - 2050-12-31"
+                    }
+                },
+                "page": "1", "per": "5"
+            }
+
+            res = requests.get(url_valida, headers=headers_geral, data=json.dumps(payload_busca), timeout=15)
+            if res.status_code == 200:
+                dados = res.json()
+                if dados and len(dados) > 0:
+                    info = dados[0]
+                    seq = info.get('mft_sequence_code') or info.get('sequence_code')
+                    if seq:
+                        logger.info(f"🔍 [RESOLVER_VISUAL] ID interno {id_tms} resolvido para Número Visual #{seq}")
+                        return str(seq).strip()
+        except Exception as e:
+            logger.warning(f"⚠️ [RESOLVER_VISUAL] Erro ao consultar ESL para ID {id_tms}: {e}")
+        return None
+
     def buscar_manifesto_completo(self, log_id, task=None):
         try:
             log = ManifestoBuscaLog.objects.select_related('motorista').get(id=log_id)

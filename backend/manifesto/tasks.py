@@ -135,6 +135,15 @@ def processar_webhook_manifesto_task(self, event_id):
             else:
                 filial_obj, _ = Filial.objects.get_or_create(nome=filial_nome)
 
+            # 🛡️ TRAVA 1: FILIAL INATIVA NO APP (Evita enfileirar manifestos de bases que ainda não usam o sistema)
+            if hasattr(filial_obj, 'operacao_ativa') and not filial_obj.operacao_ativa:
+                event.status = 'IGNORADO_FILIAL_INATIVA'
+                event.erro = f"Filial '{filial_obj.nome}' está inativa para recebimento de manifestos no app."
+                event.processed_at = timezone.now()
+                event.save()
+                logger.info(f"🚫 Filial '{filial_obj.nome}' com operação inativa. Manifesto {payload.get('manifesto', {}).get('numero')} ignorado.")
+                return f"Filial '{filial_obj.nome}' inativa. Manifesto ignorado."
+
             # 2. Motorista (Cadastro Automático de Perfil)
             m_data = payload.get('motorista', {})
             cpf = str(m_data.get('cpf', '')).strip().replace('.', '').replace('-', '')
@@ -157,17 +166,43 @@ def processar_webhook_manifesto_task(self, event_id):
                     motorista_obj.filial = filial_obj
                 motorista_obj.save()
 
-            # 3. Manifesto (Status 'AGUARDANDO' para controle operacional)
+            # 3. Manifesto — Resolução Inteligente de Número Visual vs ID Interno
             mani_data = payload.get('manifesto', {})
-            num_mani = str(mani_data.get('numero'))
+            num_mani_recebido = str(mani_data.get('numero', '')).strip()
             
-            if not num_mani:
+            if not num_mani_recebido:
                 raise Exception("Número do manifesto não informado no payload.")
 
-            manifesto_obj = Manifesto.objects.filter(numero_manifesto=num_mani).first()
-            
+            from django.db.models import Q
+            # 🔍 Busca se o manifesto JÁ EXISTE no banco (por Número Visual OU por ID Interno TMS)
+            manifesto_existente = Manifesto.objects.filter(
+                Q(numero_manifesto=num_mani_recebido) | Q(manifesto_id_tms=num_mani_recebido)
+            ).first()
+
+            if manifesto_existente:
+                # ✅ JÁ EXISTE NO BANCO: Usa o número visual que já temos (NÃO precisa bater na ESL!)
+                num_visual = manifesto_existente.numero_manifesto
+                id_tms_final = manifesto_existente.manifesto_id_tms or mani_data.get('id_tms') or num_mani_recebido
+                logger.info(f"⚡ [WEBHOOK] Manifesto {num_visual} já cadastrado no banco. Atualizando rota sem consulta na ESL.")
+            else:
+                # 🔍 NÃO EXISTE NO BANCO: Consulta a ESL para ver se é ID interno e descobrir o sequence_code (número visual)
+                adapter = get_tms_adapter()
+                num_visual_esl = None
+                if adapter and hasattr(adapter, 'resolver_numero_visual_manifesto'):
+                    try:
+                        num_visual_esl = adapter.resolver_numero_visual_manifesto(num_mani_recebido)
+                    except Exception as e:
+                        logger.warning(f"⚠️ Erro ao tentar resolver número visual na ESL para {num_mani_recebido}: {e}")
+
+                if num_visual_esl:
+                    num_visual = num_visual_esl
+                    id_tms_final = num_mani_recebido
+                else:
+                    num_visual = num_mani_recebido
+                    id_tms_final = mani_data.get('id_tms') or num_mani_recebido
+
             status_novo = 'AGUARDANDO'
-            if manifesto_obj and manifesto_obj.status == 'EM_TRANSPORTE':
+            if manifesto_existente and manifesto_existente.status == 'EM_TRANSPORTE':
                 status_novo = 'EM_TRANSPORTE'
 
             # 3b. Veículo (Novo: cria/vincula se a placa vier no payload)
@@ -185,14 +220,14 @@ def processar_webhook_manifesto_task(self, event_id):
                 'motorista': motorista_obj,
                 'filial': filial_obj,
                 'status': status_novo,
-                'manifesto_id_tms': mani_data.get('id_tms'),
+                'manifesto_id_tms': id_tms_final,
             }
             # Só vincula veículo se veio no payload (não sobrescreve com None)
             if veiculo_obj:
                 manifesto_defaults['veiculo'] = veiculo_obj
 
             manifesto_obj, _ = Manifesto.objects.update_or_create(
-                numero_manifesto=num_mani,
+                numero_manifesto=num_visual,
                 defaults=manifesto_defaults
             )
 
@@ -595,3 +630,28 @@ def enriquecer_geolocalizacao_nota_task(nota_id):
     except Exception as e:
         logger.error(f"Erro ao enriquecer geolocalizacao da NF {nota_id}: {e}")
         return str(e)
+
+
+@shared_task
+def limpar_manifestos_antigos_aguardando_task():
+    """
+    Cancela/expira manifestos que ficaram mais de 48h com status AGUARDANDO
+    sem que o motorista tenha iniciado a viagem.
+    Evita acúmulo de rotas não utilizadas nas bases.
+    """
+    from manifesto.models import Manifesto
+    from django.utils import timezone
+    from datetime import timedelta
+
+    limite = timezone.now() - timedelta(hours=48)
+    manifestos_antigos = Manifesto.objects.filter(
+        status='AGUARDANDO',
+        data_criacao__lt=limite
+    )
+
+    qtd = manifestos_antigos.count()
+    if qtd > 0:
+        logger.info(f"🧹 Cancelando {qtd} manifesto(s) antigo(s) parado(s) em AGUARDANDO há mais de 48h.")
+        manifestos_antigos.update(status='CANCELADO', finalizado=True)
+    return f"{qtd} manifestos expirados cancelados."
+

@@ -144,6 +144,11 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'manifesto.tasks_auto_recovery.auto_recuperar_baixas_pendentes_ia',
         'schedule': crontab(minute='*/2'),  # A cada 2 minutos
     },
+    # Limpeza diária de manifestos antigos em AGUARDANDO há mais de 48h
+    'limpar-manifestos-antigos-aguardando': {
+        'task': 'manifesto.tasks.limpar_manifestos_antigos_aguardando_task',
+        'schedule': crontab(hour=1, minute=0),  # Todo dia à 01:00 AM
+    },
 }
 
 CHANNEL_LAYERS = {
