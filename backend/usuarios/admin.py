@@ -53,12 +53,12 @@ class NotificacaoPushLogAdmin(admin.ModelAdmin):
 
 @admin.register(Filial)
 class FilialAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'id_filial_tms', 'operacao_ativa', 'cidade', 'uf', 'latitude', 'longitude', 'whatsapp_operacional', 'whatsapp_sac', 'horario_rebusca_esl')
+    list_display = ('nome', 'cnpj', 'id_filial_tms', 'operacao_ativa', 'cidade', 'uf', 'latitude', 'longitude', 'whatsapp_operacional', 'whatsapp_sac', 'horario_rebusca_esl')
     list_editable = ('operacao_ativa', 'whatsapp_operacional', 'whatsapp_sac')
-    search_fields = ('nome', 'id_filial_tms', 'cidade', 'uf')
+    search_fields = ('nome', 'cnpj', 'id_filial_tms', 'cidade', 'uf')
     list_filter = ('operacao_ativa', 'uf')
     fieldsets = (
-        ('Identificação', {'fields': ('nome', 'id_filial_tms', 'horario_rebusca_esl')}),
+        ('Identificação', {'fields': ('nome', 'cnpj', 'id_filial_tms', 'operacao_ativa', 'horario_rebusca_esl')}),
         ('Endereço', {'fields': ('cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf')}),
         ('Geolocalização', {'fields': ('latitude', 'longitude'), 'description': 'Preenchido automaticamente ao salvar se o endereço estiver correto.'}),
         ('WhatsApp', {'fields': ('whatsapp_operacional', 'whatsapp_sac')}),

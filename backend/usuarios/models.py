@@ -297,10 +297,25 @@ def criar_permissoes_automaticamente(sender, instance, created, **kwargs):
 # Criaçao modelo de filial
 class Filial(models.Model):
     nome = models.CharField(max_length=100)
-    id_filial_tms = models.CharField(max_length=50, blank=True, null=True)
+    cnpj = models.CharField(
+        max_length=20, 
+        blank=True, 
+        null=True, 
+        verbose_name="CNPJ da Filial", 
+        help_text="CNPJ da base (usado para unificar com os manifestos recebidos via Webhook)"
+    )
+    id_filial_tms = models.CharField(
+        max_length=50, 
+        blank=True, 
+        null=True, 
+        verbose_name="ID da Filial na ESL", 
+        help_text="ID numérico da ESL Cloud (usado na Busca Manual)"
+    )
     horario_rebusca_esl = models.TimeField(null=True, blank=True, verbose_name="Horário da Rebusca Automática (ESL)")
     operacao_ativa = models.BooleanField(
         default=True,
+        null=True,
+        blank=True,
         verbose_name="Operação Ativa no App",
         help_text="Se desmarcado, o webhook ignorará novos manifestos desta filial para evitar acúmulo de rotas não utilizadas."
     )

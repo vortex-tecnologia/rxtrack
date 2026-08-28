@@ -99,6 +99,69 @@ def enviar_comprovante_esl_task(self, baixa_id):
     return "TMS Desativado."
 
 
+def _buscar_ou_criar_filial_unificada(codigo_ou_cnpj, nome_filial, cidade=None, uf=None, cep=None, logradouro=None, bairro=None):
+    """
+    Busca ou cria Filial unificando por CNPJ (14 dígitos), ID da ESL (id_filial_tms) e Razão Social/Nome.
+    Garante que filiais cadastradas manualmente com ID da ESL sejam encontradas quando o Webhook enviar o CNPJ.
+    """
+    from usuarios.models import Filial
+    import re
+
+    doc_limpo = re.sub(r'\D', '', str(codigo_ou_cnpj or ''))
+    nome_limpo = str(nome_filial or '').upper().strip()
+
+    filial_obj = None
+
+    # 1. Busca por CNPJ
+    if doc_limpo and len(doc_limpo) == 14:
+        filial_obj = Filial.objects.filter(cnpj__in=[doc_limpo, str(codigo_ou_cnpj)]).first()
+
+    # 2. Busca por ID da ESL (id_filial_tms)
+    if not filial_obj and codigo_ou_cnpj:
+        filial_obj = Filial.objects.filter(id_filial_tms=str(codigo_ou_cnpj)).first()
+
+    # 3. Busca por Nome / Razão Social
+    if not filial_obj and nome_limpo:
+        filial_obj = Filial.objects.filter(nome__iexact=nome_limpo).first()
+        if not filial_obj:
+            palavras = nome_limpo.split('-')[0].split()
+            if len(palavras) >= 2:
+                termo = " ".join(palavras[:2])
+                filial_obj = Filial.objects.filter(nome__icontains=termo).first()
+
+    # Se encontrou, atualiza dados que faltavam
+    if filial_obj:
+        campos_update = []
+        if doc_limpo and len(doc_limpo) == 14 and not filial_obj.cnpj:
+            filial_obj.cnpj = doc_limpo
+            campos_update.append('cnpj')
+        elif doc_limpo and len(doc_limpo) != 14 and not filial_obj.id_filial_tms:
+            filial_obj.id_filial_tms = str(codigo_ou_cnpj)
+            campos_update.append('id_filial_tms')
+        if campos_update:
+            filial_obj.save(update_fields=campos_update)
+        return filial_obj
+
+    # 4. Não encontrou: cria nova Filial
+    defaults = {
+        'nome': nome_limpo or f"FILIAL {codigo_ou_cnpj}",
+        'operacao_ativa': True
+    }
+    if doc_limpo and len(doc_limpo) == 14:
+        defaults['cnpj'] = doc_limpo
+    elif codigo_ou_cnpj:
+        defaults['id_filial_tms'] = str(codigo_ou_cnpj)
+
+    if cidade: defaults['cidade'] = cidade
+    if uf: defaults['uf'] = uf
+    if cep: defaults['cep'] = cep
+    if logradouro: defaults['logradouro'] = logradouro
+    if bairro: defaults['bairro'] = bairro
+
+    filial_obj = Filial.objects.create(**defaults)
+    return filial_obj
+
+
 @shared_task(bind=True, max_retries=3)
 def processar_webhook_manifesto_task(self, event_id):
     """
@@ -121,31 +184,11 @@ def processar_webhook_manifesto_task(self, event_id):
         with transaction.atomic():
             event = WebhookEventoManifestoESL.objects.get(id=event_id)
             payload = event.payload
-             # 1. Filial Fiscal / Transportadora (Vínculo comercial)
+            # 1. Filial Fiscal / Transportadora (Vínculo comercial)
             f_data = payload.get('filial', {})
             id_f_tms = f_data.get('id_tms') or f_data.get('Codigo')
             filial_nome = str(f_data.get('nome') or f_data.get('Razao') or 'FILIAL WEBHOOK').upper().strip()
-            
-            # Busca inteligente: primeiro por código/CNPJ, depois por Razão Social
-            filial_obj = None
-            if id_f_tms:
-                filial_obj = Filial.objects.filter(id_filial_tms=str(id_f_tms)).first()
-            if not filial_obj and filial_nome:
-                # Tenta match exato ou por prefixo (ex: RD EXPRESSO TRANSPORTES -> RD EXPRESSO)
-                filial_obj = Filial.objects.filter(nome__iexact=filial_nome).first()
-                if not filial_obj:
-                    primeiro_nome = filial_nome.split('-')[0].split()[0:2]
-                    termo_busca = " ".join(primeiro_nome)
-                    filial_obj = Filial.objects.filter(nome__icontains=termo_busca).first()
-
-            if not filial_obj:
-                filial_obj, _ = Filial.objects.get_or_create(
-                    nome=filial_nome,
-                    defaults={'id_filial_tms': str(id_f_tms) if id_f_tms else None, 'operacao_ativa': True}
-                )
-            elif id_f_tms and not filial_obj.id_filial_tms:
-                filial_obj.id_filial_tms = str(id_f_tms)
-                filial_obj.save(update_fields=['id_filial_tms'])
+            filial_obj = _buscar_ou_criar_filial_unificada(id_f_tms, filial_nome)
 
             # 1b. Filial de Operação / Base de Atuação Física (de onde o caminhão realmente sai)
             filial_operacao_obj = None
@@ -153,27 +196,15 @@ def processar_webhook_manifesto_task(self, event_id):
             id_f_op_tms = f_op_data.get('id_tms') or f_op_data.get('@codigo')
             nome_f_op = f_op_data.get('nome') or f_op_data.get('Nome')
 
-            if id_f_op_tms:
-                filial_operacao_obj, _ = Filial.objects.get_or_create(
-                    id_filial_tms=str(id_f_op_tms),
-                    defaults={
-                        'nome': str(nome_f_op or f"BASE {f_op_data.get('cidade', '')}").upper().strip(),
-                        'cidade': f_op_data.get('cidade', ''),
-                        'uf': f_op_data.get('uf', ''),
-                        'cep': f_op_data.get('cep', ''),
-                        'logradouro': f_op_data.get('logradouro', '') or f_op_data.get('Rua', ''),
-                        'bairro': f_op_data.get('bairro', ''),
-                        'operacao_ativa': True
-                    }
-                )
-            elif nome_f_op:
-                filial_operacao_obj, _ = Filial.objects.get_or_create(
-                    nome=str(nome_f_op).upper().strip(),
-                    defaults={
-                        'cidade': f_op_data.get('cidade', ''),
-                        'uf': f_op_data.get('uf', ''),
-                        'operacao_ativa': True
-                    }
+            if id_f_op_tms or nome_f_op:
+                filial_operacao_obj = _buscar_ou_criar_filial_unificada(
+                    id_f_op_tms,
+                    nome_f_op,
+                    cidade=f_op_data.get('cidade'),
+                    uf=f_op_data.get('uf'),
+                    cep=f_op_data.get('cep'),
+                    logradouro=f_op_data.get('logradouro') or f_op_data.get('Rua'),
+                    bairro=f_op_data.get('bairro')
                 )
 
             # 2. Motorista (Cadastro Automático de Perfil — aceita cpf, Usuario, usuario, documento)
