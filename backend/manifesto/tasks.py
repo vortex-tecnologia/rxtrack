@@ -101,8 +101,8 @@ def enviar_comprovante_esl_task(self, baixa_id):
 
 def _buscar_ou_criar_filial_unificada(codigo_ou_cnpj, nome_filial, cidade=None, uf=None, cep=None, logradouro=None, bairro=None):
     """
-    Busca ou cria Filial unificando por CNPJ (14 dígitos), ID da ESL (id_filial_tms) e Razão Social/Nome.
-    Garante que filiais cadastradas manualmente com ID da ESL sejam encontradas quando o Webhook enviar o CNPJ.
+    Busca ou cria Filial unificando por CNPJ (suporta múltiplos CNPJs separados por vírgula),
+    ID da ESL (id_filial_tms) e Razão Social/Nome.
     """
     from usuarios.models import Filial
     import re
@@ -112,9 +112,17 @@ def _buscar_ou_criar_filial_unificada(codigo_ou_cnpj, nome_filial, cidade=None, 
 
     filial_obj = None
 
-    # 1. Busca por CNPJ
+    # 1. Busca por CNPJ (suporta múltiplos CNPJs no mesmo campo)
     if doc_limpo and len(doc_limpo) == 14:
-        filial_obj = Filial.objects.filter(cnpj__in=[doc_limpo, str(codigo_ou_cnpj)]).first()
+        # Tenta busca direta por substring
+        filial_obj = Filial.objects.filter(cnpj__icontains=doc_limpo).first()
+        if not filial_obj:
+            # Varre filiais com CNPJ cadastrado para checagem exata pós-limpeza de pontuação
+            for f in Filial.objects.exclude(cnpj__isnull=True).exclude(cnpj=''):
+                cnpjs_salvos = [re.sub(r'\D', '', c) for c in re.split(r'[,;/\s]+', f.cnpj or '') if c.strip()]
+                if doc_limpo in cnpjs_salvos:
+                    filial_obj = f
+                    break
 
     # 2. Busca por ID da ESL (id_filial_tms)
     if not filial_obj and codigo_ou_cnpj:
@@ -129,15 +137,21 @@ def _buscar_ou_criar_filial_unificada(codigo_ou_cnpj, nome_filial, cidade=None, 
                 termo = " ".join(palavras[:2])
                 filial_obj = Filial.objects.filter(nome__icontains=termo).first()
 
-    # Se encontrou, atualiza dados que faltavam
+    # Se encontrou, atualiza dados que faltavam (auto-acrescenta novos CNPJs na lista)
     if filial_obj:
         campos_update = []
-        if doc_limpo and len(doc_limpo) == 14 and not filial_obj.cnpj:
-            filial_obj.cnpj = doc_limpo
-            campos_update.append('cnpj')
+        if doc_limpo and len(doc_limpo) == 14:
+            cnpjs_atuais = [re.sub(r'\D', '', c) for c in re.split(r'[,;/\s]+', filial_obj.cnpj or '') if c.strip()]
+            if doc_limpo not in cnpjs_atuais:
+                if filial_obj.cnpj and filial_obj.cnpj.strip():
+                    filial_obj.cnpj = f"{filial_obj.cnpj.strip()}, {doc_limpo}"
+                else:
+                    filial_obj.cnpj = doc_limpo
+                campos_update.append('cnpj')
         elif doc_limpo and len(doc_limpo) != 14 and not filial_obj.id_filial_tms:
             filial_obj.id_filial_tms = str(codigo_ou_cnpj)
             campos_update.append('id_filial_tms')
+
         if campos_update:
             filial_obj.save(update_fields=campos_update)
         return filial_obj

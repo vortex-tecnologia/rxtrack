@@ -298,11 +298,11 @@ def criar_permissoes_automaticamente(sender, instance, created, **kwargs):
 class Filial(models.Model):
     nome = models.CharField(max_length=100)
     cnpj = models.CharField(
-        max_length=20, 
+        max_length=255, 
         blank=True, 
         null=True, 
-        verbose_name="CNPJ da Filial", 
-        help_text="CNPJ da base (usado para unificar com os manifestos recebidos via Webhook)"
+        verbose_name="CNPJ(s) da Filial", 
+        help_text="Informe um ou mais CNPJs separados por vírgula (ex: 14539546000120, 14539546000200). Usado para unificar manifestos recebidos via Webhook."
     )
     id_filial_tms = models.CharField(
         max_length=50, 
