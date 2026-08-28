@@ -121,56 +121,56 @@ def processar_webhook_manifesto_task(self, event_id):
         with transaction.atomic():
             event = WebhookEventoManifestoESL.objects.get(id=event_id)
             payload = event.payload
-            
-            # 1. Filial (Vínculo comercial)
+             # 1. Filial Fiscal / Transportadora (Vínculo comercial)
             f_data = payload.get('filial', {})
-            id_f_tms = f_data.get('id_tms')
-            filial_nome = f_data.get('nome', 'FILIAL WEBHOOK').upper()
-            
-            # 1. Filial Fiscal / Transportadora (Vínculo comercial)
-            f_data = payload.get('filial', {})
-            id_f_tms = f_data.get('id_tms')
-            filial_nome = f_data.get('nome', 'FILIAL WEBHOOK').upper()
+            id_f_tms = f_data.get('id_tms') or f_data.get('Codigo')
+            filial_nome = str(f_data.get('nome') or f_data.get('Razao') or 'FILIAL WEBHOOK').upper().strip()
             
             if id_f_tms:
                 filial_obj, _ = Filial.objects.get_or_create(
                     id_filial_tms=str(id_f_tms),
-                    defaults={'nome': filial_nome}
+                    defaults={'nome': filial_nome, 'operacao_ativa': True}
                 )
             else:
-                filial_obj, _ = Filial.objects.get_or_create(nome=filial_nome)
+                filial_obj, _ = Filial.objects.get_or_create(
+                    nome=filial_nome,
+                    defaults={'operacao_ativa': True}
+                )
 
             # 1b. Filial de Operação / Base de Atuação Física (de onde o caminhão realmente sai)
             filial_operacao_obj = None
             f_op_data = payload.get('filial_operacao', {})
-            id_f_op_tms = f_op_data.get('id_tms')
-            nome_f_op = f_op_data.get('nome')
+            id_f_op_tms = f_op_data.get('id_tms') or f_op_data.get('@codigo')
+            nome_f_op = f_op_data.get('nome') or f_op_data.get('Nome')
 
             if id_f_op_tms:
                 filial_operacao_obj, _ = Filial.objects.get_or_create(
                     id_filial_tms=str(id_f_op_tms),
                     defaults={
-                        'nome': nome_f_op or f"BASE {f_op_data.get('cidade', '')}",
+                        'nome': str(nome_f_op or f"BASE {f_op_data.get('cidade', '')}").upper().strip(),
                         'cidade': f_op_data.get('cidade', ''),
                         'uf': f_op_data.get('uf', ''),
                         'cep': f_op_data.get('cep', ''),
-                        'logradouro': f_op_data.get('logradouro', ''),
-                        'bairro': f_op_data.get('bairro', '')
+                        'logradouro': f_op_data.get('logradouro', '') or f_op_data.get('Rua', ''),
+                        'bairro': f_op_data.get('bairro', ''),
+                        'operacao_ativa': True
                     }
                 )
             elif nome_f_op:
                 filial_operacao_obj, _ = Filial.objects.get_or_create(
-                    nome=nome_f_op,
+                    nome=str(nome_f_op).upper().strip(),
                     defaults={
                         'cidade': f_op_data.get('cidade', ''),
-                        'uf': f_op_data.get('uf', '')
+                        'uf': f_op_data.get('uf', ''),
+                        'operacao_ativa': True
                     }
                 )
 
-            # 2. Motorista (Cadastro Automático de Perfil)
-            m_data = payload.get('motorista', {})
-            cpf = str(m_data.get('cpf', '')).strip().replace('.', '').replace('-', '')
-            nome_mot = m_data.get('nome', 'MOTORISTA WEBHOOK').upper()
+            # 2. Motorista (Cadastro Automático de Perfil — aceita cpf, Usuario, usuario, documento)
+            m_data = payload.get('motorista', {}) or payload.get('Motorista', {})
+            cpf_raw = m_data.get('cpf') or m_data.get('Usuario') or m_data.get('usuario') or m_data.get('CPF') or m_data.get('documento') or ''
+            cpf = str(cpf_raw).strip().replace('.', '').replace('-', '')
+            nome_mot = str(m_data.get('nome') or m_data.get('Nome') or 'MOTORISTA WEBHOOK').upper().strip()
 
             if not cpf:
                 raise Exception("CPF do motorista não informado no payload.")
