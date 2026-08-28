@@ -94,6 +94,21 @@ def normalizar_json_tms(payload: dict) -> dict:
     placa = str(motorista_data.get('PlacaVeiculo', '')).strip().upper()
     veiculo = {'placa': placa} if placa else None
 
+    # ─── BASE DE OPERAÇÃO / ATUAÇÃO (Física) ───
+    base_origem = rota.get('Base', {}).get('Origem', {})
+    filial_operacao = None
+    if base_origem:
+        nome_base = base_origem.get('Nome') or f"BASE {base_origem.get('Cidade', '')}"
+        filial_operacao = {
+            'id_tms': str(base_origem.get('@codigo', '')).strip() or None,
+            'nome': str(nome_base).upper().strip(),
+            'cidade': str(base_origem.get('Cidade', '')).strip(),
+            'uf': str(base_origem.get('Estado', '')).strip(),
+            'cep': str(base_origem.get('CEP', '')).strip().replace('-', ''),
+            'logradouro': str(base_origem.get('Rua', '')).strip(),
+            'bairro': str(base_origem.get('Bairro', '')).strip(),
+        }
+
     # ─── PARADAS → ITENS ───
     paradas_container = rota.get('Paradas', {})
     paradas_raw = paradas_container.get('Parada', [])
@@ -114,6 +129,9 @@ def normalizar_json_tms(payload: dict) -> dict:
         'manifesto': manifesto,
         'itens': itens,
     }
+
+    if filial_operacao:
+        resultado['filial_operacao'] = filial_operacao
 
     # Adiciona veículo somente se tiver placa
     if veiculo:

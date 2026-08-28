@@ -127,6 +127,11 @@ def processar_webhook_manifesto_task(self, event_id):
             id_f_tms = f_data.get('id_tms')
             filial_nome = f_data.get('nome', 'FILIAL WEBHOOK').upper()
             
+            # 1. Filial Fiscal / Transportadora (Vínculo comercial)
+            f_data = payload.get('filial', {})
+            id_f_tms = f_data.get('id_tms')
+            filial_nome = f_data.get('nome', 'FILIAL WEBHOOK').upper()
+            
             if id_f_tms:
                 filial_obj, _ = Filial.objects.get_or_create(
                     id_filial_tms=str(id_f_tms),
@@ -135,14 +140,32 @@ def processar_webhook_manifesto_task(self, event_id):
             else:
                 filial_obj, _ = Filial.objects.get_or_create(nome=filial_nome)
 
-            # 🛡️ TRAVA 1: FILIAL INATIVA NO APP (Evita enfileirar manifestos de bases que ainda não usam o sistema)
-            if hasattr(filial_obj, 'operacao_ativa') and not filial_obj.operacao_ativa:
-                event.status = 'IGNORADO_FILIAL_INATIVA'
-                event.erro = f"Filial '{filial_obj.nome}' está inativa para recebimento de manifestos no app."
-                event.processed_at = timezone.now()
-                event.save()
-                logger.info(f"🚫 Filial '{filial_obj.nome}' com operação inativa. Manifesto {payload.get('manifesto', {}).get('numero')} ignorado.")
-                return f"Filial '{filial_obj.nome}' inativa. Manifesto ignorado."
+            # 1b. Filial de Operação / Base de Atuação Física (de onde o caminhão realmente sai)
+            filial_operacao_obj = None
+            f_op_data = payload.get('filial_operacao', {})
+            id_f_op_tms = f_op_data.get('id_tms')
+            nome_f_op = f_op_data.get('nome')
+
+            if id_f_op_tms:
+                filial_operacao_obj, _ = Filial.objects.get_or_create(
+                    id_filial_tms=str(id_f_op_tms),
+                    defaults={
+                        'nome': nome_f_op or f"BASE {f_op_data.get('cidade', '')}",
+                        'cidade': f_op_data.get('cidade', ''),
+                        'uf': f_op_data.get('uf', ''),
+                        'cep': f_op_data.get('cep', ''),
+                        'logradouro': f_op_data.get('logradouro', ''),
+                        'bairro': f_op_data.get('bairro', '')
+                    }
+                )
+            elif nome_f_op:
+                filial_operacao_obj, _ = Filial.objects.get_or_create(
+                    nome=nome_f_op,
+                    defaults={
+                        'cidade': f_op_data.get('cidade', ''),
+                        'uf': f_op_data.get('uf', '')
+                    }
+                )
 
             # 2. Motorista (Cadastro Automático de Perfil)
             m_data = payload.get('motorista', {})
@@ -156,14 +179,14 @@ def processar_webhook_manifesto_task(self, event_id):
                 cpf=cpf,
                 defaults={
                     'nome_completo': nome_mot,
-                    'filial': filial_obj
+                    'filial': filial_operacao_obj or filial_obj
                 }
             )
             
             if not created_mot:
                 motorista_obj.nome_completo = nome_mot
                 if not motorista_obj.filial:
-                    motorista_obj.filial = filial_obj
+                    motorista_obj.filial = filial_operacao_obj or filial_obj
                 motorista_obj.save()
 
             # 3. Manifesto — Resolução Inteligente de Número Visual vs ID Interno
@@ -179,32 +202,6 @@ def processar_webhook_manifesto_task(self, event_id):
                 Q(numero_manifesto=num_mani_recebido) | Q(manifesto_id_tms=num_mani_recebido)
             ).first()
 
-            if manifesto_existente:
-                # ✅ JÁ EXISTE NO BANCO: Usa o número visual que já temos (NÃO precisa bater na ESL!)
-                num_visual = manifesto_existente.numero_manifesto
-                id_tms_final = manifesto_existente.manifesto_id_tms or mani_data.get('id_tms') or num_mani_recebido
-                logger.info(f"⚡ [WEBHOOK] Manifesto {num_visual} já cadastrado no banco. Atualizando rota sem consulta na ESL.")
-            else:
-                # 🔍 NÃO EXISTE NO BANCO: Consulta a ESL para ver se é ID interno e descobrir o sequence_code (número visual)
-                adapter = get_tms_adapter()
-                num_visual_esl = None
-                if adapter and hasattr(adapter, 'resolver_numero_visual_manifesto'):
-                    try:
-                        num_visual_esl = adapter.resolver_numero_visual_manifesto(num_mani_recebido)
-                    except Exception as e:
-                        logger.warning(f"⚠️ Erro ao tentar resolver número visual na ESL para {num_mani_recebido}: {e}")
-
-                if num_visual_esl:
-                    num_visual = num_visual_esl
-                    id_tms_final = num_mani_recebido
-                else:
-                    num_visual = num_mani_recebido
-                    id_tms_final = mani_data.get('id_tms') or num_mani_recebido
-
-            status_novo = 'AGUARDANDO'
-            if manifesto_existente and manifesto_existente.status == 'EM_TRANSPORTE':
-                status_novo = 'EM_TRANSPORTE'
-
             # 3b. Veículo (Novo: cria/vincula se a placa vier no payload)
             veiculo_obj = None
             v_data = payload.get('veiculo', {})
@@ -216,13 +213,67 @@ def processar_webhook_manifesto_task(self, event_id):
                     defaults={'tipo': 'OUTRO'}
                 )
 
+            if manifesto_existente:
+                # ✅ JÁ EXISTE NO BANCO: Usa o número visual que já temos (NÃO precisa bater na ESL!)
+                num_visual = manifesto_existente.numero_manifesto
+                id_tms_final = manifesto_existente.manifesto_id_tms or mani_data.get('id_tms') or num_mani_recebido
+                if manifesto_existente.filial_operacao:
+                    filial_operacao_obj = manifesto_existente.filial_operacao
+                logger.info(f"⚡ [WEBHOOK] Manifesto {num_visual} já cadastrado no banco. Atualizando rota sem consulta na ESL.")
+            else:
+                # 🔍 NÃO EXISTE NO BANCO: Consulta a ESL para ver se é ID interno e descobrir o sequence_code (número visual)
+                adapter = get_tms_adapter()
+                res_esl = None
+                if adapter and hasattr(adapter, 'resolver_numero_visual_manifesto'):
+                    try:
+                        res_esl = adapter.resolver_numero_visual_manifesto(num_mani_recebido)
+                    except Exception as e:
+                        logger.warning(f"⚠️ Erro ao tentar resolver número visual na ESL para {num_mani_recebido}: {e}")
+
+                if isinstance(res_esl, dict):
+                    num_visual = res_esl.get('sequence_code') or num_mani_recebido
+                    id_tms_final = num_mani_recebido
+                    # Enriquece filial_operacao e veículo a partir da ESL se não vieram no payload
+                    if not filial_operacao_obj and res_esl.get('id_filial_operacao'):
+                        filial_operacao_obj, _ = Filial.objects.get_or_create(
+                            id_filial_tms=str(res_esl.get('id_filial_operacao')),
+                            defaults={'nome': res_esl.get('nome_filial_operacao') or f"BASE {res_esl.get('id_filial_operacao')}"}
+                        )
+                    if not veiculo_obj and res_esl.get('placa'):
+                        from manifesto.models import Veiculo
+                        veiculo_obj, _ = Veiculo.objects.get_or_create(
+                            placa=res_esl.get('placa'),
+                            defaults={'tipo': 'OUTRO'}
+                        )
+                elif res_esl:
+                    num_visual = str(res_esl).strip()
+                    id_tms_final = num_mani_recebido
+                else:
+                    num_visual = num_mani_recebido
+                    id_tms_final = mani_data.get('id_tms') or num_mani_recebido
+
+            # 🛡️ TRAVA: BASE/FILIAL INATIVA NO APP (Checa a base de operação real)
+            base_checar = filial_operacao_obj or filial_obj
+            if hasattr(base_checar, 'operacao_ativa') and not base_checar.operacao_ativa:
+                event.status = 'IGNORADO_FILIAL_INATIVA'
+                event.erro = f"Base/Filial '{base_checar.nome}' está inativa para recebimento de manifestos no app."
+                event.processed_at = timezone.now()
+                event.save()
+                logger.info(f"🚫 Base '{base_checar.nome}' com operação inativa. Manifesto #{num_visual} ({num_mani_recebido}) ignorado.")
+                return f"Base '{base_checar.nome}' inativa. Manifesto ignorado."
+
+            status_novo = 'AGUARDANDO'
+            if manifesto_existente and manifesto_existente.status == 'EM_TRANSPORTE':
+                status_novo = 'EM_TRANSPORTE'
+
             manifesto_defaults = {
                 'motorista': motorista_obj,
                 'filial': filial_obj,
+                'filial_operacao': filial_operacao_obj,
                 'status': status_novo,
                 'manifesto_id_tms': id_tms_final,
             }
-            # Só vincula veículo se veio no payload (não sobrescreve com None)
+            # Só vincula veículo se veio no payload ou ESL (não sobrescreve com None)
             if veiculo_obj:
                 manifesto_defaults['veiculo'] = veiculo_obj
 

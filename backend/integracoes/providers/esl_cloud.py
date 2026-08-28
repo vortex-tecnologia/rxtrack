@@ -410,8 +410,17 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     info = dados[0]
                     seq = info.get('mft_sequence_code') or info.get('sequence_code')
                     if seq:
-                        logger.info(f"🔍 [RESOLVER_VISUAL] ID interno {id_tms} resolvido para Número Visual #{seq}")
-                        return str(seq).strip()
+                        id_op = str(info.get('mft_uer_crn_id')).strip() if info.get('mft_uer_crn_id') else None
+                        nome_op = str(info.get('mft_uer_name', '')).strip().upper() if info.get('mft_uer_name') else None
+                        placa = str(info.get('mft_vie_license_plate', '')).strip().upper().replace(' ', '').replace('-', '') if info.get('mft_vie_license_plate') else None
+
+                        logger.info(f"🔍 [RESOLVER_VISUAL] ID {id_tms} resolvido: Visual #{seq}, Base Op: {nome_op or 'N/A'}")
+                        return {
+                            'sequence_code': str(seq).strip(),
+                            'id_filial_operacao': id_op,
+                            'nome_filial_operacao': nome_op,
+                            'placa': placa
+                        }
         except Exception as e:
             logger.warning(f"⚠️ [RESOLVER_VISUAL] Erro ao consultar ESL para ID {id_tms}: {e}")
         return None
