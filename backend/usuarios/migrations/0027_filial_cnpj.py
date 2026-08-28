@@ -5,7 +5,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('usuarios', '0026_alter_filial_operacao_ativa'),
+        ('usuarios', '0025_filial_operacao_ativa'),
     ]
 
     operations = [
@@ -22,13 +22,13 @@ class Migration(migrations.Migration):
         ),
         migrations.AlterField(
             model_name='filial',
-            name='id_filial_tms',
-            field=models.CharField(
+            name='operacao_ativa',
+            field=models.BooleanField(
                 blank=True,
-                help_text='ID numérico da ESL Cloud (usado na Busca Manual)',
-                max_length=50,
+                default=True,
+                help_text='Se desmarcado, o webhook ignorará novos manifestos desta filial para evitar acúmulo de rotas não utilizadas.',
                 null=True,
-                verbose_name='ID da Filial na ESL'
+                verbose_name='Operação Ativa no App'
             ),
         ),
     ]
