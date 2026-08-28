@@ -262,6 +262,8 @@ def processar_webhook_manifesto_task(self, event_id):
                     num_visual = num_mani_recebido
                     id_tms_final = mani_data.get('id_tms') or num_mani_recebido
 
+            num_mani = num_visual
+
             # 🛡️ TRAVA: BASE/FILIAL INATIVA NO APP (Checa a base de operação real)
             base_checar = filial_operacao_obj or filial_obj
             if hasattr(base_checar, 'operacao_ativa') and not base_checar.operacao_ativa:
