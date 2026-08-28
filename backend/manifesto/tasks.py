@@ -309,7 +309,16 @@ def processar_webhook_manifesto_task(self, event_id):
 
             num_mani = num_visual
 
-            # 🛡️ TRAVA: BASE/FILIAL INATIVA NO APP (Checa a base de operação real)
+            # 🛡️ TRAVA 1: MANIFESTO JÁ FINALIZADO OU CANCELADO NO APP (NÃO REABRE NEM ALTERA HISTÓRICO)
+            if manifesto_existente and manifesto_existente.status in ['FINALIZADO', 'CANCELADO']:
+                event.status = 'IGNORADO'
+                event.erro = f"Manifesto #{num_visual} já está {manifesto_existente.status} no app. Atualização via Webhook ignorada para proteger o histórico operacional."
+                event.processed_at = timezone.now()
+                event.save()
+                logger.info(f"🔒 [PROTEÇÃO] Manifesto #{num_visual} já está {manifesto_existente.status} no app. Webhook ignorado.")
+                return f"Manifesto #{num_visual} já finalizado/cancelado. Ignorado."
+
+            # 🛡️ TRAVA 2: BASE/FILIAL INATIVA NO APP (Checa a base de operação real)
             base_checar = filial_operacao_obj or filial_obj
             if hasattr(base_checar, 'operacao_ativa') and not base_checar.operacao_ativa:
                 event.status = 'IGNORADO'
@@ -319,9 +328,10 @@ def processar_webhook_manifesto_task(self, event_id):
                 logger.info(f"🚫 Base '{base_checar.nome}' com operação inativa. Manifesto #{num_visual} ({num_mani_recebido}) ignorado.")
                 return f"Base '{base_checar.nome}' inativa. Manifesto ignorado."
 
-            status_novo = 'AGUARDANDO'
-            if manifesto_existente and manifesto_existente.status == 'EM_TRANSPORTE':
-                status_novo = 'EM_TRANSPORTE'
+            # 🛡️ PRESERVAÇÃO DE STATUS EXISTENTE:
+            # - Se já existia (seja EM_TRANSPORTE ou AGUARDANDO), MANTÉM exatamente o status atual.
+            # - Se for um manifesto novo, inicia como AGUARDANDO.
+            status_novo = manifesto_existente.status if manifesto_existente else 'AGUARDANDO'
 
             manifesto_defaults = {
                 'motorista': motorista_obj,
@@ -592,9 +602,14 @@ def processar_soap_task(self, evento_id):
 
         with transaction.atomic():
             manifesto_obj = Manifesto.objects.filter(numero_manifesto=numero_rota).first()
-            status_novo = 'AGUARDANDO'
-            if manifesto_obj and manifesto_obj.status == 'EM_TRANSPORTE':
-                status_novo = 'EM_TRANSPORTE'
+            if manifesto_obj and manifesto_obj.status in ['FINALIZADO', 'CANCELADO']:
+                evento.status = 'IGNORADO'
+                evento.erro = f"Manifesto #{numero_rota} ja esta {manifesto_obj.status} no app. Integracao ignorada."
+                evento.processed_at = timezone.now()
+                evento.save()
+                return f"Manifesto #{numero_rota} ja finalizado/cancelado."
+
+            status_novo = manifesto_obj.status if manifesto_obj else 'AGUARDANDO'
 
             manifesto_obj, _ = Manifesto.objects.update_or_create(
                 numero_manifesto=numero_rota,
