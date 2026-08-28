@@ -105,7 +105,8 @@ def processar_webhook_manifesto_task(self, event_id):
     Processa o payload de um WebhookEventoManifestoESL.
     - Cria/Busca Filial e Motorista.
     - Cria/Atualiza Manifesto com status 'AGUARDANDO'.
-    - Cria/Atualiza Notas Fiscais vinculadas.
+    - Cria/Atualiza Veículo (se placa informada).
+    - Cria/Atualiza Notas Fiscais vinculadas (com CEP e geocodificação).
     """
     from manifesto.models import WebhookEventoManifestoESL, Manifesto, NotaFiscal, ManifestoBuscaLog
     from usuarios.models import Motorista, Filial
@@ -169,14 +170,30 @@ def processar_webhook_manifesto_task(self, event_id):
             if manifesto_obj and manifesto_obj.status == 'EM_TRANSPORTE':
                 status_novo = 'EM_TRANSPORTE'
 
+            # 3b. Veículo (Novo: cria/vincula se a placa vier no payload)
+            veiculo_obj = None
+            v_data = payload.get('veiculo', {})
+            placa = str(v_data.get('placa', '')).strip().upper() if v_data else ''
+            if placa:
+                from manifesto.models import Veiculo
+                veiculo_obj, _ = Veiculo.objects.get_or_create(
+                    placa=placa,
+                    defaults={'tipo': 'OUTRO'}
+                )
+
+            manifesto_defaults = {
+                'motorista': motorista_obj,
+                'filial': filial_obj,
+                'status': status_novo,
+                'manifesto_id_tms': mani_data.get('id_tms'),
+            }
+            # Só vincula veículo se veio no payload (não sobrescreve com None)
+            if veiculo_obj:
+                manifesto_defaults['veiculo'] = veiculo_obj
+
             manifesto_obj, _ = Manifesto.objects.update_or_create(
                 numero_manifesto=num_mani,
-                defaults={
-                    'motorista': motorista_obj,
-                    'filial': filial_obj,
-                    'status': status_novo,
-                    'manifesto_id_tms': mani_data.get('id_tms'),
-                }
+                defaults=manifesto_defaults
             )
 
             itens = payload.get('itens', [])
@@ -237,6 +254,9 @@ def processar_webhook_manifesto_task(self, event_id):
                         }
                     )
 
+                # CEP do destinatário (Novo: antes não era salvo)
+                cep_dest = str(dest.get('cep', '')).strip().replace('-', '') if dest.get('cep') else None
+
                 nota_obj, created_nota = NotaFiscal.objects.update_or_create(
                     **filtros_busca,
                     defaults={
@@ -249,9 +269,17 @@ def processar_webhook_manifesto_task(self, event_id):
                         'numero_coleta': num_coleta,
                         'numero_cte': normalizar_valor(item.get('numero_cte')),
                         'chave_cte': chave_cte,
-                        'frete': frete_obj
+                        'frete': frete_obj,
+                        'cep': cep_dest,
                     }
                 )
+
+                # 🌍 Geocodificação automática: busca lat/lng pelo CEP (se nota nova e com CEP)
+                if created_nota and cep_dest:
+                    try:
+                        enriquecer_geolocalizacao_nota_task.delay(nota_obj.id)
+                    except Exception as geo_err:
+                        logger.warning(f"⚠️ Erro ao enfileirar geocodificação da NF #{numero_item}: {geo_err}")
                 ids_processadas.append(nota_obj.id)
                 count_notas += 1
 

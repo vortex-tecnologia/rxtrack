@@ -512,3 +512,6 @@ CSRF_TRUSTED_ORIGINS = ['http://localhost', 'https://localhost', 'capacitor://lo
 
 WHITENOISE_MANIFEST_STRICT = False
 X_FRAME_OPTIONS = 'ALLOWALL'
+
+# ─── Integração TMS (Webhook JSON Direto) ───
+TMS_WEBHOOK_SECRET = os.getenv('TMS_WEBHOOK_SECRET', '')

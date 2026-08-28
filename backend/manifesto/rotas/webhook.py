@@ -4,9 +4,12 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
+from django.conf import settings
 
 from manifesto.models import WebhookEventoManifestoESL
 
+import logging
+logger = logging.getLogger(__name__)
 
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes, OpenApiExample, OpenApiResponse
 
@@ -20,12 +23,15 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes,
     summary="Receber Manifesto via Webhook (JSON)",
     description=(
         "Recebe dados de manifesto e notas fiscais em formato JSON. "
-        "Requer autenticação via Header `Authorization: Token SEU_TOKEN`."
+        "Aceita **dois formatos**:\n\n"
+        "1. **Formato TMS (Comprovei/SSW)**: Envelope SOAP convertido em JSON com credencial dentro do body (`Envelope.Header.Credenciais.Senha`)\n"
+        "2. **Formato Padrão RXTrack**: JSON simples com Header `Authorization: Token SEU_TOKEN`\n\n"
+        "O endpoint detecta automaticamente qual formato foi enviado."
     ),
     request=OpenApiTypes.OBJECT,
     examples=[
         OpenApiExample(
-            "Exemplo Payload Webhook JSON",
+            "Exemplo Payload Webhook JSON (Formato Padrão)",
             value={
                 "filial": {
                     "id_tms": "ID_FILIAL_TMS",
@@ -83,10 +89,22 @@ def webhook_tms(request):
     # 📘 DOCUMENTAÇÃO (GET SEM TOKEN)
     if request.method == "GET":
         return Response({
-            "descricao": "Webhook TMS - Manifesto (Comercial)",
+            "descricao": "Webhook TMS - Manifesto (Comercial + TMS Direto)",
             "endpoint": "/api/webhook/tms/",
             "metodo": "POST",
-            "headers_obrigatorios": {
+            "formatos_aceitos": {
+                "formato_tms": {
+                    "descricao": "JSON Envelope (Comprovei/SSW) — credencial dentro do body",
+                    "autenticacao": "Envelope.Header.Credenciais.Senha",
+                    "estrutura": "Envelope.Body.uploadRoute.Rotas.Rota { Motorista, Paradas, Transportadora }"
+                },
+                "formato_padrao": {
+                    "descricao": "JSON simples RXTrack — credencial via HTTP Header",
+                    "autenticacao": "Header Authorization: Token SEU_TOKEN",
+                    "estrutura": "{ filial, motorista, manifesto, itens[] }"
+                }
+            },
+            "headers_obrigatorios_formato_padrao": {
                 "Authorization": "Token SEU_TOKEN_AQUI",
                 "Content-Type": "application/json"
             },
@@ -132,62 +150,98 @@ def webhook_tms(request):
             }
         })
 
-    # 🔐 VALIDA TOKEN E CONTROLE DE USO
+    # ───────────────────────────────────────────────────
+    # 🔐 1. AUTENTICAÇÃO
+    # ───────────────────────────────────────────────────
+    payload = request.data
+    from integracoes.normalizers import is_formato_tms_envelope, extrair_credencial_tms, normalizar_json_tms
+
     auth = request.headers.get("Authorization")
-    if not auth or not auth.startswith("Token "):
-        return Response({"detail": "Token não informado"}, status=status.HTTP_401_UNAUTHORIZED)
+    control = None
+    limite_excedido = False
 
-    token_key = auth.replace("Token ", "")
-    try:
-        token_obj = Token.objects.select_related('user').get(key=token_key)
-        user = token_obj.user
-    except Token.DoesNotExist:
-        return Response({"detail": "Token inválido"}, status=status.HTTP_401_UNAUTHORIZED)
+    # Opção A: Autenticação via Header Authorization (padrão DRF configurado no Webservice)
+    if auth and auth.startswith("Token "):
+        token_key = auth.replace("Token ", "").strip()
+        try:
+            token_obj = Token.objects.select_related('user').get(key=token_key)
+            user = token_obj.user
+        except Token.DoesNotExist:
+            return Response({"detail": "Token de autorização inválido"}, status=status.HTTP_401_UNAUTHORIZED)
 
-    # Verifica se existe controle de token para este usuário
-    from manifesto.models import WebhookTokenControl
-    control, created = WebhookTokenControl.objects.get_or_create(
-        user=user,
-        defaults={'mes_referencia': timezone.now().date().replace(day=1)}
-    )
-
-    # Verifica se o token foi bloqueado manualmente
-    if not control.ativo:
-        return Response(
-            {"detail": "Seu token de acesso foi desativado. Entre em contato com o suporte."},
-            status=status.HTTP_403_FORBIDDEN
+        # Controle de consumo mensal
+        from manifesto.models import WebhookTokenControl
+        control, _ = WebhookTokenControl.objects.get_or_create(
+            user=user,
+            defaults={'mes_referencia': timezone.now().date().replace(day=1)}
         )
 
-    # Lógica de reset mensal e incremento
-    control.reset_if_new_month()
-    control.total_mes_atual += 1
-    control.save()
+        if not control.ativo:
+            return Response(
+                {"detail": "Seu token de acesso foi desativado. Entre em contato com o suporte."},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
-    # Define flags de faturamento
-    limite_excedido = control.total_mes_atual > control.limite_mensal
+        control.reset_if_new_month()
+        control.total_mes_atual += 1
+        control.save()
+        limite_excedido = control.total_mes_atual > control.limite_mensal
 
-    # 📩 RECEBE WEBHOOK
-    payload = request.data
-    numero_manifesto = payload.get("manifesto", {}).get("numero")
+    # Opção B: Fallback via Senha no Payload (se não enviou header)
+    elif is_formato_tms_envelope(payload):
+        senha_recebida = extrair_credencial_tms(payload)
+        senha_esperada = getattr(settings, 'TMS_WEBHOOK_SECRET', '')
+        if not senha_esperada or senha_recebida != senha_esperada:
+            return Response({"detail": "Token não informado no Header e credencial no payload inválida."}, status=status.HTTP_401_UNAUTHORIZED)
+
+    else:
+        return Response({"detail": "Token de autenticação não informado. Envie o header 'Authorization: Token SEU_TOKEN'."}, status=status.HTTP_401_UNAUTHORIZED)
+
+    # ───────────────────────────────────────────────────
+    # 🔄 2. NORMALIZAÇÃO AUTOMÁTICA DO PAYLOAD
+    # ───────────────────────────────────────────────────
+    origem_evento = 'ESL'
+    tipo_evento = payload.get("tipo", "comercial_standard")
+
+    if is_formato_tms_envelope(payload):
+        logger.info("📦 Webhook recebido no formato TMS Envelope — normalizando automaticamente")
+        try:
+            payload_processar = normalizar_json_tms(payload)
+            origem_evento = 'TMS_JSON'
+            tipo_evento = 'tms_uploadroute'
+        except (ValueError, KeyError) as e:
+            logger.error(f"❌ Erro ao normalizar JSON TMS: {e}")
+            return Response({"detail": f"Erro na estrutura do JSON: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        payload_processar = payload
+
+    # ───────────────────────────────────────────────────
+    # 📩 3. CRIAÇÃO DO EVENTO E DISPARO CELERY
+    # ───────────────────────────────────────────────────
+    numero_manifesto = payload_processar.get("manifesto", {}).get("numero")
 
     event = WebhookEventoManifestoESL.objects.create(
-        tipo=payload.get("tipo", "comercial_standard"),
+        origem=origem_evento,
+        tipo=tipo_evento,
         numero_manifesto=numero_manifesto,
-        payload=payload
+        payload=payload_processar
     )
 
-    # 🔥 Dispara a leitura asíncrona no Celery
     from manifesto.tasks import processar_webhook_manifesto_task
     processar_webhook_manifesto_task.delay(event.id)
 
-    return Response({
-        "ok": True, 
-        "mensagem": "Recebido e enfileirado para processamento",
-        "monitoramento": {
+    response_data = {
+        "ok": True,
+        "mensagem": "Manifesto recebido e enfileirado para processamento com sucesso.",
+        "manifesto": numero_manifesto,
+        "event_id": event.id
+    }
+
+    if control:
+        response_data["monitoramento"] = {
             "consumo_mes": control.total_mes_atual,
             "limite_plano": control.limite_mensal,
-            "aviso_limite_excedido": limite_excedido,
-            "valor_adicional": limite_excedido
-        },
-        "event_id": event.id
-    }, status=201)
+            "aviso_limite_excedido": limite_excedido
+        }
+
+    return Response(response_data, status=status.HTTP_201_CREATED)
