@@ -265,7 +265,7 @@ def processar_webhook_manifesto_task(self, event_id):
             # 🛡️ TRAVA: BASE/FILIAL INATIVA NO APP (Checa a base de operação real)
             base_checar = filial_operacao_obj or filial_obj
             if hasattr(base_checar, 'operacao_ativa') and not base_checar.operacao_ativa:
-                event.status = 'IGNORADO_FILIAL_INATIVA'
+                event.status = 'IGNORADO'
                 event.erro = f"Base/Filial '{base_checar.nome}' está inativa para recebimento de manifestos no app."
                 event.processed_at = timezone.now()
                 event.save()
