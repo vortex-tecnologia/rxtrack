@@ -1317,7 +1317,10 @@
             </button>
         </div>
 
-        <div>
+        <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-warning rounded-pill btn-sm px-3 fw-bold d-flex align-items-center gap-1 shadow-sm d-none" id="btnSalvarRotacaoServidor" onclick="salvarRotacaoNoServidor()" title="Salvar imagem rotacionada no servidor e recriar a tarja preta no rodapé">
+                <i class="bi bi-save2-fill"></i> <span id="txtBtnSalvarRot">Salvar Rotação</span>
+            </button>
             <button type="button" class="btn btn-outline-light rounded-pill btn-sm px-3 fw-bold" onclick="fecharVisualizadorImagem()">
                 <i class="bi bi-x-lg me-1"></i>Fechar [ESC]
             </button>
@@ -1335,6 +1338,7 @@
 let viewerState = {
     src: '',
     titulo: '',
+    baixaId: null,
     graus: 0,
     zoom: 1,
     flipH: 1,
@@ -1345,10 +1349,11 @@ let viewerState = {
     startY: 0
 };
 
-function abrirVisualizadorImagem(url, titulo) {
+function abrirVisualizadorImagem(url, titulo, baixaId) {
     if (!url) return;
     viewerState.src = url;
     viewerState.titulo = titulo || 'Visualizador de Imagem';
+    viewerState.baixaId = baixaId || null;
     viewerState.graus = 0;
     viewerState.zoom = 1;
     viewerState.flipH = 1;
@@ -1358,8 +1363,20 @@ function abrirVisualizadorImagem(url, titulo) {
     const modal = document.getElementById('modalVisualizadorImagemGlobal');
     const img = document.getElementById('imgViewerElement');
     const tit = document.getElementById('imgViewerTitulo');
+    const btnSalvar = document.getElementById('btnSalvarRotacaoServidor');
+    const txtSalvar = document.getElementById('txtBtnSalvarRot');
 
     if (tit) tit.innerText = viewerState.titulo;
+    if (btnSalvar) {
+        if (viewerState.baixaId) {
+            btnSalvar.classList.remove('d-none');
+            btnSalvar.disabled = false;
+            if (txtSalvar) txtSalvar.innerText = 'Salvar Rotação';
+        } else {
+            btnSalvar.classList.add('d-none');
+        }
+    }
+
     if (img) {
         img.src = url;
         atualizarTransformImagemViewer();
@@ -1371,6 +1388,77 @@ function abrirVisualizadorImagem(url, titulo) {
     }
 
     window.addEventListener('keydown', onKeyDownViewer);
+}
+
+function salvarRotacaoNoServidor() {
+    if (!viewerState.baixaId) {
+        alert("Nenhum registro de comprovante vinculado a esta imagem.");
+        return;
+    }
+    if (viewerState.graus === 0) {
+        alert("Gire a foto (90°, 180° ou 270°) antes de salvar.");
+        return;
+    }
+
+    const btn = document.getElementById('btnSalvarRotacaoServidor');
+    const txt = document.getElementById('txtBtnSalvarRot');
+    if (btn) btn.disabled = true;
+    if (txt) txt.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Salvando...';
+
+    // Pega CSRF Token
+    let csrfToken = '';
+    const cookie = document.cookie.split('; ').find(row => row.startsWith('csrftoken='));
+    if (cookie) csrfToken = cookie.split('=')[1];
+    if (!csrfToken) {
+        const input = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (input) csrfToken = input.value;
+    }
+
+    fetch(`/api/operacional/baixa/${viewerState.baixaId}/rotacionar-foto/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({
+            graus: viewerState.graus
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'sucesso') {
+            // Atualiza a imagem no visualizador
+            viewerState.src = data.nova_url;
+            const img = document.getElementById('imgViewerElement');
+            if (img) {
+                img.src = data.nova_url + '?t=' + Date.now();
+            }
+            // Reseta rotação visual pois o arquivo no servidor já está rotacionado
+            resetarImagemViewer();
+
+            // Atualiza thumbnail no modal se existir
+            const thumb = document.getElementById(`thumb-comprovante-baixa-${viewerState.baixaId}`);
+            if (thumb) {
+                thumb.src = data.nova_url + '?t=' + Date.now();
+            }
+
+            if (txt) txt.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i> Salvo!';
+            setTimeout(() => {
+                if (txt) txt.innerHTML = 'Salvar Rotação';
+                if (btn) btn.disabled = false;
+            }, 2500);
+        } else {
+            alert(data.message || 'Erro ao rotacionar imagem.');
+            if (txt) txt.innerHTML = 'Salvar Rotação';
+            if (btn) btn.disabled = false;
+        }
+    })
+    .catch(err => {
+        console.error("Erro ao salvar rotação:", err);
+        alert("Erro de comunicação ao salvar rotação.");
+        if (txt) txt.innerHTML = 'Salvar Rotação';
+        if (btn) btn.disabled = false;
+    });
 }
 
 function fecharVisualizadorImagem() {

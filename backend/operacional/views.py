@@ -2385,6 +2385,136 @@ def aprovar_canhoto_manual_view(request, baixa_id):
     })
 
 
+@login_required
+@require_POST
+def rotacionar_canhoto_servidor_view(request, baixa_id):
+    """
+    Gira o canhoto no servidor pelo ângulo desejado (90, 180, 270),
+    remove a tarja antiga invertida e recria a tarja preta de rastreamento perfeitamente
+    alinhada no rodapé da imagem corrigida.
+    """
+    import logging
+    import requests
+    import numpy as np
+    import cv2
+    from manifesto.models import BaixaNF
+    from manifesto.rotas.baixa import upload_via_ftp
+    from manifesto.services import enviar_painel
+    
+    logger = logging.getLogger(__name__)
+    baixa = get_object_or_404(BaixaNF, id=baixa_id)
+
+    try:
+        data = json.loads(request.body) if request.body else request.POST
+    except Exception:
+        data = request.POST
+
+    try:
+        graus = int(data.get('graus', 0)) % 360
+    except (ValueError, TypeError):
+        return JsonResponse({'status': 'erro', 'message': 'Ângulo de rotação inválido.'}, status=400)
+
+    if graus == 0:
+        return JsonResponse({'status': 'erro', 'message': 'Gire a imagem antes de salvar (ângulo atual: 0°).'}, status=400)
+
+    # 1. Pega a URL da imagem de origem (preferência para backup original sem tarja)
+    url_origem = baixa.comprovante_original_url or baixa.comprovante_foto_url
+    if not url_origem:
+        return JsonResponse({'status': 'erro', 'message': 'Nenhum comprovante associado a esta baixa.'}, status=404)
+
+    try:
+        resp = requests.get(url_origem, timeout=20)
+        if resp.status_code != 200:
+            return JsonResponse({'status': 'erro', 'message': f'Falha ao baixar imagem de origem (HTTP {resp.status_code}).'}, status=500)
+
+        img_array = np.frombuffer(resp.content, np.uint8)
+        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        if img is None:
+            return JsonResponse({'status': 'erro', 'message': 'Não foi possível decodificar o arquivo de imagem.'}, status=500)
+
+        # 2. Se a imagem utilizada de origem já possuía a tarja antiga no rodapé, remove antes de girar
+        h, w = img.shape[:2]
+        if (not baixa.comprovante_original_url or url_origem == baixa.comprovante_foto_url) and h > 100:
+            rodape = img[max(0, h - 45):h, :]
+            if np.mean(rodape) < 40: # Tarja preta detectada
+                img = img[0:max(1, h - 45), :]
+                h, w = img.shape[:2]
+
+        # 3. Aplica a rotação de acordo com o ângulo
+        if graus == 90:
+            img_rotacionada = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+        elif graus == 180:
+            img_rotacionada = cv2.rotate(img, cv2.ROTATE_180)
+        elif graus == 270:
+            img_rotacionada = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        else:
+            return JsonResponse({'status': 'erro', 'message': f'Ângulo {graus}° não suportado. Use 90°, 180° ou 270°.'}, status=400)
+
+        # 4. Monta o texto da nova Tarja Preta
+        from django.utils import timezone
+        data_local = timezone.localtime(baixa.data_baixa) if baixa.data_baixa else timezone.now()
+        data_str = data_local.strftime('%d/%m/%Y %H:%M:%S')
+
+        lat = str(baixa.latitude) if baixa.latitude else ""
+        lng = str(baixa.longitude) if baixa.longitude else ""
+
+        motorista_nome = ""
+        nfe_num = ""
+        nf = baixa.nota_fiscal
+        if nf:
+            nfe_num = nf.numero_nota or ""
+            if nf.manifesto and nf.manifesto.motorista:
+                motorista_nome = getattr(nf.manifesto.motorista, 'nome_completo', '') or getattr(nf.manifesto.motorista, 'nome_motorista', '')
+
+        watermark_text = f"RXTrack - {data_str} {lat}, {lng} {motorista_nome} NFE {nfe_num}".replace("  ", " ").strip()
+
+        # 5. Adiciona a nova Tarja Preta perfeitamente alinhada no rodapé da imagem final
+        h_rot, w_rot = img_rotacionada.shape[:2]
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        text_scale = 1.0
+        text_size = cv2.getTextSize(watermark_text, font, text_scale, 1)[0]
+        if text_size[0] > (w_rot - 40):
+            text_scale = (w_rot - 40) / text_size[0]
+        text_scale = max(0.4, text_scale)
+        thickness = max(1, int(text_scale * 2))
+        text_size = cv2.getTextSize(watermark_text, font, text_scale, thickness)[0]
+
+        bar_height = text_size[1] + 30
+        black_bar = np.zeros((bar_height, w_rot, 3), dtype=np.uint8)
+        text_color = (0, 255, 255) # Amarelo BGR
+        cv2.putText(black_bar, watermark_text, (20, bar_height - 15), font, text_scale, text_color, thickness, cv2.LINE_AA)
+
+        final_img = cv2.vconcat([img_rotacionada, black_bar])
+
+        # 6. Codifica e faz upload para o servidor de arquivos (FTP)
+        _, buffer_jpg = cv2.imencode('.jpg', final_img, [cv2.IMWRITE_JPEG_QUALITY, 92])
+
+        id_foto = nf.chave_acesso if (nf and nf.chave_acesso) else f"baixa_{baixa.id}"
+        nome_arquivo = f"rot_{baixa.id}_{graus}deg_{id_foto}.jpg"
+
+        url_final = upload_via_ftp(buffer_jpg.tobytes(), nome_arquivo)
+        if not url_final:
+            return JsonResponse({'status': 'erro', 'message': 'Falha ao salvar imagem no servidor de arquivos (FTP).'}, status=500)
+
+        # 7. Atualiza o registro no banco de dados
+        baixa.comprovante_foto_url = url_final
+        baixa.save(update_fields=['comprovante_foto_url'])
+
+        # Notifica a Torre de Controle em tempo real
+        if nf and nf.manifesto:
+            transaction.on_commit(lambda: enviar_painel(nf.manifesto))
+
+        return JsonResponse({
+            'status': 'sucesso',
+            'message': f'Comprovante rotacionado em {graus}° e nova tarja preta gerada com sucesso!',
+            'nova_url': url_final
+        })
+
+    except Exception as e:
+        logger.error(f"Erro ao rotacionar comprovante #{baixa_id}: {e}")
+        return JsonResponse({'status': 'erro', 'message': f'Erro interno: {str(e)}'}, status=500)
+
+
 # ──────────────────────────────────────────────────────────────
 #  API GESTÃO DE FILIAIS (Endereço, Geolocalização, WhatsApp)
 # ──────────────────────────────────────────────────────────────
