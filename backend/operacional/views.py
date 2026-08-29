@@ -2500,13 +2500,22 @@ def rotacionar_canhoto_servidor_view(request, baixa_id):
         baixa.comprovante_foto_url = url_final
         baixa.save(update_fields=['comprovante_foto_url'])
 
+        # 8. Dispara o re-envio EXCLUSIVO da foto para o ESL Cloud (atualiza apenas o comprovante lá no TMS)
+        from configuracao.utils import get_config
+        from manifesto.tasks import enviar_comprovante_esl_task
+
+        config = get_config()
+        if config.enviar_tms:
+            enviar_comprovante_esl_task.delay(baixa.id)
+            logger.info(f"📸 [ROTACAO COMPROVANTE] Recadastro exclusivo de foto disparado para ESL Cloud (Baixa #{baixa.id}).")
+
         # Notifica a Torre de Controle em tempo real
         if nf and nf.manifesto:
             transaction.on_commit(lambda: enviar_painel(nf.manifesto))
 
         return JsonResponse({
             'status': 'sucesso',
-            'message': f'Comprovante rotacionado em {graus}° e nova tarja preta gerada com sucesso!',
+            'message': f'Comprovante rotacionado em {graus}° e atualizado na ESL com sucesso!',
             'nova_url': url_final
         })
 
