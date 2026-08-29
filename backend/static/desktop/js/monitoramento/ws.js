@@ -848,6 +848,9 @@ function atualizarPosicaoMapa(dados) {
     }
     document.getElementById('mapa-status-visto').innerText = timeStr;
 
+    atualizarTooltipEPopupMarcador(motoristaNomeAtual, dados.last_seen, dados.battery, dados.network, dados.is_charging);
+}
+
 // =========================================================
 // SISTEMA DE PILHA INTELIGENTE DE CARDS POR MOTORISTA (STACK ENGINE)
 // =========================================================
@@ -898,10 +901,16 @@ function agruparCardsPorMotorista() {
         return !window.filialAtivaTorreId || String(cFilial) === String(window.filialAtivaTorreId);
     });
 
-    // Agrupa por motorista_id
+    // Agrupa por motorista_id ou fallback pelo nome do motorista
     const grupos = {};
     cardsFilial.forEach(card => {
-        const motId = card.getAttribute('data-motorista-id');
+        let motId = (card.getAttribute('data-motorista-id') || '').trim();
+        if (!motId) {
+            const nomeSpan = card.querySelector('h6 .text-truncate') || card.querySelector('h6 span');
+            if (nomeSpan && nomeSpan.innerText.trim()) {
+                motId = 'mot_' + nomeSpan.innerText.trim().toLowerCase().replace(/\s+/g, '_');
+            }
+        }
         if (!motId) return;
         if (!grupos[motId]) grupos[motId] = [];
         grupos[motId].push(card);
