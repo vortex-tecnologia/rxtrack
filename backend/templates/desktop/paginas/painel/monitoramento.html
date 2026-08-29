@@ -73,6 +73,119 @@
     50% { transform: scale(1.35); }
     100% { transform: scale(1); }
 }
+
+/* =========================================================
+   STACK DE CARDS POR MOTORISTA (PILHA INTELIGENTE)
+========================================================= */
+.manifesto-card-item {
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease;
+}
+
+/* Efeito de camadas de cartas empilhadas no card principal */
+.card-stacked-layer-2 {
+    box-shadow: 
+        0 2px 6px rgba(0,0,0,0.06),
+        4px 4px 0 0 #f8f9fa,
+        4px 4px 0 1px #dee2e6,
+        5px 6px 12px rgba(0,0,0,0.08) !important;
+}
+
+.card-stacked-layer-3plus {
+    box-shadow: 
+        0 2px 6px rgba(0,0,0,0.06),
+        4px 4px 0 0 #f8f9fa,
+        4px 4px 0 1px #dee2e6,
+        8px 8px 0 0 #f1f3f5,
+        8px 8px 0 1px #ced4da,
+        10px 10px 18px rgba(0,0,0,0.11) !important;
+}
+
+/* Badge de controle da pilha (Toggle) */
+.badge-stack-toggle {
+    position: absolute;
+    top: 9px;
+    right: 9px;
+    z-index: 10;
+    background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+    color: #ffffff;
+    font-size: 0.73rem;
+    font-weight: 800;
+    padding: 3px 9px;
+    border-radius: 12px;
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(13, 110, 253, 0.4);
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    line-height: 1.2;
+}
+
+.badge-stack-toggle:hover {
+    transform: scale(1.1);
+    background: linear-gradient(135deg, #0b5ed7 0%, #084298 100%);
+    box-shadow: 0 4px 12px rgba(13, 110, 253, 0.6);
+}
+
+.badge-stack-toggle.is-expanded {
+    background: linear-gradient(135deg, #495057 0%, #343a40 100%);
+    box-shadow: 0 2px 6px rgba(52, 58, 64, 0.4);
+}
+
+.badge-stack-toggle.is-expanded:hover {
+    background: linear-gradient(135deg, #343a40 0%, #212529 100%);
+}
+
+.badge-stack-toggle-pulse {
+    animation: stackPulse 0.5s ease;
+}
+
+@keyframes stackPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+    100% { transform: scale(1); }
+}
+
+/* Faixa de prévia dos manifestos na fila empilhados */
+.stack-peek-bar {
+    background: #f1f5f9;
+    border-top: 1px dashed #cbd5e1;
+    padding: 5px 12px;
+    font-size: 0.70rem;
+    font-weight: 600;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    border-bottom-left-radius: 14px;
+    border-bottom-right-radius: 14px;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.stack-peek-bar:hover {
+    background: #e2e8f0;
+    color: #0d6efd;
+}
+
+/* Animações de expansão e colapso */
+.stack-expand-anim {
+    animation: stackExpand 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes stackExpand {
+    from {
+        opacity: 0;
+        transform: translateY(-12px) scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
 </style>
 <div class="container-fluid py-4" style="background-color: #f8f9fa; min-height: 100vh;">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
@@ -110,6 +223,8 @@
         <div class="col-12 col-md-6 col-lg-4 col-xl-3 manifesto-card-item" 
              id="card-mft-{{ m.numero_manifesto }}"
              data-status="{{ m.status }}"
+             data-motorista-id="{% if m.motorista %}{{ m.motorista.id }}{% endif %}"
+             data-criacao="{{ m.data_criacao|date:'c' }}"
              data-filial-id="{% firstof m.filial_operacao_id m.filial_id '' %}"
              data-filial-nome="{% if m.filial_operacao %}{{ m.filial_operacao.nome }}{% elif m.filial %}{{ m.filial.nome }}{% endif %}"
              style="{% if filial_ativa_id %}{% with efetiva_id=m.filial_operacao_id|default:m.filial_id %}{% if efetiva_id != filial_ativa_id %}display: none;{% endif %}{% endwith %}{% endif %}">
@@ -503,9 +618,14 @@
                     emptyStateEl.classList.add('d-none');
                 }
             }
+
+            // Recalcula agrupamento de pilhas para a filial selecionada
+            if (typeof reavaliarStacks === 'function') {
+                reavaliarStacks();
+            }
         }
     </script>
-    <script src="{% static 'desktop/js/monitoramento/ws.js' %}?v=9"></script>
+    <script src="{% static 'desktop/js/monitoramento/ws.js' %}?v=10"></script>
     <script>
         let mapaEntrega = null;
 

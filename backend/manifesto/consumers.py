@@ -61,6 +61,27 @@ class MonitoramentoConsumer(AsyncWebsocketConsumer):
         except Exception:
             return
 
+        # Sincronização em tempo real de agrupamento de cards (pilha de manifestos por motorista)
+        if data.get('type') == 'toggle_stack':
+            mot_id = data.get('motorista_id')
+            expanded = data.get('expanded', False)
+            targets = ["painel_monitoramento_todas"]
+            if hasattr(self, 'filial_id') and self.filial_id and self.filial_id != 'todas':
+                targets.append(f"painel_monitoramento_{self.filial_id}")
+            targets = list(set(targets))
+            for target in targets:
+                await self.channel_layer.group_send(
+                    target,
+                    {
+                        "type": "repassar_toggle_stack",
+                        "data": {
+                            "motorista_id": str(mot_id),
+                            "expanded": bool(expanded)
+                        }
+                    }
+                )
+            return
+
         # Lógica de Coração (Heartbeat) do Motorista
         if data.get('type') == 'heartbeat':
             user = self.scope['user']
@@ -175,6 +196,12 @@ class MonitoramentoConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             "type": "atualizar_cargas",
             "data": event.get("data", {})
+        }))
+
+    async def repassar_toggle_stack(self, event):
+        await self.send(text_data=json.dumps({
+            "type": "toggle_stack",
+            "dados": event.get("data", {})
         }))
 
 

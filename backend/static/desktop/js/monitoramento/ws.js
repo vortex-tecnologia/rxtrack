@@ -26,6 +26,23 @@ function conectarWebSocket() {
             console.log("📩 WS Mensagem recebida:", e.data);
             const data = JSON.parse(e.data);
 
+            // 0. TRATAR SINCRONIZAÇÃO DE EXPANSÃO/RECOLHIMENTO DE PILHA (STACK)
+            if (data.type === 'toggle_stack') {
+                const payload = data.dados || data;
+                const motId = String(payload.motorista_id || '');
+                if (motId) {
+                    if (payload.expanded) {
+                        stacksExpandidos.add(motId);
+                    } else {
+                        stacksExpandidos.delete(motId);
+                    }
+                    if (typeof reavaliarStacks === 'function') {
+                        reavaliarStacks();
+                    }
+                }
+                return;
+            }
+
             // 1. TRATAR STATUS DO MOTORISTA (HEARTBEAT)
             if (data.type === 'status_motorista') {
                 const status = data.dados;
@@ -110,6 +127,9 @@ function conectarWebSocket() {
                             if (typeof aplicarFiltroFilialNaGrid === 'function') {
                                 aplicarFiltroFilialNaGrid();
                             }
+                            if (typeof reavaliarStacks === 'function') {
+                                reavaliarStacks();
+                            }
                         }, 500);
                     }
                     return; // Ignora o resto se for remover
@@ -123,6 +143,11 @@ function conectarWebSocket() {
                     cardContainer = document.getElementById(`card-mft-${mID}`);
                     if (typeof aplicarFiltroFilialNaGrid === 'function') {
                         aplicarFiltroFilialNaGrid();
+                    }
+                } else if (d.status && cardContainer.getAttribute('data-status') !== d.status) {
+                    cardContainer.setAttribute('data-status', d.status);
+                    if (typeof reavaliarStacks === 'function') {
+                        reavaliarStacks();
                     }
                 }
 
@@ -279,6 +304,8 @@ function conectarWebSocket() {
             <div class="col-12 col-md-6 col-lg-4 col-xl-3 manifesto-card-item" 
                  id="card-mft-${d.manifesto_id}"
                  data-status="${d.status || 'AGUARDANDO'}"
+                 data-motorista-id="${d.motorista_id || ''}"
+                 data-criacao="${d.data_criacao_iso || ''}"
                  data-filial-id="${d.filial_id || ''}"
                  data-filial-nome="${d.filial_nome || ''}"
                  style="${deveEsconder ? 'display: none;' : ''}">
@@ -384,6 +411,10 @@ function conectarWebSocket() {
         `;
 
         grid.insertAdjacentHTML('afterbegin', html);
+
+        if (typeof reavaliarStacks === 'function') {
+            reavaliarStacks();
+        }
     }
 
     function updateBatteryIcon(mID, level, isCharging) {
@@ -817,7 +848,208 @@ function atualizarPosicaoMapa(dados) {
     }
     document.getElementById('mapa-status-visto').innerText = timeStr;
 
-    atualizarTooltipEPopupMarcador(motoristaNomeAtual, dados.last_seen, dados.battery, dados.network, dados.is_charging);
+// =========================================================
+// SISTEMA DE PILHA INTELIGENTE DE CARDS POR MOTORISTA (STACK ENGINE)
+// =========================================================
+const stacksExpandidos = new Set();
+let stackReevalTimeout = null;
+
+function reavaliarStacks() {
+    clearTimeout(stackReevalTimeout);
+    stackReevalTimeout = setTimeout(() => {
+        agruparCardsPorMotorista();
+    }, 60);
 }
+
+function toggleStackMotorista(motId) {
+    if (!motId) return;
+    const idStr = String(motId);
+    const expandir = !stacksExpandidos.has(idStr);
+    
+    if (expandir) {
+        stacksExpandidos.add(idStr);
+    } else {
+        stacksExpandidos.delete(idStr);
+    }
+    
+    // Atualiza a visualização local
+    agruparCardsPorMotorista();
+
+    // Sincroniza em tempo real com todas as outras telas da Torre via WebSocket
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            type: 'toggle_stack',
+            motorista_id: idStr,
+            expanded: expandir
+        }));
+    }
+}
+
+function agruparCardsPorMotorista() {
+    const grid = document.getElementById('grid-monitoramento');
+    if (!grid) return;
+
+    // Pega todos os cards de manifesto presentes no DOM
+    const allCards = Array.from(grid.querySelectorAll('.manifesto-card-item'));
+    
+    // Filtra apenas os cards da filial ativa no momento (ou todos se nenhuma estiver filtrada)
+    const cardsFilial = allCards.filter(card => {
+        const cFilial = card.getAttribute('data-filial-id');
+        return !window.filialAtivaTorreId || String(cFilial) === String(window.filialAtivaTorreId);
+    });
+
+    // Agrupa por motorista_id
+    const grupos = {};
+    cardsFilial.forEach(card => {
+        const motId = card.getAttribute('data-motorista-id');
+        if (!motId) return;
+        if (!grupos[motId]) grupos[motId] = [];
+        grupos[motId].push(card);
+    });
+
+    // Processa cada grupo de motorista
+    Object.entries(grupos).forEach(([motId, cardsDoMotorista]) => {
+        // Se o motorista tem apenas 1 card, restaura visual normal
+        if (cardsDoMotorista.length <= 1) {
+            limparEfeitosStack(cardsDoMotorista[0]);
+            cardsDoMotorista[0].style.display = '';
+            return;
+        }
+
+        const isExpandido = stacksExpandidos.has(String(motId));
+
+        // Ordenação inteligente: EM_TRANSPORTE primeiro, depois por data mais antiga (quem chegou antes)
+        cardsDoMotorista.sort((a, b) => {
+            const stA = a.getAttribute('data-status') || '';
+            const stB = b.getAttribute('data-status') || '';
+            if (stA === 'EM_TRANSPORTE' && stB !== 'EM_TRANSPORTE') return -1;
+            if (stB === 'EM_TRANSPORTE' && stA !== 'EM_TRANSPORTE') return 1;
+
+            const dtA = a.getAttribute('data-criacao') || '';
+            const dtB = b.getAttribute('data-criacao') || '';
+            return dtA.localeCompare(dtB);
+        });
+
+        if (isExpandido) {
+            // EXPANDIDO: Mostra todos os cards lado a lado na grid
+            cardsDoMotorista.forEach((card, index) => {
+                card.style.display = '';
+                limparEfeitosStack(card);
+                card.classList.add('stack-expand-anim');
+                aplicarBadgeStackExpandido(card, cardsDoMotorista.length, index + 1, motId);
+            });
+        } else {
+            // EMPILHADO (COLAPSADO): Card prioritário na frente, demais escondidos
+            const cardPrincipal = cardsDoMotorista[0];
+            const cardsAtras = cardsDoMotorista.slice(1);
+
+            cardPrincipal.style.display = '';
+            limparEfeitosStack(cardPrincipal);
+            aplicarEfeitosStackPrincipal(cardPrincipal, cardsDoMotorista.length, motId, cardsAtras);
+
+            cardsAtras.forEach(card => {
+                limparEfeitosStack(card);
+                card.style.display = 'none';
+            });
+        }
+    });
+
+    // Para cards sem motorista_id, garante visibilidade
+    cardsFilial.forEach(card => {
+        const motId = card.getAttribute('data-motorista-id');
+        if (!motId) {
+            limparEfeitosStack(card);
+            card.style.display = '';
+        }
+    });
+}
+
+function aplicarEfeitosStackPrincipal(card, total, motId, cardsAtras) {
+    const innerCard = card.querySelector('.card');
+    if (!innerCard) return;
+
+    // Efeito de camadas visuais de cartas empilhadas
+    if (total === 2) {
+        innerCard.classList.add('card-stacked-layer-2');
+    } else if (total >= 3) {
+        innerCard.classList.add('card-stacked-layer-3plus');
+    }
+
+    // Badge com contagem e ícone de pilha
+    let badge = card.querySelector('.badge-stack-toggle');
+    if (!badge) {
+        badge = document.createElement('div');
+        badge.className = 'badge-stack-toggle shadow-sm';
+        innerCard.appendChild(badge);
+    }
+    badge.classList.remove('is-expanded');
+    badge.innerHTML = `<i class="bi bi-stack"></i> <span>${total}</span>`;
+    badge.title = `${total} manifestos deste motorista. Clique para expandir os ${total} cards`;
+    badge.onclick = (e) => {
+        e.stopPropagation();
+        badge.classList.add('badge-stack-toggle-pulse');
+        toggleStackMotorista(motId);
+    };
+
+    // Faixa inferior (peek) mostrando números dos manifestos na fila
+    const numerosManifestosAtras = cardsAtras.map(c => {
+        const idMft = c.id.replace('card-mft-', '');
+        return `#${idMft}`;
+    }).join(', ');
+
+    let peek = card.querySelector('.stack-peek-bar');
+    if (!peek) {
+        peek = document.createElement('div');
+        peek.className = 'stack-peek-bar';
+        innerCard.appendChild(peek);
+    }
+    peek.innerHTML = `<span><i class="bi bi-layers me-1 text-primary"></i> +${cardsAtras.length} na fila: <strong>${numerosManifestosAtras}</strong></span><i class="bi bi-chevron-down text-muted"></i>`;
+    peek.title = `Clique para expandir todos os ${total} manifestos deste motorista`;
+    peek.onclick = (e) => {
+        e.stopPropagation();
+        toggleStackMotorista(motId);
+    };
+}
+
+function aplicarBadgeStackExpandido(card, total, posicao, motId) {
+    const innerCard = card.querySelector('.card');
+    if (!innerCard) return;
+
+    let badge = card.querySelector('.badge-stack-toggle');
+    if (!badge) {
+        badge = document.createElement('div');
+        badge.className = 'badge-stack-toggle is-expanded shadow-sm';
+        innerCard.appendChild(badge);
+    } else {
+        badge.classList.add('is-expanded');
+    }
+    badge.innerHTML = `<i class="bi bi-x-circle me-1"></i> <span>Pilha ${posicao}/${total}</span>`;
+    badge.title = `Clique para recolher todos os ${total} manifestos na pilha`;
+    badge.onclick = (e) => {
+        e.stopPropagation();
+        badge.classList.add('badge-stack-toggle-pulse');
+        toggleStackMotorista(motId);
+    };
+}
+
+function limparEfeitosStack(card) {
+    if (!card) return;
+    const innerCard = card.querySelector('.card');
+    if (innerCard) {
+        innerCard.classList.remove('card-stacked-layer-2', 'card-stacked-layer-3plus');
+    }
+    const badge = card.querySelector('.badge-stack-toggle');
+    if (badge) badge.remove();
+    const peek = card.querySelector('.stack-peek-bar');
+    if (peek) peek.remove();
+    card.classList.remove('stack-expand-anim');
+}
+
+// Inicializa ou reavalia pilhas automaticamente
+document.addEventListener("DOMContentLoaded", function () {
+    if (typeof reavaliarStacks === 'function') {
+        reavaliarStacks();
+    }
+});
 
 conectarWebSocket();
