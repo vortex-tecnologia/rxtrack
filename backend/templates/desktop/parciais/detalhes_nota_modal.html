@@ -154,10 +154,16 @@
                             <label class="text-muted small fw-bold d-block mb-2 text-uppercase" style="font-size: 0.65rem;">Comprovante / Canhoto</label>
                             {% if baixa.comprovante_foto_url %}
                                 <div class="mb-2">
-                                    <a href="{{ baixa.comprovante_foto_url }}" target="_blank" class="d-inline-block position-relative">
-                                        <img src="{{ baixa.comprovante_foto_url }}" class="img-fluid rounded shadow-sm border" style="max-height: 160px; object-fit: contain;">
+                                    <a href="javascript:void(0)" 
+                                       onclick="abrirVisualizadorImagem('{{ baixa.comprovante_foto_url|escapejs }}', 'Comprovante / Canhoto NF {{ nota_principal.numero_nota }}')" 
+                                       class="d-inline-block position-relative shadow-sm rounded overflow-hidden" 
+                                       title="Clique para abrir e inspecionar/girar a imagem">
+                                        <img src="{{ baixa.comprovante_foto_url }}" class="img-fluid rounded border" style="max-height: 160px; object-fit: contain; cursor: pointer; transition: transform 0.2s ease;">
                                         <span class="position-absolute bottom-0 end-0 bg-dark bg-opacity-75 text-white p-1 rounded-start small" title="Foto Processada">
                                             <i class="bi bi-cpu"></i>
+                                        </span>
+                                        <span class="position-absolute top-0 end-0 bg-primary text-white px-2 py-0.5 rounded-bottom-start small shadow-sm" style="font-size: 0.65rem;" title="Inspecionar / Girar">
+                                            <i class="bi bi-arrows-fullscreen me-1"></i>Inspecionar
                                         </span>
                                     </a>
                                 </div>
@@ -185,8 +191,11 @@
                                 {% if baixa.comprovante_original_url and baixa.comprovante_original_url != baixa.comprovante_foto_url %}
                                     <div class="mt-2">
                                         <label class="text-muted" style="font-size: 0.6rem; display: block;">FOTO ORIGINAL (BACKUP)</label>
-                                        <a href="{{ baixa.comprovante_original_url }}" target="_blank" class="d-inline-block opacity-75">
-                                            <img src="{{ baixa.comprovante_original_url }}" class="img-fluid rounded border" style="max-height: 80px; filter: grayscale(50%);">
+                                        <a href="javascript:void(0)" 
+                                           onclick="abrirVisualizadorImagem('{{ baixa.comprovante_original_url|escapejs }}', 'Foto Original (Backup) NF {{ nota_principal.numero_nota }}')" 
+                                           class="d-inline-block opacity-75" 
+                                           title="Clique para inspecionar / girar foto original">
+                                            <img src="{{ baixa.comprovante_original_url }}" class="img-fluid rounded border" style="max-height: 80px; filter: grayscale(50%); cursor: pointer;">
                                         </a>
                                     </div>
                                 {% endif %}
