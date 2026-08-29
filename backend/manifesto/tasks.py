@@ -200,9 +200,11 @@ def processar_webhook_manifesto_task(self, event_id):
             payload = event.payload
             # 1. Filial Fiscal / Transportadora (Vínculo comercial)
             f_data = payload.get('filial', {})
+            cnpj_filial = f_data.get('cnpj')
             id_f_tms = f_data.get('id_tms') or f_data.get('Codigo')
             filial_nome = str(f_data.get('nome') or f_data.get('Razao') or 'FILIAL WEBHOOK').upper().strip()
-            filial_obj = _buscar_ou_criar_filial_unificada(id_f_tms, filial_nome)
+            # Prioriza CNPJ para busca (mais confiável que id_tms)
+            filial_obj = _buscar_ou_criar_filial_unificada(cnpj_filial or id_f_tms, filial_nome)
 
             # 1b. Filial de Operação / Base de Atuação Física (de onde o caminhão realmente sai)
             filial_operacao_obj = None

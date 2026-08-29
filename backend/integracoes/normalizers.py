@@ -88,6 +88,32 @@ def extrair_credencial_tms(payload: dict) -> str:
     return ''
 
 
+def _resolver_nome_filial(razao_social: str) -> str:
+    """
+    Converte razão social longa do TMS para o nome amigável da filial.
+    Faz match contra as filiais já cadastradas no banco de dados.
+    Ex: 'QUICK DELIVERY BRASILIA ENTREGAS RAPIDAS DE ENCOMENDAS LTDA' → 'QUICK BRASILIA'
+        'RD EXPRESSO TRANSPORTES - EIRELI' → 'RD EXPRESSO'
+    """
+    razao = razao_social.upper().strip()
+    if not razao:
+        return 'FILIAL TMS'
+
+    try:
+        from usuarios.models import Filial
+        # Busca se alguma filial cadastrada tem nome que está contido na razão social
+        for filial in Filial.objects.all().order_by('-id'):
+            nome_filial = filial.nome.upper().strip()
+            if nome_filial and len(nome_filial) >= 3 and nome_filial in razao:
+                logger.info(f"🏢 [RESOLVER_FILIAL] Razão '{razao}' resolvida para filial existente: '{nome_filial}'")
+                return nome_filial
+    except Exception as e:
+        logger.warning(f"⚠️ [RESOLVER_FILIAL] Erro ao buscar filiais no banco: {e}")
+
+    # Fallback: retorna a razão social original
+    return razao
+
+
 def normalizar_json_tms(payload: dict) -> dict:
     """
     Converte o JSON do TMS (formato Comprovei/SSW) para o formato interno do RXTrack.
@@ -98,9 +124,15 @@ def normalizar_json_tms(payload: dict) -> dict:
 
     # ─── TRANSPORTADORA → FILIAL ───
     transportadora = rota.get('Transportadora', {})
+    import re
+    codigo_raw = str(transportadora.get('Codigo', '')).strip()
+    codigo_limpo = re.sub(r'\D', '', codigo_raw)
+    razao_social = str(transportadora.get('Razao', 'FILIAL TMS')).upper().strip()
+
     filial = {
-        'id_tms': str(transportadora.get('Codigo', '')).strip() or None,
-        'nome': str(transportadora.get('Razao', 'FILIAL TMS')).upper().strip(),
+        'cnpj': codigo_limpo if len(codigo_limpo) == 14 else None,
+        'id_tms': codigo_raw if codigo_raw and len(codigo_limpo) != 14 else None,
+        'nome': _resolver_nome_filial(razao_social),
     }
 
     # ─── MOTORISTA ───
