@@ -2389,10 +2389,12 @@ def aprovar_canhoto_manual_view(request, baixa_id):
 @require_POST
 def rotacionar_canhoto_servidor_view(request, baixa_id):
     """
-    Gira o canhoto no servidor pelo ângulo desejado (90, 180, 270),
-    remove a tarja antiga invertida e recria a tarja preta de rastreamento perfeitamente
-    alinhada no rodapé da imagem corrigida.
+    Recebe a imagem recortada e rotacionada pelo operador (via Base64 do Cropper.js),
+    adiciona a Tarja Preta de Rastreamento (RXTrack - Data Hora GPS Motorista NFE)
+    perfeitamente no rodapé e sincroniza com a ESL Cloud.
     """
+    import base64
+    import time
     import logging
     import requests
     import numpy as np
@@ -2400,7 +2402,8 @@ def rotacionar_canhoto_servidor_view(request, baixa_id):
     from manifesto.models import BaixaNF
     from manifesto.rotas.baixa import upload_via_ftp
     from manifesto.services import enviar_painel
-    
+    from django.utils import timezone
+
     logger = logging.getLogger(__name__)
     baixa = get_object_or_404(BaixaNF, id=baixa_id)
 
@@ -2410,70 +2413,41 @@ def rotacionar_canhoto_servidor_view(request, baixa_id):
         data = request.POST
 
     try:
-        graus = int(data.get('graus', 0)) % 360
-    except (ValueError, TypeError):
-        return JsonResponse({'status': 'erro', 'message': 'Ângulo de rotação inválido.'}, status=400)
-
-    if graus == 0:
-        return JsonResponse({'status': 'erro', 'message': 'Gire a imagem antes de salvar (ângulo atual: 0°).'}, status=400)
-
-    # 1. Pega a URL da imagem exata que está sendo visualizada e rotacionada (canhoto recortado)
-    url_origem = data.get('url_imagem') or baixa.comprovante_foto_url or baixa.comprovante_original_url
-    if not url_origem:
-        return JsonResponse({'status': 'erro', 'message': 'Nenhum comprovante associado a esta baixa.'}, status=404)
-
-    try:
-        resp = requests.get(url_origem, timeout=20)
-        if resp.status_code != 200:
-            return JsonResponse({'status': 'erro', 'message': f'Falha ao baixar imagem de origem (HTTP {resp.status_code}).'}, status=500)
-
-        img_array = np.frombuffer(resp.content, np.uint8)
-        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-        if img is None:
-            return JsonResponse({'status': 'erro', 'message': 'Não foi possível decodificar o arquivo de imagem.'}, status=500)
-
-        # 2. Remove TODAS as tarjas pretas antigas (tanto do topo quanto do rodapé) antes de rotacionar
-        h, w = img.shape[:2]
-        if h > 80:
-            top_cut = 0
-            # Varre do topo para baixo procurando onde termina tarja preta no topo (se houver)
-            for y in range(0, min(h // 2, 160)):
-                linha = img[y, :, :]
-                pixels_escuros = np.mean(linha < 45)
-                if pixels_escuros < 0.70 and np.mean(linha) > 55:
-                    top_cut = y
-                    break
-
-            bottom_cut = h
-            # Varre da base para cima procurando onde termina tarja preta na base (se houver)
-            for y in range(h - 1, max(h // 2, h - 160), -1):
-                linha = img[y, :, :]
-                pixels_escuros = np.mean(linha < 45)
-                if pixels_escuros < 0.70 and np.mean(linha) > 55:
-                    bottom_cut = y + 1
-                    break
-
-            if bottom_cut > top_cut and (bottom_cut - top_cut) > 40:
-                img = img[top_cut:bottom_cut, :]
-
-        # 3. Aplica a rotação de acordo com o ângulo
-        if graus == 90:
-            img_rotacionada = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-        elif graus == 180:
-            img_rotacionada = cv2.rotate(img, cv2.ROTATE_180)
-        elif graus == 270:
-            img_rotacionada = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        # Se veio imagem Base64 do Cropper.js (Modo Recorte Interativo)
+        if 'imagem_base64' in data and data['imagem_base64']:
+            b64_str = str(data['imagem_base64'])
+            if 'base64,' in b64_str:
+                b64_str = b64_str.split('base64,')[1]
+            img_bytes = base64.b64decode(b64_str)
+            img_array = np.frombuffer(img_bytes, np.uint8)
+            img_recortada = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+            if img_recortada is None:
+                return JsonResponse({'status': 'erro', 'message': 'Falha ao decodificar imagem base64.'}, status=400)
         else:
-            return JsonResponse({'status': 'erro', 'message': f'Ângulo {graus}° não suportado. Use 90°, 180° ou 270°.'}, status=400)
+            # Fallback tradicional: URL + graus
+            graus = int(data.get('graus', 0)) % 360
+            url_origem = data.get('url_imagem') or baixa.comprovante_foto_url or baixa.comprovante_original_url
+            if not url_origem:
+                return JsonResponse({'status': 'erro', 'message': 'Nenhum comprovante encontrado.'}, status=404)
+            resp = requests.get(url_origem, timeout=20)
+            img_array = np.frombuffer(resp.content, np.uint8)
+            img_raw = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+            if img_raw is None:
+                return JsonResponse({'status': 'erro', 'message': 'Erro ao ler arquivo da URL.'}, status=500)
+            if graus == 90:
+                img_recortada = cv2.rotate(img_raw, cv2.ROTATE_90_CLOCKWISE)
+            elif graus == 180:
+                img_recortada = cv2.rotate(img_raw, cv2.ROTATE_180)
+            elif graus == 270:
+                img_recortada = cv2.rotate(img_raw, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            else:
+                img_recortada = img_raw
 
-        # 4. Monta o texto da nova Tarja Preta
-        from django.utils import timezone
+        # 1. Monta o texto oficial da Tarja Preta
         data_local = timezone.localtime(baixa.data_baixa) if baixa.data_baixa else timezone.now()
         data_str = data_local.strftime('%d/%m/%Y %H:%M:%S')
-
         lat = str(baixa.latitude) if baixa.latitude else ""
         lng = str(baixa.longitude) if baixa.longitude else ""
-
         motorista_nome = ""
         nfe_num = ""
         nf = baixa.nota_fiscal
@@ -2484,46 +2458,46 @@ def rotacionar_canhoto_servidor_view(request, baixa_id):
 
         watermark_text = f"RXTrack - {data_str} {lat}, {lng} {motorista_nome} NFE {nfe_num}".replace("  ", " ").strip()
 
-        # 5. Adiciona a nova Tarja Preta perfeitamente alinhada no rodapé da imagem final
-        h_rot, w_rot = img_rotacionada.shape[:2]
+        # 2. Adiciona a Tarja Preta perfeitamente alinhada no rodapé da imagem recortada
+        h_rec, w_rec = img_recortada.shape[:2]
         font = cv2.FONT_HERSHEY_SIMPLEX
         text_scale = 1.0
         text_size = cv2.getTextSize(watermark_text, font, text_scale, 1)[0]
-        if text_size[0] > (w_rot - 40):
-            text_scale = (w_rot - 40) / text_size[0]
-        text_scale = max(0.4, text_scale)
+        if text_size[0] > (w_rec - 40):
+            text_scale = (w_rec - 40) / text_size[0]
+        text_scale = max(0.35, text_scale)
         thickness = max(1, int(text_scale * 2))
         text_size = cv2.getTextSize(watermark_text, font, text_scale, thickness)[0]
 
-        bar_height = text_size[1] + 30
-        black_bar = np.zeros((bar_height, w_rot, 3), dtype=np.uint8)
+        bar_height = text_size[1] + 28
+        black_bar = np.zeros((bar_height, w_rec, 3), dtype=np.uint8)
         text_color = (0, 255, 255) # Amarelo BGR
-        cv2.putText(black_bar, watermark_text, (20, bar_height - 15), font, text_scale, text_color, thickness, cv2.LINE_AA)
+        cv2.putText(black_bar, watermark_text, (20, bar_height - 14), font, text_scale, text_color, thickness, cv2.LINE_AA)
 
-        final_img = cv2.vconcat([img_rotacionada, black_bar])
+        final_img = cv2.vconcat([img_recortada, black_bar])
 
-        # 6. Codifica e faz upload para o servidor de arquivos (FTP)
-        _, buffer_jpg = cv2.imencode('.jpg', final_img, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        # 3. Codifica e faz upload para o servidor de arquivos (FTP)
+        _, buffer_jpg = cv2.imencode('.jpg', final_img, [cv2.IMWRITE_JPEG_QUALITY, 93])
 
         id_foto = nf.chave_acesso if (nf and nf.chave_acesso) else f"baixa_{baixa.id}"
-        nome_arquivo = f"rot_{baixa.id}_{graus}deg_{id_foto}.jpg"
+        nome_arquivo = f"crop_{baixa.id}_{int(time.time())}_{id_foto}.jpg"
 
         url_final = upload_via_ftp(buffer_jpg.tobytes(), nome_arquivo)
         if not url_final:
             return JsonResponse({'status': 'erro', 'message': 'Falha ao salvar imagem no servidor de arquivos (FTP).'}, status=500)
 
-        # 7. Atualiza o registro no banco de dados
+        # 4. Atualiza o registro no banco de dados
         baixa.comprovante_foto_url = url_final
         baixa.save(update_fields=['comprovante_foto_url'])
 
-        # 8. Dispara o re-envio EXCLUSIVO da foto para o ESL Cloud (atualiza apenas o comprovante lá no TMS)
+        # 5. Dispara o re-envio EXCLUSIVO da foto para o ESL Cloud (atualiza apenas o comprovante lá no TMS)
         from configuracao.utils import get_config
         from manifesto.tasks import enviar_comprovante_esl_task
 
         config = get_config()
         if config.enviar_tms:
             enviar_comprovante_esl_task.delay(baixa.id)
-            logger.info(f"📸 [ROTACAO COMPROVANTE] Recadastro exclusivo de foto disparado para ESL Cloud (Baixa #{baixa.id}).")
+            logger.info(f"📸 [RECORTE COMPROVANTE] Recadastro exclusivo de foto disparado para ESL Cloud (Baixa #{baixa.id}).")
 
         # Notifica a Torre de Controle em tempo real
         if nf and nf.manifesto:
@@ -2531,9 +2505,13 @@ def rotacionar_canhoto_servidor_view(request, baixa_id):
 
         return JsonResponse({
             'status': 'sucesso',
-            'message': f'Comprovante rotacionado em {graus}° e atualizado na ESL com sucesso!',
+            'message': 'Comprovante recortado e tarja gerada com sucesso!',
             'nova_url': url_final
         })
+
+    except Exception as e:
+        logger.error(f"Erro ao recortar/rotacionar comprovante #{baixa_id}: {e}")
+        return JsonResponse({'status': 'erro', 'message': f'Erro interno: {str(e)}'}, status=500)
 
     except Exception as e:
         logger.error(f"Erro ao rotacionar comprovante #{baixa_id}: {e}")

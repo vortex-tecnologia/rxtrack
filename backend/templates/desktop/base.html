@@ -18,6 +18,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Cropper.js para Recorte e Rotação Interativa de Comprovantes -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
     <!-- Driver.js para Tutoriais Guiados -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.css"/>
     <script src="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.js"></script>
@@ -1253,21 +1256,37 @@
     justify-content: center;
     overflow: hidden;
     position: relative;
-    cursor: grab;
+    padding: 16px;
 }
-.image-viewer-viewport.is-dragging {
-    cursor: grabbing;
-}
-.image-viewer-img {
+.image-viewer-crop-wrapper {
     max-width: 90vw;
-    max-height: 82vh;
-    object-fit: contain;
-    border-radius: 8px;
-    box-shadow: 0 12px 48px rgba(0,0,0,0.7);
-    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
-    transform-origin: center center;
-    user-select: none;
-    -webkit-user-drag: none;
+    max-height: 80vh;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+/* Cropper Styling Customizado */
+.cropper-view-box {
+    outline: 2px solid #38bdf8 !important;
+    outline-color: rgba(56, 189, 248, 0.95) !important;
+}
+.cropper-line {
+    background-color: #38bdf8 !important;
+}
+.cropper-point {
+    background-color: #38bdf8 !important;
+    width: 10px !important;
+    height: 10px !important;
+    border-radius: 2px !important;
+}
+.cropper-point.point-se {
+    width: 14px !important;
+    height: 14px !important;
+}
+.cropper-modal {
+    background-color: rgba(10, 15, 29, 0.75) !important;
 }
 .image-viewer-badge-info {
     font-size: 0.73rem;
@@ -1280,46 +1299,49 @@
 }
 </style>
 
-<div id="modalVisualizadorImagemGlobal" class="image-viewer-modal-backdrop" onclick="fecharVisualizadorImagemSeClicarFora(event)">
+<div id="modalVisualizadorImagemGlobal" class="image-viewer-modal-backdrop">
     <!-- Header com título e botões de ação -->
     <div class="image-viewer-header">
         <div class="d-flex align-items-center gap-2">
-            <i class="bi bi-image text-primary fs-5"></i>
-            <h6 class="mb-0 fw-bold text-white text-truncate" id="imgViewerTitulo" style="max-width: 380px;">Visualizador de Imagem</h6>
+            <i class="bi bi-crop text-primary fs-5"></i>
+            <h6 class="mb-0 fw-bold text-white text-truncate" id="imgViewerTitulo" style="max-width: 360px;">Recorte e Ajuste de Canhoto</h6>
             <span class="image-viewer-badge-info" id="imgViewerGrausBadge">0° (Normal)</span>
-            <span class="image-viewer-badge-info" id="imgViewerZoomBadge">100%</span>
+            <span class="image-viewer-badge-info" id="imgViewerZoomBadge">-</span>
         </div>
 
-        <!-- Toolbar com botões interativos de rotação, zoom e espelhamento -->
+        <!-- Toolbar com botões interativos de rotação, zoom, recorte e espelhamento -->
         <div class="image-viewer-toolbar">
-            <button type="button" class="image-viewer-btn" onclick="rotacionarImagemViewer(-90)" title="Girar 90° para a Esquerda (Anti-horário) [← ou L]">
+            <button type="button" class="image-viewer-btn" onclick="rotacionarCropper(-90)" title="Girar 90° para a Esquerda (Anti-horário) [← ou L]">
                 <i class="bi bi-arrow-counterclockwise"></i>
             </button>
-            <button type="button" class="image-viewer-btn" onclick="rotacionarImagemViewer(90)" title="Girar 90° para a Direita (Horário) [→ ou R]">
+            <button type="button" class="image-viewer-btn" onclick="rotacionarCropper(90)" title="Girar 90° para a Direita (Horário) [→ ou R]">
                 <i class="bi bi-arrow-clockwise"></i>
             </button>
             <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2); margin: 0 4px;"></div>
-            <button type="button" class="image-viewer-btn" onclick="zoomImagemViewer(0.25)" title="Aumentar Zoom [+]">
+            <button type="button" class="image-viewer-btn" onclick="zoomCropper(0.15)" title="Aumentar Zoom [+]">
                 <i class="bi bi-zoom-in"></i>
             </button>
-            <button type="button" class="image-viewer-btn" onclick="zoomImagemViewer(-0.25)" title="Diminuir Zoom [-]">
+            <button type="button" class="image-viewer-btn" onclick="zoomCropper(-0.15)" title="Diminuir Zoom [-]">
                 <i class="bi bi-zoom-out"></i>
             </button>
-            <button type="button" class="image-viewer-btn" onclick="flipHorizontalImagemViewer()" title="Espelhar Horizontalmente">
+            <button type="button" class="image-viewer-btn" onclick="flipCropper()" title="Espelhar Horizontalmente">
                 <i class="bi bi-symmetry-vertical"></i>
             </button>
-            <button type="button" class="image-viewer-btn" onclick="resetarImagemViewer()" title="Redefinir Posição e Rotação [0]">
-                <i class="bi bi-aspect-ratio"></i>
+            <button type="button" class="image-viewer-btn" onclick="redefinirAreaRecorte()" title="Redefinir Área de Recorte">
+                <i class="bi bi-crop"></i>
+            </button>
+            <button type="button" class="image-viewer-btn" onclick="resetarCropper()" title="Redefinir Posição e Rotação [0]">
+                <i class="bi bi-arrow-repeat"></i>
             </button>
             <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2); margin: 0 4px;"></div>
-            <button type="button" class="image-viewer-btn" onclick="abrirOriginalImagemViewer()" title="Abrir arquivo original em nova aba">
+            <button type="button" class="image-viewer-btn" onclick="abrirOriginalImagemViewer()" title="Abrir imagem original em nova aba">
                 <i class="bi bi-box-arrow-up-right"></i>
             </button>
         </div>
 
         <div class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-warning rounded-pill btn-sm px-3 fw-bold d-flex align-items-center gap-1 shadow-sm d-none" id="btnSalvarRotacaoServidor" onclick="salvarRotacaoNoServidor()" title="Salvar imagem rotacionada no servidor e recriar a tarja preta no rodapé">
-                <i class="bi bi-save2-fill"></i> <span id="txtBtnSalvarRot">Salvar Rotação</span>
+            <button type="button" class="btn btn-warning rounded-pill btn-sm px-3 fw-bold d-flex align-items-center gap-1 shadow-sm d-none" id="btnSalvarRotacaoServidor" onclick="salvarRecorteNoServidor()" title="Salvar área recortada no servidor e recriar a tarja preta no rodapé">
+                <i class="bi bi-scissors"></i> <span id="txtBtnSalvarRot">Salvar Recorte</span>
             </button>
             <button type="button" class="btn btn-outline-light rounded-pill btn-sm px-3 fw-bold" onclick="fecharVisualizadorImagem()">
                 <i class="bi bi-x-lg me-1"></i>Fechar [ESC]
@@ -1327,9 +1349,11 @@
         </div>
     </div>
 
-    <!-- Viewport da imagem -->
-    <div class="image-viewer-viewport" id="imgViewerViewport" onwheel="onWheelZoomImagem(event)" onmousedown="iniciarArrastoImagem(event)">
-        <img src="" id="imgViewerElement" class="image-viewer-img" alt="Comprovante" onload="onImagemViewerCarregada()">
+    <!-- Viewport da imagem com Cropper.js -->
+    <div class="image-viewer-viewport" id="imgViewerViewport">
+        <div class="image-viewer-crop-wrapper">
+            <img src="" id="imgViewerElement" alt="Comprovante" style="max-width: 100%; display: block;">
+        </div>
     </div>
 </div>
 
@@ -1338,27 +1362,17 @@
 let viewerState = {
     src: '',
     titulo: '',
-    baixaId: null,
-    graus: 0,
-    zoom: 1,
-    flipH: 1,
-    posX: 0,
-    posY: 0,
-    isDragging: false,
-    startX: 0,
-    startY: 0
+    baixaId: null
 };
+let cropperInstance = null;
+let cropperScaleX = 1;
 
 function abrirVisualizadorImagem(url, titulo, baixaId) {
     if (!url) return;
     viewerState.src = url;
-    viewerState.titulo = titulo || 'Visualizador de Imagem';
+    viewerState.titulo = titulo || 'Recorte e Ajuste de Canhoto';
     viewerState.baixaId = baixaId || null;
-    viewerState.graus = 0;
-    viewerState.zoom = 1;
-    viewerState.flipH = 1;
-    viewerState.posX = 0;
-    viewerState.posY = 0;
+    cropperScaleX = 1;
 
     const modal = document.getElementById('modalVisualizadorImagemGlobal');
     const img = document.getElementById('imgViewerElement');
@@ -1371,15 +1385,10 @@ function abrirVisualizadorImagem(url, titulo, baixaId) {
         if (viewerState.baixaId) {
             btnSalvar.classList.remove('d-none');
             btnSalvar.disabled = false;
-            if (txtSalvar) txtSalvar.innerText = 'Salvar Rotação';
+            if (txtSalvar) txtSalvar.innerText = 'Salvar Recorte';
         } else {
             btnSalvar.classList.add('d-none');
         }
-    }
-
-    if (img) {
-        img.src = url;
-        atualizarTransformImagemViewer();
     }
 
     if (modal) {
@@ -1387,25 +1396,148 @@ function abrirVisualizadorImagem(url, titulo, baixaId) {
         document.body.style.overflow = 'hidden';
     }
 
+    if (img) {
+        if (cropperInstance) {
+            cropperInstance.destroy();
+            cropperInstance = null;
+        }
+        img.src = url;
+        img.onload = function() {
+            if (cropperInstance) cropperInstance.destroy();
+            cropperInstance = new Cropper(img, {
+                viewMode: 1,
+                dragMode: 'crop',
+                autoCrop: true,
+                autoCropArea: 0.96,
+                restore: false,
+                guides: true,
+                center: true,
+                highlight: false,
+                cropBoxMovable: true,
+                cropBoxResizable: true,
+                toggleDragModeOnDblclick: false,
+                ready() {
+                    atualizarBadgeInfo();
+                },
+                crop(event) {
+                    atualizarBadgeInfo();
+                }
+            });
+        };
+    }
+
     window.addEventListener('keydown', onKeyDownViewer);
 }
 
-function salvarRotacaoNoServidor() {
+function fecharVisualizadorImagem() {
+    const modal = document.getElementById('modalVisualizadorImagemGlobal');
+    if (modal) {
+        modal.classList.remove('show');
+        document.body.style.overflow = '';
+    }
+    if (cropperInstance) {
+        cropperInstance.destroy();
+        cropperInstance = null;
+    }
+    window.removeEventListener('keydown', onKeyDownViewer);
+}
+
+function rotacionarCropper(delta) {
+    if (cropperInstance) {
+        cropperInstance.rotate(delta);
+    }
+}
+
+function zoomCropper(delta) {
+    if (cropperInstance) {
+        cropperInstance.zoom(delta);
+    }
+}
+
+function flipCropper() {
+    if (cropperInstance) {
+        cropperScaleX = (cropperScaleX === 1) ? -1 : 1;
+        cropperInstance.scaleX(cropperScaleX);
+    }
+}
+
+function redefinirAreaRecorte() {
+    if (cropperInstance) {
+        cropperInstance.crop();
+        cropperInstance.setCropBoxData(cropperInstance.getCanvasData());
+    }
+}
+
+function resetarCropper() {
+    if (cropperInstance) {
+        cropperScaleX = 1;
+        cropperInstance.reset();
+    }
+}
+
+function abrirOriginalImagemViewer() {
+    if (viewerState.src) {
+        window.open(viewerState.src, '_blank');
+    }
+}
+
+function atualizarBadgeInfo() {
+    if (!cropperInstance) return;
+    const data = cropperInstance.getData(true);
+    const badgeGraus = document.getElementById('imgViewerGrausBadge');
+    const badgeZoom = document.getElementById('imgViewerZoomBadge');
+
+    let g = (data.rotate || 0) % 360;
+    if (g < 0) g += 360;
+
+    if (badgeGraus) {
+        let label = `${g}°`;
+        if (g === 0) label += ' (Normal)';
+        else if (g === 90) label += ' (Direita)';
+        else if (g === 180) label += ' (Invertida)';
+        else if (g === 270) label += ' (Esquerda)';
+        badgeGraus.innerText = label;
+    }
+
+    if (badgeZoom) {
+        badgeZoom.innerText = `${Math.round(data.width)}x${Math.round(data.height)}px`;
+    }
+}
+
+function salvarRecorteNoServidor() {
     if (!viewerState.baixaId) {
         alert("Nenhum registro de comprovante vinculado a esta imagem.");
         return;
     }
-    if (viewerState.graus === 0) {
-        alert("Gire a foto (90°, 180° ou 270°) antes de salvar.");
+    if (!cropperInstance) {
+        alert("Editor de imagem não inicializado.");
         return;
     }
 
     const btn = document.getElementById('btnSalvarRotacaoServidor');
     const txt = document.getElementById('txtBtnSalvarRot');
     if (btn) btn.disabled = true;
-    if (txt) txt.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Salvando...';
+    if (txt) txt.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Salvando e gerando tarja...';
 
-    // Pega CSRF Token
+    // Exporta o canvas exatamente como o operador enquadrou
+    const canvas = cropperInstance.getCroppedCanvas({
+        maxWidth: 2600,
+        maxHeight: 2600,
+        fillColor: '#fff',
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high'
+    });
+
+    if (!canvas) {
+        alert("Não foi possível gerar a imagem recortada.");
+        if (btn) btn.disabled = false;
+        if (txt) txt.innerText = 'Salvar Recorte';
+        return;
+    }
+
+    const base64Data = canvas.toDataURL('image/jpeg', 0.93);
+
+    // CSRF Token
     let csrfToken = '';
     const cookie = document.cookie.split('; ').find(row => row.startsWith('csrftoken='));
     if (cookie) csrfToken = cookie.split('=')[1];
@@ -1421,170 +1553,72 @@ function salvarRotacaoNoServidor() {
             'X-CSRFToken': csrfToken
         },
         body: JSON.stringify({
-            graus: viewerState.graus,
-            url_imagem: viewerState.src
+            imagem_base64: base64Data
         })
     })
     .then(r => r.json())
     .then(data => {
         if (data.status === 'sucesso') {
-            // Atualiza a imagem no visualizador
             viewerState.src = data.nova_url;
+            
+            // Recarrega o cropper com a imagem final salva
             const img = document.getElementById('imgViewerElement');
             if (img) {
+                if (cropperInstance) cropperInstance.destroy();
                 img.src = data.nova_url + '?t=' + Date.now();
+                img.onload = function() {
+                    cropperInstance = new Cropper(img, {
+                        viewMode: 1,
+                        dragMode: 'crop',
+                        autoCrop: true,
+                        autoCropArea: 0.96,
+                        restore: false,
+                        cropBoxMovable: true,
+                        cropBoxResizable: true,
+                        ready() { atualizarBadgeInfo(); },
+                        crop() { atualizarBadgeInfo(); }
+                    });
+                };
             }
-            // Reseta rotação visual pois o arquivo no servidor já está rotacionado
-            resetarImagemViewer();
 
-            // Atualiza thumbnail no modal se existir
+            // Atualiza thumbnail no modal
             const thumb = document.getElementById(`thumb-comprovante-baixa-${viewerState.baixaId}`);
             if (thumb) {
                 thumb.src = data.nova_url + '?t=' + Date.now();
             }
 
-            if (txt) txt.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i> Salvo!';
+            if (txt) txt.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i> Salvo com Sucesso!';
             setTimeout(() => {
-                if (txt) txt.innerHTML = 'Salvar Rotação';
+                if (txt) txt.innerHTML = 'Salvar Recorte';
                 if (btn) btn.disabled = false;
             }, 2500);
         } else {
-            alert(data.message || 'Erro ao rotacionar imagem.');
-            if (txt) txt.innerHTML = 'Salvar Rotação';
+            alert(data.message || 'Erro ao salvar imagem recortada.');
+            if (txt) txt.innerHTML = 'Salvar Recorte';
             if (btn) btn.disabled = false;
         }
     })
     .catch(err => {
-        console.error("Erro ao salvar rotação:", err);
-        alert("Erro de comunicação ao salvar rotação.");
-        if (txt) txt.innerHTML = 'Salvar Rotação';
+        console.error("Erro ao salvar recorte:", err);
+        alert("Erro de comunicação ao salvar imagem.");
+        if (txt) txt.innerHTML = 'Salvar Recorte';
         if (btn) btn.disabled = false;
     });
-}
-
-function fecharVisualizadorImagem() {
-    const modal = document.getElementById('modalVisualizadorImagemGlobal');
-    if (modal) {
-        modal.classList.remove('show');
-        document.body.style.overflow = '';
-    }
-    window.removeEventListener('keydown', onKeyDownViewer);
-}
-
-function fecharVisualizadorImagemSeClicarFora(e) {
-    if (e.target.id === 'imgViewerViewport' || e.target.id === 'modalVisualizadorImagemGlobal') {
-        fecharVisualizadorImagem();
-    }
-}
-
-function rotacionarImagemViewer(deltaGraus) {
-    viewerState.graus = (viewerState.graus + deltaGraus) % 360;
-    if (viewerState.graus < 0) viewerState.graus += 360;
-    atualizarTransformImagemViewer();
-}
-
-function zoomImagemViewer(deltaZoom) {
-    let novoZoom = viewerState.zoom + deltaZoom;
-    if (novoZoom < 0.3) novoZoom = 0.3;
-    if (novoZoom > 4.5) novoZoom = 4.5;
-    viewerState.zoom = Math.round(novoZoom * 100) / 100;
-    atualizarTransformImagemViewer();
-}
-
-function flipHorizontalImagemViewer() {
-    viewerState.flipH = (viewerState.flipH === 1) ? -1 : 1;
-    atualizarTransformImagemViewer();
-}
-
-function resetarImagemViewer() {
-    viewerState.graus = 0;
-    viewerState.zoom = 1;
-    viewerState.flipH = 1;
-    viewerState.posX = 0;
-    viewerState.posY = 0;
-    atualizarTransformImagemViewer();
-}
-
-function abrirOriginalImagemViewer() {
-    if (viewerState.src) {
-        window.open(viewerState.src, '_blank');
-    }
-}
-
-function atualizarTransformImagemViewer() {
-    const img = document.getElementById('imgViewerElement');
-    const badgeGraus = document.getElementById('imgViewerGrausBadge');
-    const badgeZoom = document.getElementById('imgViewerZoomBadge');
-
-    if (img) {
-        img.style.transform = `translate(${viewerState.posX}px, ${viewerState.posY}px) rotate(${viewerState.graus}deg) scale(${viewerState.zoom * viewerState.flipH}, ${viewerState.zoom})`;
-    }
-
-    if (badgeGraus) {
-        let label = `${viewerState.graus}°`;
-        if (viewerState.graus === 0) label += ' (Normal)';
-        else if (viewerState.graus === 90) label += ' (Direita)';
-        else if (viewerState.graus === 180) label += ' (Invertida)';
-        else if (viewerState.graus === 270) label += ' (Esquerda)';
-        badgeGraus.innerText = label;
-    }
-
-    if (badgeZoom) {
-        badgeZoom.innerText = `${Math.round(viewerState.zoom * 100)}%`;
-    }
-}
-
-function onImagemViewerCarregada() {
-    atualizarTransformImagemViewer();
-}
-
-function onWheelZoomImagem(e) {
-    e.preventDefault();
-    const delta = e.deltaY < 0 ? 0.15 : -0.15;
-    zoomImagemViewer(delta);
-}
-
-function iniciarArrastoImagem(e) {
-    if (e.button !== 0) return; // apenas botão esquerdo
-    viewerState.isDragging = true;
-    viewerState.startX = e.clientX - viewerState.posX;
-    viewerState.startY = e.clientY - viewerState.posY;
-
-    const vp = document.getElementById('imgViewerViewport');
-    if (vp) vp.classList.add('is-dragging');
-
-    window.addEventListener('mousemove', onArrastandoImagem);
-    window.addEventListener('mouseup', onFinalizarArrastoImagem);
-}
-
-function onArrastandoImagem(e) {
-    if (!viewerState.isDragging) return;
-    viewerState.posX = e.clientX - viewerState.startX;
-    viewerState.posY = e.clientY - viewerState.startY;
-    atualizarTransformImagemViewer();
-}
-
-function onFinalizarArrastoImagem() {
-    viewerState.isDragging = false;
-    const vp = document.getElementById('imgViewerViewport');
-    if (vp) vp.classList.remove('is-dragging');
-    window.removeEventListener('mousemove', onArrastandoImagem);
-    window.removeEventListener('mouseup', onFinalizarArrastoImagem);
 }
 
 function onKeyDownViewer(e) {
     if (e.key === 'Escape') {
         fecharVisualizadorImagem();
     } else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'r') {
-        rotacionarImagemViewer(90);
+        rotacionarCropper(90);
     } else if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'l') {
-        rotacionarImagemViewer(-90);
+        rotacionarCropper(-90);
     } else if (e.key === '+' || e.key === '=') {
-        zoomImagemViewer(0.25);
+        zoomCropper(0.15);
     } else if (e.key === '-' || e.key === '_') {
-        zoomImagemViewer(-0.25);
+        zoomCropper(-0.15);
     } else if (e.key === '0') {
-        resetarImagemViewer();
+        resetarCropper();
     }
 }
 </script>
