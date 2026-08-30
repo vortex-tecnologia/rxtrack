@@ -1845,7 +1845,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
             baixa.processado_tms = True
             baixa.integrado_tms = True
-            baixa.log_erro_tms = f"Sucesso: Comprovante de entrega atualizado no TMS ESL Cloud em {timezone.now().strftime('%d/%m/%Y %H:%M')}"
+            baixa.log_erro_tms = f"Sucesso: Comprovante de entrega atualizado no TMS ESL Cloud em {timezone.localtime().strftime('%d/%m/%Y %H:%M')}"
             baixa.data_integracao = timezone.now()
             baixa.save(update_fields=['processado_tms', 'integrado_tms', 'log_erro_tms', 'data_integracao'])
 
