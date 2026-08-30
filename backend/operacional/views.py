@@ -2432,18 +2432,29 @@ def rotacionar_canhoto_servidor_view(request, baixa_id):
         if img is None:
             return JsonResponse({'status': 'erro', 'message': 'Não foi possível decodificar o arquivo de imagem.'}, status=500)
 
-        # 2. Remove a tarja preta antiga antes de rotacionar
+        # 2. Remove TODAS as tarjas pretas antigas (tanto do topo quanto do rodapé) antes de rotacionar
         h, w = img.shape[:2]
         if h > 80:
-            corte_y = h
-            for y in range(h - 1, max(0, h - 140), -1):
+            top_cut = 0
+            # Varre do topo para baixo procurando onde termina tarja preta no topo (se houver)
+            for y in range(0, min(h // 2, 160)):
                 linha = img[y, :, :]
-                media_intensidade = np.mean(linha)
-                if media_intensidade > 60:
-                    corte_y = y + 1
+                pixels_escuros = np.mean(linha < 45)
+                if pixels_escuros < 0.70 and np.mean(linha) > 55:
+                    top_cut = y
                     break
-            if corte_y < h:
-                img = img[0:corte_y, :]
+
+            bottom_cut = h
+            # Varre da base para cima procurando onde termina tarja preta na base (se houver)
+            for y in range(h - 1, max(h // 2, h - 160), -1):
+                linha = img[y, :, :]
+                pixels_escuros = np.mean(linha < 45)
+                if pixels_escuros < 0.70 and np.mean(linha) > 55:
+                    bottom_cut = y + 1
+                    break
+
+            if bottom_cut > top_cut and (bottom_cut - top_cut) > 40:
+                img = img[top_cut:bottom_cut, :]
 
         # 3. Aplica a rotação de acordo com o ângulo
         if graus == 90:
