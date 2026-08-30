@@ -1258,6 +1258,22 @@
     position: relative;
     padding: 12px;
     background: rgba(10, 15, 29, 0.96);
+    user-select: none;
+}
+.image-viewer-clean-img {
+    max-width: 90vw;
+    max-height: 80vh;
+    object-fit: contain;
+    border-radius: 8px;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.7);
+    transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transform-origin: center center;
+    cursor: grab;
+    -webkit-user-drag: none;
+}
+.image-viewer-viewport.is-dragging .image-viewer-clean-img {
+    cursor: grabbing;
+    transition: none;
 }
 .image-viewer-crop-wrapper {
     width: 88vw;
@@ -1308,18 +1324,45 @@
     <!-- Header com título e botões de ação -->
     <div class="image-viewer-header">
         <div class="d-flex align-items-center gap-2">
-            <i class="bi bi-crop text-primary fs-5"></i>
-            <h6 class="mb-0 fw-bold text-white text-truncate" id="imgViewerTitulo" style="max-width: 360px;">Recorte e Ajuste de Canhoto</h6>
+            <i class="bi bi-image text-primary fs-5" id="imgViewerIcon"></i>
+            <h6 class="mb-0 fw-bold text-white text-truncate" id="imgViewerTitulo" style="max-width: 350px;">Visualizador de Comprovante</h6>
             <span class="image-viewer-badge-info" id="imgViewerGrausBadge">0° (Normal)</span>
-            <span class="image-viewer-badge-info" id="imgViewerZoomBadge">-</span>
+            <span class="image-viewer-badge-info" id="imgViewerZoomBadge">100%</span>
         </div>
 
-        <!-- Toolbar com botões interativos de rotação, zoom, recorte e espelhamento -->
-        <div class="image-viewer-toolbar">
-            <button type="button" class="image-viewer-btn" onclick="rotacionarCropper(-90)" title="Girar 90° para a Esquerda (Anti-horário) [← ou L]">
+        <!-- Toolbar para Modo Visualização Normal -->
+        <div class="image-viewer-toolbar" id="toolbarVisualizacaoNormal">
+            <button type="button" class="image-viewer-btn" onclick="rotacionarViewerNormal(-90)" title="Girar 90° para a Esquerda (Anti-horário) [← ou L]">
                 <i class="bi bi-arrow-counterclockwise"></i>
             </button>
-            <button type="button" class="image-viewer-btn" onclick="rotacionarCropper(90)" title="Girar 90° para a Direita (Horário) [→ ou R]">
+            <button type="button" class="image-viewer-btn" onclick="rotacionarViewerNormal(90)" title="Girar 90° para a Direita (Horário) [→ ou R]">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+            <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2); margin: 0 4px;"></div>
+            <button type="button" class="image-viewer-btn" onclick="zoomViewerNormal(0.2)" title="Aumentar Zoom [+]">
+                <i class="bi bi-zoom-in"></i>
+            </button>
+            <button type="button" class="image-viewer-btn" onclick="zoomViewerNormal(-0.2)" title="Diminuir Zoom [-]">
+                <i class="bi bi-zoom-out"></i>
+            </button>
+            <button type="button" class="image-viewer-btn" onclick="flipViewerNormal()" title="Espelhar Horizontalmente">
+                <i class="bi bi-symmetry-vertical"></i>
+            </button>
+            <button type="button" class="image-viewer-btn" onclick="resetarViewerNormal()" title="Redefinir Posição e Rotação [0]">
+                <i class="bi bi-aspect-ratio"></i>
+            </button>
+            <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2); margin: 0 4px;"></div>
+            <button type="button" class="image-viewer-btn" onclick="abrirOriginalImagemViewer()" title="Abrir imagem original em nova aba">
+                <i class="bi bi-box-arrow-up-right"></i>
+            </button>
+        </div>
+
+        <!-- Toolbar para Modo Recorte (Cropper.js) -->
+        <div class="image-viewer-toolbar d-none" id="toolbarModoRecorte">
+            <button type="button" class="image-viewer-btn" onclick="rotacionarCropper(-90)" title="Girar 90° para a Esquerda [←]">
+                <i class="bi bi-arrow-counterclockwise"></i>
+            </button>
+            <button type="button" class="image-viewer-btn" onclick="rotacionarCropper(90)" title="Girar 90° para a Direita [→]">
                 <i class="bi bi-arrow-clockwise"></i>
             </button>
             <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2); margin: 0 4px;"></div>
@@ -1329,35 +1372,45 @@
             <button type="button" class="image-viewer-btn" onclick="zoomCropper(-0.15)" title="Diminuir Zoom [-]">
                 <i class="bi bi-zoom-out"></i>
             </button>
-            <button type="button" class="image-viewer-btn" onclick="flipCropper()" title="Espelhar Horizontalmente">
-                <i class="bi bi-symmetry-vertical"></i>
-            </button>
             <button type="button" class="image-viewer-btn" onclick="redefinirAreaRecorte()" title="Ajustar ao Tamanho Total">
-                <i class="bi bi-aspect-ratio"></i>
+                <i class="bi bi-crop"></i>
             </button>
-            <button type="button" class="image-viewer-btn" onclick="resetarCropper()" title="Redefinir Tudo [0]">
+            <button type="button" class="image-viewer-btn" onclick="resetarCropper()" title="Redefinir Tudo">
                 <i class="bi bi-arrow-repeat"></i>
-            </button>
-            <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2); margin: 0 4px;"></div>
-            <button type="button" class="image-viewer-btn" onclick="abrirOriginalImagemViewer()" title="Abrir imagem original em nova aba">
-                <i class="bi bi-box-arrow-up-right"></i>
             </button>
         </div>
 
+        <!-- Botões de Ação na Direita -->
         <div class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-warning rounded-pill btn-sm px-3 fw-bold d-flex align-items-center gap-1 shadow-sm d-none" id="btnSalvarRotacaoServidor" onclick="salvarRecorteNoServidor()" title="Salvar área recortada no servidor e recriar a tarja preta no rodapé">
-                <i class="bi bi-scissors"></i> <span id="txtBtnSalvarRot">Salvar Recorte</span>
+            <!-- Botão para entrar no modo recorte (exibido apenas no modo normal quando tem baixaId) -->
+            <button type="button" class="btn btn-primary rounded-pill btn-sm px-3 fw-bold d-flex align-items-center gap-1 shadow-sm d-none" id="btnAtivarModoRecorte" onclick="ativarModoRecorte()" title="Abrir ferramenta para recortar e alinhar canhoto">
+                <i class="bi bi-scissors"></i> <span>Ajustar / Recortar</span>
             </button>
+
+            <!-- Botões do modo recorte -->
+            <button type="button" class="btn btn-warning rounded-pill btn-sm px-3 fw-bold d-flex align-items-center gap-1 shadow-sm d-none" id="btnSalvarRecorteServidor" onclick="salvarRecorteNoServidor()" title="Salvar área recortada no servidor e recriar a tarja preta no rodapé">
+                <i class="bi bi-check2-circle"></i> <span id="txtBtnSalvarRot">Salvar Recorte</span>
+            </button>
+            <button type="button" class="btn btn-outline-secondary rounded-pill btn-sm px-3 fw-bold text-white d-none" id="btnCancelarModoRecorte" onclick="cancelarModoRecorte()">
+                <i class="bi bi-x-lg me-1"></i>Cancelar
+            </button>
+
             <button type="button" class="btn btn-outline-light rounded-pill btn-sm px-3 fw-bold" onclick="fecharVisualizadorImagem()">
                 <i class="bi bi-x-lg me-1"></i>Fechar [ESC]
             </button>
         </div>
     </div>
 
-    <!-- Viewport da imagem com Cropper.js -->
-    <div class="image-viewer-viewport" id="imgViewerViewport">
-        <div class="image-viewer-crop-wrapper">
-            <img src="" id="imgViewerElement" alt="Comprovante" style="max-width: 100%; max-height: 100%; display: block;">
+    <!-- Viewport da imagem -->
+    <div class="image-viewer-viewport" id="imgViewerViewport" onwheel="onWheelViewerNormal(event)" onmousedown="iniciarArrastoViewerNormal(event)">
+        <!-- Container de Visualização Limpa -->
+        <div id="containerVisualizacaoLimpa" class="w-100 h-100 d-flex align-items-center justify-content-center">
+            <img src="" id="imgViewerElementClean" class="image-viewer-clean-img" alt="Comprovante" onload="onCleanImageLoaded()">
+        </div>
+
+        <!-- Container do Modo Recorte (Cropper.js) -->
+        <div id="containerModoRecorte" class="image-viewer-crop-wrapper d-none">
+            <img src="" id="imgViewerElementCrop" alt="Comprovante" style="max-width: 100%; max-height: 100%; display: block;">
         </div>
     </div>
 </div>
@@ -1367,7 +1420,17 @@
 let viewerState = {
     src: '',
     titulo: '',
-    baixaId: null
+    baixaId: null,
+    isCropping: false,
+    // Estado de visualização limpa
+    graus: 0,
+    zoom: 1,
+    flipH: 1,
+    posX: 0,
+    posY: 0,
+    isDragging: false,
+    startX: 0,
+    startY: 0
 };
 let cropperInstance = null;
 let cropperScaleX = 1;
@@ -1375,67 +1438,40 @@ let cropperScaleX = 1;
 function abrirVisualizadorImagem(url, titulo, baixaId) {
     if (!url) return;
     viewerState.src = url;
-    viewerState.titulo = titulo || 'Recorte e Ajuste de Canhoto';
+    viewerState.titulo = titulo || 'Visualizador de Comprovante';
     viewerState.baixaId = baixaId || null;
-    cropperScaleX = 1;
+    viewerState.isCropping = false;
+    viewerState.graus = 0;
+    viewerState.zoom = 1;
+    viewerState.flipH = 1;
+    viewerState.posX = 0;
+    viewerState.posY = 0;
 
     const modal = document.getElementById('modalVisualizadorImagemGlobal');
-    const img = document.getElementById('imgViewerElement');
     const tit = document.getElementById('imgViewerTitulo');
-    const btnSalvar = document.getElementById('btnSalvarRotacaoServidor');
-    const txtSalvar = document.getElementById('txtBtnSalvarRot');
+    const btnAtivarRecorte = document.getElementById('btnAtivarModoRecorte');
 
     if (tit) tit.innerText = viewerState.titulo;
-    if (btnSalvar) {
+    if (btnAtivarRecorte) {
         if (viewerState.baixaId) {
-            btnSalvar.classList.remove('d-none');
-            btnSalvar.disabled = false;
-            if (txtSalvar) txtSalvar.innerText = 'Salvar Recorte';
+            btnAtivarRecorte.classList.remove('d-none');
         } else {
-            btnSalvar.classList.add('d-none');
+            btnAtivarRecorte.classList.add('d-none');
         }
+    }
+
+    // Exibe em modo de visualização limpa inicialmente
+    exibirModoVisualizacaoLimpa();
+
+    const imgClean = document.getElementById('imgViewerElementClean');
+    if (imgClean) {
+        const urlFinal = url.startsWith('http') ? ('/api/operacional/proxy-imagem/?url=' + encodeURIComponent(url)) : url;
+        imgClean.src = urlFinal;
     }
 
     if (modal) {
         modal.classList.add('show');
         document.body.style.overflow = 'hidden';
-    }
-
-    if (img) {
-        if (cropperInstance) {
-            cropperInstance.destroy();
-            cropperInstance = null;
-        }
-        
-        // Usa o proxy local seguro para evitar bloqueio de CORS ao manipular canvas no navegador
-        const urlFinal = url.startsWith('http') ? ('/api/operacional/proxy-imagem/?url=' + encodeURIComponent(url)) : url;
-
-        img.crossOrigin = 'anonymous';
-        img.onload = function() {
-            if (cropperInstance) cropperInstance.destroy();
-            cropperInstance = new Cropper(img, {
-                viewMode: 0, // Livre, evita zoom forçado ao rotacionar
-                dragMode: 'crop',
-                autoCrop: true,
-                autoCropArea: 0.98,
-                responsive: true,
-                restore: false,
-                guides: true,
-                center: true,
-                highlight: false,
-                cropBoxMovable: true,
-                cropBoxResizable: true,
-                checkCrossOrigin: false,
-                toggleDragModeOnDblclick: false,
-                ready() {
-                    atualizarBadgeInfo();
-                },
-                crop(event) {
-                    atualizarBadgeInfo();
-                }
-            });
-        };
-        img.src = urlFinal;
     }
 
     window.addEventListener('keydown', onKeyDownViewer);
@@ -1454,6 +1490,185 @@ function fecharVisualizadorImagem() {
     window.removeEventListener('keydown', onKeyDownViewer);
 }
 
+// -------------------------------------------------------------
+// CONTROLE DE MODOS (VISUALIZAÇÃO LIMPA vs MODO RECORTE)
+// -------------------------------------------------------------
+function exibirModoVisualizacaoLimpa() {
+    viewerState.isCropping = false;
+
+    // Destrói cropper se houver
+    if (cropperInstance) {
+        cropperInstance.destroy();
+        cropperInstance = null;
+    }
+
+    document.getElementById('containerVisualizacaoLimpa').classList.remove('d-none');
+    document.getElementById('containerModoRecorte').classList.add('d-none');
+
+    document.getElementById('toolbarVisualizacaoNormal').classList.remove('d-none');
+    document.getElementById('toolbarModoRecorte').classList.add('d-none');
+
+    document.getElementById('btnSalvarRecorteServidor').classList.add('d-none');
+    document.getElementById('btnCancelarModoRecorte').classList.add('d-none');
+
+    const btnAtivar = document.getElementById('btnAtivarModoRecorte');
+    if (btnAtivar && viewerState.baixaId) btnAtivar.classList.remove('d-none');
+
+    const icon = document.getElementById('imgViewerIcon');
+    if (icon) icon.className = 'bi bi-image text-primary fs-5';
+
+    atualizarTransformViewerNormal();
+}
+
+function ativarModoRecorte() {
+    if (!viewerState.baixaId) return;
+    viewerState.isCropping = true;
+
+    document.getElementById('containerVisualizacaoLimpa').classList.add('d-none');
+    document.getElementById('containerModoRecorte').classList.remove('d-none');
+
+    document.getElementById('toolbarVisualizacaoNormal').classList.add('d-none');
+    document.getElementById('toolbarModoRecorte').classList.remove('d-none');
+
+    document.getElementById('btnAtivarModoRecorte').classList.add('d-none');
+    document.getElementById('btnSalvarRecorteServidor').classList.remove('d-none');
+    document.getElementById('btnCancelarModoRecorte').classList.remove('d-none');
+
+    const txtSalvar = document.getElementById('txtBtnSalvarRot');
+    if (txtSalvar) txtSalvar.innerText = 'Salvar Recorte';
+
+    const icon = document.getElementById('imgViewerIcon');
+    if (icon) icon.className = 'bi bi-scissors text-warning fs-5';
+
+    // Inicializa Cropper na imagem de recorte
+    const imgCrop = document.getElementById('imgViewerElementCrop');
+    if (imgCrop) {
+        const urlFinal = viewerState.src.startsWith('http') ? ('/api/operacional/proxy-imagem/?url=' + encodeURIComponent(viewerState.src)) : viewerState.src;
+        imgCrop.crossOrigin = 'anonymous';
+        imgCrop.onload = function() {
+            if (cropperInstance) cropperInstance.destroy();
+            cropperInstance = new Cropper(imgCrop, {
+                viewMode: 0,
+                dragMode: 'crop',
+                autoCrop: true,
+                autoCropArea: 0.98,
+                responsive: true,
+                restore: false,
+                guides: true,
+                center: true,
+                highlight: false,
+                cropBoxMovable: true,
+                cropBoxResizable: true,
+                checkCrossOrigin: false,
+                toggleDragModeOnDblclick: false,
+                ready() { atualizarBadgeInfoCropper(); },
+                crop() { atualizarBadgeInfoCropper(); }
+            });
+        };
+        imgCrop.src = urlFinal;
+    }
+}
+
+function cancelarModoRecorte() {
+    exibirModoVisualizacaoLimpa();
+}
+
+// -------------------------------------------------------------
+// FUNÇÕES DO MODO DE VISUALIZAÇÃO LIMPA (NORMAL)
+// -------------------------------------------------------------
+function rotacionarViewerNormal(delta) {
+    viewerState.graus = (viewerState.graus + delta) % 360;
+    if (viewerState.graus < 0) viewerState.graus += 360;
+    atualizarTransformViewerNormal();
+}
+
+function zoomViewerNormal(delta) {
+    let novoZoom = viewerState.zoom + delta;
+    if (novoZoom < 0.3) novoZoom = 0.3;
+    if (novoZoom > 4.5) novoZoom = 4.5;
+    viewerState.zoom = Math.round(novoZoom * 100) / 100;
+    atualizarTransformViewerNormal();
+}
+
+function flipViewerNormal() {
+    viewerState.flipH = (viewerState.flipH === 1) ? -1 : 1;
+    atualizarTransformViewerNormal();
+}
+
+function resetarViewerNormal() {
+    viewerState.graus = 0;
+    viewerState.zoom = 1;
+    viewerState.flipH = 1;
+    viewerState.posX = 0;
+    viewerState.posY = 0;
+    atualizarTransformViewerNormal();
+}
+
+function atualizarTransformViewerNormal() {
+    const img = document.getElementById('imgViewerElementClean');
+    const badgeGraus = document.getElementById('imgViewerGrausBadge');
+    const badgeZoom = document.getElementById('imgViewerZoomBadge');
+
+    if (img) {
+        img.style.transform = `translate(${viewerState.posX}px, ${viewerState.posY}px) rotate(${viewerState.graus}deg) scale(${viewerState.zoom * viewerState.flipH}, ${viewerState.zoom})`;
+    }
+
+    if (badgeGraus) {
+        let label = `${viewerState.graus}°`;
+        if (viewerState.graus === 0) label += ' (Normal)';
+        else if (viewerState.graus === 90) label += ' (Direita)';
+        else if (viewerState.graus === 180) label += ' (Invertida)';
+        else if (viewerState.graus === 270) label += ' (Esquerda)';
+        badgeGraus.innerText = label;
+    }
+
+    if (badgeZoom) {
+        badgeZoom.innerText = `${Math.round(viewerState.zoom * 100)}%`;
+    }
+}
+
+function onCleanImageLoaded() {
+    resetarViewerNormal();
+}
+
+function onWheelViewerNormal(e) {
+    if (viewerState.isCropping) return;
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.15 : -0.15;
+    zoomViewerNormal(delta);
+}
+
+function iniciarArrastoViewerNormal(e) {
+    if (viewerState.isCropping || e.button !== 0) return;
+    viewerState.isDragging = true;
+    viewerState.startX = e.clientX - viewerState.posX;
+    viewerState.startY = e.clientY - viewerState.posY;
+
+    const vp = document.getElementById('imgViewerViewport');
+    if (vp) vp.classList.add('is-dragging');
+
+    window.addEventListener('mousemove', onArrastandoViewerNormal);
+    window.addEventListener('mouseup', onFinalizarArrastoViewerNormal);
+}
+
+function onArrastandoViewerNormal(e) {
+    if (!viewerState.isDragging) return;
+    viewerState.posX = e.clientX - viewerState.startX;
+    viewerState.posY = e.clientY - viewerState.startY;
+    atualizarTransformViewerNormal();
+}
+
+function onFinalizarArrastoViewerNormal() {
+    viewerState.isDragging = false;
+    const vp = document.getElementById('imgViewerViewport');
+    if (vp) vp.classList.remove('is-dragging');
+    window.removeEventListener('mousemove', onArrastandoViewerNormal);
+    window.removeEventListener('mouseup', onFinalizarArrastoViewerNormal);
+}
+
+// -------------------------------------------------------------
+// FUNÇÕES DO MODO RECORTE (CROPPER.JS)
+// -------------------------------------------------------------
 function rotacionarCropper(delta) {
     if (cropperInstance) {
         cropperInstance.rotate(delta);
@@ -1466,7 +1681,7 @@ function rotacionarCropper(delta) {
                     width: canvasData.width,
                     height: canvasData.height
                 });
-                atualizarBadgeInfo();
+                atualizarBadgeInfoCropper();
             }
         }, 30);
     }
@@ -1475,13 +1690,6 @@ function rotacionarCropper(delta) {
 function zoomCropper(delta) {
     if (cropperInstance) {
         cropperInstance.zoom(delta);
-    }
-}
-
-function flipCropper() {
-    if (cropperInstance) {
-        cropperScaleX = (cropperScaleX === 1) ? -1 : 1;
-        cropperInstance.scaleX(cropperScaleX);
     }
 }
 
@@ -1499,18 +1707,11 @@ function redefinirAreaRecorte() {
 
 function resetarCropper() {
     if (cropperInstance) {
-        cropperScaleX = 1;
         cropperInstance.reset();
     }
 }
 
-function abrirOriginalImagemViewer() {
-    if (viewerState.src) {
-        window.open(viewerState.src, '_blank');
-    }
-}
-
-function atualizarBadgeInfo() {
+function atualizarBadgeInfoCropper() {
     if (!cropperInstance) return;
     const data = cropperInstance.getData(true);
     const badgeGraus = document.getElementById('imgViewerGrausBadge');
@@ -1543,12 +1744,11 @@ function salvarRecorteNoServidor() {
         return;
     }
 
-    const btn = document.getElementById('btnSalvarRotacaoServidor');
+    const btn = document.getElementById('btnSalvarRecorteServidor');
     const txt = document.getElementById('txtBtnSalvarRot');
     if (btn) btn.disabled = true;
-    if (txt) txt.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Salvando e gerando tarja...';
+    if (txt) txt.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Salvando...';
 
-    // Exporta o canvas exatamente como o operador enquadrou
     const canvas = cropperInstance.getCroppedCanvas({
         maxWidth: 2600,
         maxHeight: 2600,
@@ -1566,7 +1766,6 @@ function salvarRecorteNoServidor() {
 
     const base64Data = canvas.toDataURL('image/jpeg', 0.93);
 
-    // CSRF Token
     let csrfToken = '';
     const cookie = document.cookie.split('; ').find(row => row.startsWith('csrftoken='));
     if (cookie) csrfToken = cookie.split('=')[1];
@@ -1589,28 +1788,14 @@ function salvarRecorteNoServidor() {
     .then(data => {
         if (data.status === 'sucesso') {
             viewerState.src = data.nova_url;
-            
-            // Recarrega o cropper com a imagem final salva via proxy
-            const img = document.getElementById('imgViewerElement');
-            if (img) {
-                if (cropperInstance) cropperInstance.destroy();
+
+            // Retorna ao modo de visualização limpa com a nova imagem
+            exibirModoVisualizacaoLimpa();
+
+            const imgClean = document.getElementById('imgViewerElementClean');
+            if (imgClean) {
                 const proxyNovaUrl = '/api/operacional/proxy-imagem/?url=' + encodeURIComponent(data.nova_url) + '&t=' + Date.now();
-                img.crossOrigin = 'anonymous';
-                img.onload = function() {
-                    cropperInstance = new Cropper(img, {
-                        viewMode: 1,
-                        dragMode: 'crop',
-                        autoCrop: true,
-                        autoCropArea: 0.96,
-                        restore: false,
-                        cropBoxMovable: true,
-                        cropBoxResizable: true,
-                        checkCrossOrigin: false,
-                        ready() { atualizarBadgeInfo(); },
-                        crop() { atualizarBadgeInfo(); }
-                    });
-                };
-                img.src = proxyNovaUrl;
+                imgClean.src = proxyNovaUrl;
             }
 
             // Atualiza thumbnail no modal
@@ -1619,14 +1804,20 @@ function salvarRecorteNoServidor() {
                 thumb.src = data.nova_url + '?t=' + Date.now();
             }
 
-            if (txt) txt.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i> Salvo com Sucesso!';
-            setTimeout(() => {
-                if (txt) txt.innerHTML = 'Salvar Recorte';
-                if (btn) btn.disabled = false;
-            }, 2500);
+            // Feedback Toast visual
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'success',
+                    title: 'Canhoto salvo e tarja gerada!',
+                    showConfirmButton: false,
+                    timer: 2500
+                });
+            }
         } else {
             alert(data.message || 'Erro ao salvar imagem recortada.');
-            if (txt) txt.innerHTML = 'Salvar Recorte';
+            if (txt) txt.innerText = 'Salvar Recorte';
             if (btn) btn.disabled = false;
         }
     })
@@ -1638,19 +1829,34 @@ function salvarRecorteNoServidor() {
     });
 }
 
+function abrirOriginalImagemViewer() {
+    if (viewerState.src) {
+        window.open(viewerState.src, '_blank');
+    }
+}
+
 function onKeyDownViewer(e) {
     if (e.key === 'Escape') {
-        fecharVisualizadorImagem();
+        if (viewerState.isCropping) {
+            cancelarModoRecorte();
+        } else {
+            fecharVisualizadorImagem();
+        }
     } else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'r') {
-        rotacionarCropper(90);
+        if (viewerState.isCropping) rotacionarCropper(90);
+        else rotacionarViewerNormal(90);
     } else if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'l') {
-        rotacionarCropper(-90);
+        if (viewerState.isCropping) rotacionarCropper(-90);
+        else rotacionarViewerNormal(-90);
     } else if (e.key === '+' || e.key === '=') {
-        zoomCropper(0.15);
+        if (viewerState.isCropping) zoomCropper(0.15);
+        else zoomViewerNormal(0.2);
     } else if (e.key === '-' || e.key === '_') {
-        zoomCropper(-0.15);
+        if (viewerState.isCropping) zoomCropper(-0.15);
+        else zoomViewerNormal(-0.2);
     } else if (e.key === '0') {
-        resetarCropper();
+        if (viewerState.isCropping) resetarCropper();
+        else resetarViewerNormal();
     }
 }
 </script>
