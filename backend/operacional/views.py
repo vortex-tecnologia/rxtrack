@@ -2513,9 +2513,27 @@ def rotacionar_canhoto_servidor_view(request, baixa_id):
         logger.error(f"Erro ao recortar/rotacionar comprovante #{baixa_id}: {e}")
         return JsonResponse({'status': 'erro', 'message': f'Erro interno: {str(e)}'}, status=500)
 
+
+@login_required
+def proxy_imagem_view(request):
+    """Proxy seguro para carregar imagens de comprovantes sem bloqueio de CORS no navegador para o Cropper.js."""
+    from django.http import HttpResponse
+    url = request.GET.get('url')
+    if not url:
+        return HttpResponse("URL ausente", status=400)
+
+    try:
+        import requests
+        resp = requests.get(url, timeout=15)
+        if resp.status_code == 200:
+            content_type = resp.headers.get('Content-Type', 'image/jpeg')
+            response = HttpResponse(resp.content, content_type=content_type)
+            response['Access-Control-Allow-Origin'] = '*'
+            response['Cache-Control'] = 'public, max-age=86400'
+            return response
+        return HttpResponse("Imagem não encontrada", status=resp.status_code)
     except Exception as e:
-        logger.error(f"Erro ao rotacionar comprovante #{baixa_id}: {e}")
-        return JsonResponse({'status': 'erro', 'message': f'Erro interno: {str(e)}'}, status=500)
+        return HttpResponse(f"Erro ao buscar imagem: {e}", status=500)
 
 
 # ──────────────────────────────────────────────────────────────

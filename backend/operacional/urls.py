@@ -29,6 +29,7 @@ urlpatterns = [
     path('api/operacional/baixa/<int:baixa_id>/atualizar-foto/', views.atualizar_foto_baixa_view, name='atualizar_foto_baixa'),
     path('api/operacional/baixa/<int:baixa_id>/rotacionar-foto/', views.rotacionar_canhoto_servidor_view, name='rotacionar_canhoto_servidor'),
     path('api/operacional/baixa/<int:baixa_id>/aprovar-manual/', views.aprovar_canhoto_manual_view, name='aprovar_canhoto_manual'),
+    path('api/operacional/proxy-imagem/', views.proxy_imagem_view, name='proxy_imagem'),
     path('api/fretes/', views.api_fretes_listar, name='api_fretes_listar'),
     path('api/fretes/<int:frete_id>/notas/', views.api_fretes_detalhes_notas, name='api_fretes_detalhes_notas'),
     path('api/cargas-fretes/resumo/', views.api_cargas_fretes_resumo, name='api_cargas_fretes_resumo'),

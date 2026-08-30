@@ -1401,7 +1401,11 @@ function abrirVisualizadorImagem(url, titulo, baixaId) {
             cropperInstance.destroy();
             cropperInstance = null;
         }
-        img.src = url;
+        
+        // Usa o proxy local seguro para evitar bloqueio de CORS ao manipular canvas no navegador
+        const urlFinal = url.startsWith('http') ? ('/api/operacional/proxy-imagem/?url=' + encodeURIComponent(url)) : url;
+
+        img.crossOrigin = 'anonymous';
         img.onload = function() {
             if (cropperInstance) cropperInstance.destroy();
             cropperInstance = new Cropper(img, {
@@ -1415,6 +1419,7 @@ function abrirVisualizadorImagem(url, titulo, baixaId) {
                 highlight: false,
                 cropBoxMovable: true,
                 cropBoxResizable: true,
+                checkCrossOrigin: false,
                 toggleDragModeOnDblclick: false,
                 ready() {
                     atualizarBadgeInfo();
@@ -1424,6 +1429,7 @@ function abrirVisualizadorImagem(url, titulo, baixaId) {
                 }
             });
         };
+        img.src = urlFinal;
     }
 
     window.addEventListener('keydown', onKeyDownViewer);
@@ -1561,11 +1567,12 @@ function salvarRecorteNoServidor() {
         if (data.status === 'sucesso') {
             viewerState.src = data.nova_url;
             
-            // Recarrega o cropper com a imagem final salva
+            // Recarrega o cropper com a imagem final salva via proxy
             const img = document.getElementById('imgViewerElement');
             if (img) {
                 if (cropperInstance) cropperInstance.destroy();
-                img.src = data.nova_url + '?t=' + Date.now();
+                const proxyNovaUrl = '/api/operacional/proxy-imagem/?url=' + encodeURIComponent(data.nova_url) + '&t=' + Date.now();
+                img.crossOrigin = 'anonymous';
                 img.onload = function() {
                     cropperInstance = new Cropper(img, {
                         viewMode: 1,
@@ -1575,10 +1582,12 @@ function salvarRecorteNoServidor() {
                         restore: false,
                         cropBoxMovable: true,
                         cropBoxResizable: true,
+                        checkCrossOrigin: false,
                         ready() { atualizarBadgeInfo(); },
                         crop() { atualizarBadgeInfo(); }
                     });
                 };
+                img.src = proxyNovaUrl;
             }
 
             // Atualiza thumbnail no modal
