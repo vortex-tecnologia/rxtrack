@@ -2417,8 +2417,8 @@ def rotacionar_canhoto_servidor_view(request, baixa_id):
     if graus == 0:
         return JsonResponse({'status': 'erro', 'message': 'Gire a imagem antes de salvar (ângulo atual: 0°).'}, status=400)
 
-    # 1. Pega a URL da imagem de origem (preferência para backup original sem tarja)
-    url_origem = baixa.comprovante_original_url or baixa.comprovante_foto_url
+    # 1. Pega a URL da imagem exata que está sendo visualizada e rotacionada (canhoto recortado)
+    url_origem = data.get('url_imagem') or baixa.comprovante_foto_url or baixa.comprovante_original_url
     if not url_origem:
         return JsonResponse({'status': 'erro', 'message': 'Nenhum comprovante associado a esta baixa.'}, status=404)
 
@@ -2432,13 +2432,18 @@ def rotacionar_canhoto_servidor_view(request, baixa_id):
         if img is None:
             return JsonResponse({'status': 'erro', 'message': 'Não foi possível decodificar o arquivo de imagem.'}, status=500)
 
-        # 2. Se a imagem utilizada de origem já possuía a tarja antiga no rodapé, remove antes de girar
+        # 2. Remove a tarja preta antiga antes de rotacionar
         h, w = img.shape[:2]
-        if (not baixa.comprovante_original_url or url_origem == baixa.comprovante_foto_url) and h > 100:
-            rodape = img[max(0, h - 45):h, :]
-            if np.mean(rodape) < 40: # Tarja preta detectada
-                img = img[0:max(1, h - 45), :]
-                h, w = img.shape[:2]
+        if h > 80:
+            corte_y = h
+            for y in range(h - 1, max(0, h - 140), -1):
+                linha = img[y, :, :]
+                media_intensidade = np.mean(linha)
+                if media_intensidade > 60:
+                    corte_y = y + 1
+                    break
+            if corte_y < h:
+                img = img[0:corte_y, :]
 
         # 3. Aplica a rotação de acordo com o ângulo
         if graus == 90:

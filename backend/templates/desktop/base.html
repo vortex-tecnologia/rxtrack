@@ -1421,7 +1421,8 @@ function salvarRotacaoNoServidor() {
             'X-CSRFToken': csrfToken
         },
         body: JSON.stringify({
-            graus: viewerState.graus
+            graus: viewerState.graus,
+            url_imagem: viewerState.src
         })
     })
     .then(r => r.json())
