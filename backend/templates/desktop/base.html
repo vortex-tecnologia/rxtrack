@@ -1256,18 +1256,23 @@
     justify-content: center;
     overflow: hidden;
     position: relative;
-    padding: 16px;
+    padding: 12px;
+    background: rgba(10, 15, 29, 0.96);
 }
 .image-viewer-crop-wrapper {
-    max-width: 90vw;
-    max-height: 80vh;
-    width: 100%;
-    height: 100%;
+    width: 88vw;
+    height: 76vh;
+    max-width: 1200px;
+    max-height: 76vh;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 /* Cropper Styling Customizado */
+.cropper-container {
+    max-width: 100% !important;
+    max-height: 100% !important;
+}
 .cropper-view-box {
     outline: 2px solid #38bdf8 !important;
     outline-color: rgba(56, 189, 248, 0.95) !important;
@@ -1327,10 +1332,10 @@
             <button type="button" class="image-viewer-btn" onclick="flipCropper()" title="Espelhar Horizontalmente">
                 <i class="bi bi-symmetry-vertical"></i>
             </button>
-            <button type="button" class="image-viewer-btn" onclick="redefinirAreaRecorte()" title="Redefinir Área de Recorte">
-                <i class="bi bi-crop"></i>
+            <button type="button" class="image-viewer-btn" onclick="redefinirAreaRecorte()" title="Ajustar ao Tamanho Total">
+                <i class="bi bi-aspect-ratio"></i>
             </button>
-            <button type="button" class="image-viewer-btn" onclick="resetarCropper()" title="Redefinir Posição e Rotação [0]">
+            <button type="button" class="image-viewer-btn" onclick="resetarCropper()" title="Redefinir Tudo [0]">
                 <i class="bi bi-arrow-repeat"></i>
             </button>
             <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2); margin: 0 4px;"></div>
@@ -1352,7 +1357,7 @@
     <!-- Viewport da imagem com Cropper.js -->
     <div class="image-viewer-viewport" id="imgViewerViewport">
         <div class="image-viewer-crop-wrapper">
-            <img src="" id="imgViewerElement" alt="Comprovante" style="max-width: 100%; display: block;">
+            <img src="" id="imgViewerElement" alt="Comprovante" style="max-width: 100%; max-height: 100%; display: block;">
         </div>
     </div>
 </div>
@@ -1409,10 +1414,11 @@ function abrirVisualizadorImagem(url, titulo, baixaId) {
         img.onload = function() {
             if (cropperInstance) cropperInstance.destroy();
             cropperInstance = new Cropper(img, {
-                viewMode: 1,
+                viewMode: 0, // Livre, evita zoom forçado ao rotacionar
                 dragMode: 'crop',
                 autoCrop: true,
-                autoCropArea: 0.96,
+                autoCropArea: 0.98,
+                responsive: true,
                 restore: false,
                 guides: true,
                 center: true,
@@ -1451,6 +1457,18 @@ function fecharVisualizadorImagem() {
 function rotacionarCropper(delta) {
     if (cropperInstance) {
         cropperInstance.rotate(delta);
+        setTimeout(() => {
+            if (cropperInstance) {
+                const canvasData = cropperInstance.getCanvasData();
+                cropperInstance.setCropBoxData({
+                    left: canvasData.left,
+                    top: canvasData.top,
+                    width: canvasData.width,
+                    height: canvasData.height
+                });
+                atualizarBadgeInfo();
+            }
+        }, 30);
     }
 }
 
@@ -1469,8 +1487,13 @@ function flipCropper() {
 
 function redefinirAreaRecorte() {
     if (cropperInstance) {
-        cropperInstance.crop();
-        cropperInstance.setCropBoxData(cropperInstance.getCanvasData());
+        const canvasData = cropperInstance.getCanvasData();
+        cropperInstance.setCropBoxData({
+            left: canvasData.left,
+            top: canvasData.top,
+            width: canvasData.width,
+            height: canvasData.height
+        });
     }
 }
 
