@@ -423,30 +423,88 @@ def processar_webhook_manifesto_task(self, event_id):
                 cep_dest = str(dest.get('cep', '')).strip().replace('-', '') if dest.get('cep') else None
 
                 if nota_obj:
-                    # ✅ NOTA JÁ EXISTE NO MANIFESTO: APENAS COMPLETA DADOS FALTANTES
-                    # NUNCA sobrescreve o status de notas que já foram entregues (BAIXADA) ou com OCORRÊNCIA!
+                    # ✅ NOTA JÁ EXISTE NO MANIFESTO: VERIFICAÇÃO COMPLETA CAMPO A CAMPO
+                    # O webhook vem direto do banco da ESL (dados sempre confiáveis/completos),
+                    # então SEMPRE tem prioridade sobre dados que já estavam no banco local.
+                    # PROTEÇÃO: Notas BAIXADA/OCORRENCIA NÃO são alteradas (já finalizadas pelo motorista).
                     campos_update = []
-                    if id_tms and nota_obj.freight_id_tms != str(id_tms):
-                        nota_obj.freight_id_tms = str(id_tms)
-                        campos_update.append('freight_id_tms')
-                    if chave_nfe and not nota_obj.chave_acesso:
-                        nota_obj.chave_acesso = chave_nfe
-                        campos_update.append('chave_acesso')
-                    if cep_dest and not nota_obj.cep:
-                        nota_obj.cep = cep_dest
-                        campos_update.append('cep')
-                    if frete_obj and not nota_obj.frete:
-                        nota_obj.frete = frete_obj
-                        campos_update.append('frete')
-                    if dest.get('nome') and (not nota_obj.destinatario or nota_obj.destinatario == 'NÃO INFORMADO'):
-                        nota_obj.destinatario = str(dest.get('nome')).upper()
-                        campos_update.append('destinatario')
-                    if endereco and (not nota_obj.endereco_entrega or 'CONSULTE' in nota_obj.endereco_entrega):
-                        nota_obj.endereco_entrega = endereco
-                        campos_update.append('endereco_entrega')
+                    cep_mudou = False
+
+                    if nota_obj.status in ['BAIXADA', 'OCORRENCIA']:
+                        # 🔒 Nota já finalizada — apenas atualiza freight_id se faltava
+                        if id_tms and nota_obj.freight_id_tms != str(id_tms):
+                            nota_obj.freight_id_tms = str(id_tms)
+                            campos_update.append('freight_id_tms')
+                    else:
+                        # 📋 Nota PENDENTE — verificação COMPLETA de todos os campos
+                        # tipo_operacao: CRÍTICO — corrige tipo errado (ex: ENTREGA → TRANSFERENCIA)
+                        # Webhook SEMPRE tem autoridade sobre tipo_operacao (dados 100% confiáveis da ESL)
+                        if tipo_item and nota_obj.tipo_operacao != tipo_item:
+                            logger.info(f"🔄 [WEBHOOK CORREÇÃO] NF #{numero_item}: tipo_operacao '{nota_obj.tipo_operacao}' → '{tipo_item}'")
+                            nota_obj.tipo_operacao = tipo_item
+                            campos_update.append('tipo_operacao')
+                        # Marca que o tipo_operacao foi confirmado pelo webhook (trava contra busca manual)
+                        if tipo_item and not nota_obj.tipo_operacao_confirmado_webhook:
+                            nota_obj.tipo_operacao_confirmado_webhook = True
+                            campos_update.append('tipo_operacao_confirmado_webhook')
+                        # freight_id_tms
+                        if id_tms and nota_obj.freight_id_tms != str(id_tms):
+                            nota_obj.freight_id_tms = str(id_tms)
+                            campos_update.append('freight_id_tms')
+                        # chave_acesso (sempre atualiza se diferente, webhook é confiável)
+                        if chave_nfe and nota_obj.chave_acesso != chave_nfe:
+                            nota_obj.chave_acesso = chave_nfe
+                            campos_update.append('chave_acesso')
+                        # CEP
+                        if cep_dest and nota_obj.cep != cep_dest:
+                            nota_obj.cep = cep_dest
+                            campos_update.append('cep')
+                            cep_mudou = True
+                        # Frete
+                        if frete_obj and nota_obj.frete != frete_obj:
+                            nota_obj.frete = frete_obj
+                            campos_update.append('frete')
+                        # Destinatário (webhook sempre tem prioridade — dados vêm do banco ESL)
+                        nome_dest_wh = str(dest.get('nome', '')).upper().strip()
+                        if nome_dest_wh and nome_dest_wh != 'NÃO INFORMADO' and nota_obj.destinatario != nome_dest_wh:
+                            nota_obj.destinatario = nome_dest_wh
+                            campos_update.append('destinatario')
+                        # Endereço de entrega (webhook sempre tem prioridade — dados vêm do banco ESL)
+                        if endereco and 'NÃO INFORMADO' not in endereco:
+                            endereco_limpo = endereco.strip()
+                            if nota_obj.endereco_entrega != endereco_limpo:
+                                nota_obj.endereco_entrega = endereco_limpo
+                                campos_update.append('endereco_entrega')
+                                cep_mudou = True  # Endereço mudou, re-geocodificar
+                        # CT-e
+                        novo_cte = normalizar_valor(item.get('numero_cte'))
+                        if novo_cte and nota_obj.numero_cte != novo_cte:
+                            nota_obj.numero_cte = novo_cte
+                            campos_update.append('numero_cte')
+                        if chave_cte and nota_obj.chave_cte != chave_cte:
+                            nota_obj.chave_cte = chave_cte
+                            campos_update.append('chave_cte')
+                        # Número de coleta
+                        if num_coleta and nota_obj.numero_coleta != num_coleta:
+                            nota_obj.numero_coleta = num_coleta
+                            campos_update.append('numero_coleta')
 
                     if campos_update:
+                        logger.info(f"📝 [WEBHOOK SYNC] NF #{numero_item} - Campos atualizados: {campos_update}")
                         nota_obj.save(update_fields=campos_update)
+
+                    # 🌍 Re-geocodificação: se CEP ou endereço mudou, atualiza lat/lng
+                    if cep_mudou and nota_obj.cep:
+                        try:
+                            # Limpa coordenadas antigas para forçar nova busca
+                            nota_obj.latitude = None
+                            nota_obj.longitude = None
+                            nota_obj.save(update_fields=['latitude', 'longitude'])
+                            enriquecer_geolocalizacao_nota_task.delay(nota_obj.id)
+                            logger.info(f"🌍 [WEBHOOK GEO] Re-geocodificação disparada para NF #{numero_item} (CEP/endereço alterado)")
+                        except Exception as geo_err:
+                            logger.warning(f"⚠️ Erro ao re-geocodificar NF #{numero_item}: {geo_err}")
+
                     created_nota = False
                 else:
                     # 🆕 NOTA NOVA NO MANIFESTO: CRIA COMO PENDENTE
@@ -455,6 +513,7 @@ def processar_webhook_manifesto_task(self, event_id):
                         numero_nota=numero_item,
                         chave_acesso=chave_nfe,
                         tipo_operacao=tipo_item,
+                        tipo_operacao_confirmado_webhook=True,  # Webhook é fonte confiável
                         destinatario=str(dest.get('nome', 'NÃO INFORMADO')).upper(),
                         endereco_entrega=endereco,
                         cep=cep_dest,
@@ -705,6 +764,7 @@ def processar_soap_task(self, evento_id):
                                 'destinatario': destinatario,
                                 'endereco_entrega': endereco_str,
                                 'tipo_operacao': tipo_operacao,
+                                'tipo_operacao_confirmado_webhook': True,  # SOAP também é integração confiável
                                 'numero_nota': numero_nota,
                                 'chave_acesso': chave_nota if chave_nota else None,
                             }

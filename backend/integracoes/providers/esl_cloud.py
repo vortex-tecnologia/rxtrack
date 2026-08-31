@@ -648,17 +648,95 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         ).first()
 
                     if nota_no_manifesto:
-                        # NOTA JÁ EXISTE: Não faz requisições extras de endereço/frete na ESL!
+                        # ✅ NOTA JÁ EXISTE: VERIFICAÇÃO COMPLETA CAMPO A CAMPO
+                        # PROTEÇÃO: Notas BAIXADA/OCORRENCIA NÃO são alteradas (já finalizadas)
                         update_fields = []
-                        if nota_no_manifesto.tipo_operacao != tipo_operacao:
-                            nota_no_manifesto.tipo_operacao = tipo_operacao
-                            update_fields.append('tipo_operacao')
-                        if freight_id and nota_no_manifesto.freight_id_tms != str(freight_id):
-                            nota_no_manifesto.freight_id_tms = str(freight_id)
-                            update_fields.append('freight_id_tms')
+                        cep_mudou = False
+
+                        if nota_no_manifesto.status not in ['BAIXADA', 'OCORRENCIA']:
+                            # 📋 Nota PENDENTE — verificação COMPLETA
+                            # 🛡️ TRAVA: tipo_operacao confirmado via Webhook NÃO pode ser alterado pela busca manual
+                            if nota_no_manifesto.tipo_operacao != tipo_operacao:
+                                if nota_no_manifesto.tipo_operacao_confirmado_webhook:
+                                    logger.info(f"🛡️ [BUSCA MANUAL] NF #{numero}: tipo_operacao '{nota_no_manifesto.tipo_operacao}' PROTEGIDO (confirmado via Webhook). Busca manual tentou '{tipo_operacao}' — IGNORADO.")
+                                else:
+                                    logger.info(f"🔄 [BUSCA MANUAL CORREÇÃO] NF #{numero}: tipo_operacao '{nota_no_manifesto.tipo_operacao}' → '{tipo_operacao}'")
+                                    nota_no_manifesto.tipo_operacao = tipo_operacao
+                                    update_fields.append('tipo_operacao')
+                            if freight_id and nota_no_manifesto.freight_id_tms != str(freight_id):
+                                nota_no_manifesto.freight_id_tms = str(freight_id)
+                                update_fields.append('freight_id_tms')
+                            if chave and nota_no_manifesto.chave_acesso != chave:
+                                nota_no_manifesto.chave_acesso = chave
+                                update_fields.append('chave_acesso')
+
+                            # Busca endereço/destinatário atualizado na ESL se dados parecem incompletos
+                            dados_incompletos = (
+                                not nota_no_manifesto.endereco_entrega or
+                                'CONSULTE' in (nota_no_manifesto.endereco_entrega or '') or
+                                'DADOS NÃO REPASSADOS' in (nota_no_manifesto.endereco_entrega or '') or
+                                'NÃO INFORMADO' in (nota_no_manifesto.destinatario or '') or
+                                'DADOS NÃO REPASSADOS' in (nota_no_manifesto.destinatario or '') or
+                                not nota_no_manifesto.cep
+                            )
+                            if dados_incompletos and chave:
+                                try:
+                                    time.sleep(2.0)
+                                    detalhes = self.buscar_detalhes_esl_interno(chave, numero, token_geral)
+                                    if detalhes:
+                                        nome_det = detalhes.get('ioe_rpt_name')
+                                        if nome_det:
+                                            nome_limpo = str(nome_det).upper().strip()
+                                            if nome_limpo and nota_no_manifesto.destinatario != nome_limpo:
+                                                nota_no_manifesto.destinatario = nome_limpo
+                                                update_fields.append('destinatario')
+
+                                        rua = detalhes.get('ioe_rpt_mds_line_1', '')
+                                        num_end = detalhes.get('ioe_rpt_mds_number', '')
+                                        if rua:
+                                            endereco_novo = f"{rua} {num_end}".strip().upper()
+                                            if nota_no_manifesto.endereco_entrega != endereco_novo:
+                                                nota_no_manifesto.endereco_entrega = endereco_novo
+                                                update_fields.append('endereco_entrega')
+                                                cep_mudou = True
+
+                                        cep_val = (
+                                            detalhes.get('ioe_rpt_mds_postal_code') or
+                                            detalhes.get('ioe_rpt_zip_code') or
+                                            detalhes.get('ioe_rpt_mds_zip_code') or
+                                            detalhes.get('zip_code') or
+                                            detalhes.get('cep')
+                                        )
+                                        if cep_val:
+                                            cep_limpo = str(cep_val).strip()[:10]
+                                            if cep_limpo and nota_no_manifesto.cep != cep_limpo:
+                                                nota_no_manifesto.cep = cep_limpo
+                                                update_fields.append('cep')
+                                                cep_mudou = True
+                                except Exception as det_err:
+                                    logger.warning(f"⚠️ Erro ao buscar detalhes ESL para NF #{numero}: {det_err}")
+                        else:
+                            # 🔒 Nota BAIXADA/OCORRENCIA — apenas atualiza freight_id se faltava
+                            if freight_id and nota_no_manifesto.freight_id_tms != str(freight_id):
+                                nota_no_manifesto.freight_id_tms = str(freight_id)
+                                update_fields.append('freight_id_tms')
+
                         if update_fields:
+                            logger.info(f"📝 [BUSCA MANUAL SYNC] NF #{numero} - Campos atualizados: {update_fields}")
                             nota_no_manifesto.save(update_fields=update_fields)
-                            
+
+                        # 🌍 Re-geocodificação: se CEP ou endereço mudou, atualiza lat/lng
+                        if cep_mudou and nota_no_manifesto.cep:
+                            try:
+                                nota_no_manifesto.latitude = None
+                                nota_no_manifesto.longitude = None
+                                nota_no_manifesto.save(update_fields=['latitude', 'longitude'])
+                                from manifesto.tasks import enriquecer_geolocalizacao_nota_task
+                                enriquecer_geolocalizacao_nota_task.delay(nota_no_manifesto.id)
+                                logger.info(f"🌍 [BUSCA MANUAL GEO] Re-geocodificação disparada para NF #{numero} (CEP/endereço alterado)")
+                            except Exception as geo_err:
+                                logger.warning(f"⚠️ Erro ao re-geocodificar NF #{numero}: {geo_err}")
+
                         ids_processadas.append(nota_no_manifesto.id)
                         total_processadas += 1
                         continue

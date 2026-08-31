@@ -320,6 +320,9 @@ class NotaFiscal(models.Model):
         choices=TIPO_OPERACAO_CHOICES, 
         default='ENTREGA', null=True, blank=True
     )
+    # Indica que o tipo_operacao foi definido/confirmado pelo Webhook (fonte confiável da ESL).
+    # Quando True, busca manual e resincronização NÃO podem sobrescrever o tipo_operacao.
+    tipo_operacao_confirmado_webhook = models.BooleanField(default=False, verbose_name="Tipo confirmado via Webhook")
     
     # Campo para Coletas
     numero_coleta = models.CharField(max_length=50, null=True, blank=True, verbose_name="Número da Coleta")
