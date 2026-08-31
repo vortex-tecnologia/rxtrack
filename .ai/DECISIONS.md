@@ -83,3 +83,13 @@
 **Motivo**: O TMS envia o `id` interno de banco da ESL (`6765484`) e não o número visual (`sequence_code`). Para evitar chamadas redundantes à API da ESL a cada atualização de rota via webhook, o sistema primeiro busca no banco local por `numero_manifesto` ou `manifesto_id_tms`. Somente se o manifesto for novo no sistema é feita a consulta na ESL.  
 **Impacto**: Economia massiva de requisições à ESL e atualizações de rotas em tempo real no app.
 
+---
+
+## DEC-010
+
+**Data**: 2026-08-31  
+**Decisão**: Bloqueio de processamento de manifestos via Webhook/SOAP para motoristas que possuem apenas pré-cadastro (`motorista.user is None`).  
+**Motivo**: Quando a ESL emite uma rota para um motorista que ainda não fez seu primeiro acesso/cadastro no aplicativo RXTrack, o sistema deve registrar e manter o perfil (pré-cadastro) com CPF, Nome e Filial, mas NÃO deve criar o Manifesto nem as Notas Fiscais, evitando poluição da Torre de Controle Live com cards de motoristas inaptos/sem acesso. Assim que o motorista realizar o primeiro acesso no app (`user` criado e ativo), os futuros manifestos passarão a ser processados normalmente.  
+**Impacto**: Webhooks recebidos para CPFs sem usuário ativo são registrados como `IGNORADO` com log explicativo; nenhum manifesto é aberto para motorista não cadastrado.
+
+

@@ -330,6 +330,16 @@ def processar_webhook_manifesto_task(self, event_id):
                 logger.info(f"🚫 Base '{base_checar.nome}' com operação inativa. Manifesto #{num_visual} ({num_mani_recebido}) ignorado.")
                 return f"Base '{base_checar.nome}' inativa. Manifesto ignorado."
 
+            # 🛡️ TRAVA 3: MOTORISTA NÃO CADASTRADO NO APP (APENAS PRÉ-CADASTRO, SEM USUÁRIO ATIVO)
+            # Se o motorista não concluiu o primeiro acesso/cadastro (user é None), mantém o pré-cadastro mas NÃO processa o manifesto
+            if not motorista_obj.user or not motorista_obj.user.is_active:
+                event.status = 'IGNORADO'
+                event.erro = f"Motorista '{motorista_obj.nome_completo}' (CPF: {cpf}) possui apenas pré-cadastro e ainda não concluiu o cadastro de usuário no aplicativo. Manifesto #{num_visual} ({num_mani_recebido}) não processado."
+                event.processed_at = timezone.now()
+                event.save()
+                logger.info(f"👤 [PRÉ-CADASTRO] Motorista '{motorista_obj.nome_completo}' ({cpf}) sem conta de usuário ativa no app. Pré-cadastro mantido, manifesto #{num_visual} ignorado.")
+                return f"Motorista '{motorista_obj.nome_completo}' sem usuário ativo. Pré-cadastro registrado, manifesto ignorado."
+
             # 🛡️ PRESERVAÇÃO DE STATUS EXISTENTE:
             # - Se já existia (seja EM_TRANSPORTE ou AGUARDANDO), MANTÉM exatamente o status atual.
             # - Se for um manifesto novo, inicia como AGUARDANDO.
@@ -707,6 +717,15 @@ def processar_soap_task(self, evento_id):
                 evento.processed_at = timezone.now()
                 evento.save()
                 return f"Manifesto #{numero_rota} ja finalizado/cancelado."
+
+            # 🛡️ TRAVA: MOTORISTA NÃO CADASTRADO NO APP (APENAS PRÉ-CADASTRO)
+            if not motorista_obj.user or not motorista_obj.user.is_active:
+                evento.status = 'IGNORADO'
+                evento.erro = f"Motorista '{motorista_obj.nome_completo}' (CPF: {cpf}) possui apenas pre-cadastro e ainda nao concluiu o primeiro acesso no app. Manifesto #{numero_rota} ignorado."
+                evento.processed_at = timezone.now()
+                evento.save()
+                logger.info(f"👤 [SOAP PRÉ-CADASTRO] Motorista '{motorista_obj.nome_completo}' ({cpf}) sem usuario ativo. Manifesto #{numero_rota} ignorado.")
+                return f"Motorista '{motorista_obj.nome_completo}' sem usuario ativo. Pre-cadastro registrado, manifesto ignorado."
 
             status_novo = manifesto_obj.status if manifesto_obj else 'AGUARDANDO'
 
