@@ -156,7 +156,8 @@ class RegistrarBaixaView(APIView):
                         raise NotaFiscal.DoesNotExist(f"Documento {id_err} não localizado.")
 
                 # ======= BLOQUEIO POR STATUS TMS (PENDENTE/FINALIZADO) =======
-                manifesto_da_nota = nf.manifesto
+                manifesto = nf.manifesto
+                manifesto_da_nota = manifesto
                 if manifesto_da_nota:
                     status_tms_atual = getattr(manifesto_da_nota, 'status_tms', 'in_transit')
                     if status_tms_atual == 'pending':
@@ -376,17 +377,18 @@ class RegistrarBaixaView(APIView):
                         msg_log = "Baixa salva localmente (TMS desligado nas configurações)."
 
                 # 🏁 Se a baixa não requer IA (coletas, ocorrências sem foto, retidas, etc.), dispara a auto-finalização
-                if not is_analise_ia_necessaria and manifesto:
-                    try:
+                try:
+                    manifesto_alvo = manifesto or (nf.manifesto if nf else None)
+                    if not is_analise_ia_necessaria and manifesto_alvo:
                         from manifesto.tasks import verificar_autofinalizacao_manifesto_task
                         from django.db import connection
                         verificar_autofinalizacao_manifesto_task.apply_async(
-                            args=[manifesto.id],
+                            args=[manifesto_alvo.id],
                             kwargs={'schema_name': getattr(connection, 'schema_name', None)},
                             countdown=3
                         )
-                    except Exception as auto_err:
-                        print(f"Aviso: Erro ao agendar auto-finalizacao na baixa: {auto_err}")
+                except Exception as auto_err:
+                    print(f"Aviso: Erro ao agendar auto-finalizacao na baixa: {auto_err}")
                 
                 _trace.append(f"[DISPATCH] {msg_log} | NF status='{nf.status}', chave_acesso={'SIM' if nf.chave_acesso else 'NAO'}")
                 _trace_str = " | ".join(_trace)
