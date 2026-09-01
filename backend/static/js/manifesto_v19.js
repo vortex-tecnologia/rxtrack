@@ -473,6 +473,19 @@ async function atualizarListaViva(numeroManifesto) {
         window.manifestoWhatsappOperacional = metaManifesto.whatsapp_operacional || null;
         window.manifestoNomeFilial = metaManifesto.nome_filial || null;
         window.manifestoPlacaVeiculo = metaManifesto.placa_veiculo || null;
+
+        // Se o manifesto já foi finalizado no backend (ex: auto-finalização), limpa a rota e recarrega
+        if (metaManifesto.status === 'FINALIZADO' || metaManifesto.finalizado) {
+            console.log("🏁 Manifesto já se encontra finalizado no backend. Limpando sessão.");
+            localStorage.removeItem('manifesto_ativo');
+            localStorage.removeItem(`cache_notas_${numeroManifesto}`);
+            localStorage.removeItem(`cache_dados_puros_${numeroManifesto}`);
+            setTimeout(() => {
+                window.location.reload();
+            }, 600);
+            return;
+        }
+
         const areaDinamica = document.getElementById('area-lista-dinamica');
         const contador = document.getElementById('contador-notas');
 
@@ -671,19 +684,47 @@ async function atualizarListaViva(numeroManifesto) {
                             if (mID) atualizarListaViva(mID);
                         }, 3000);
                     } else {
-                        // 🟢 CASO 3: Tudo aprovado — libera botão FINALIZAR MANIFESTO
+                        // 🟢 CASO 3: Tudo aprovado — FINALIZA AUTOMATICAMENTE O MANIFESTO!
                         containerFinalizacao.innerHTML = `
                             <div class="card bg-success text-white mb-4 shadow border-0 animate__animated animate__pulse animate__infinite" style="border-radius: 16px;">
                                 <div class="card-body text-center py-4">
-                                    <i class="bi bi-flag-fill mb-2" style="font-size: 2rem;"></i>
+                                    <div class="spinner-border text-white mb-3" role="status" style="width: 2.2rem; height: 2.2rem;"></div>
                                     <h5 class="fw-bold mb-1">ENTREGAS CONCLUÍDAS!</h5>
-                                    <p class="small mb-3 opacity-91">Todas as notas deste manifesto foram bipadas e validadas.</p>
-                                    <button class="btn btn-light btn-lg fw-bold text-success w-100 rounded-pill shadow-sm" onclick="abrirModalFinalizacao()">
-                                        <i class="bi bi-check-all me-1"></i> FINALIZAR MANIFESTO
+                                    <p class="small mb-2 opacity-91">Todas as notas foram validadas. Encerrando manifesto automaticamente...</p>
+                                    <button class="btn btn-sm btn-outline-light rounded-pill px-3 fw-bold mt-2" onclick="executarFinalizacaoManual()">
+                                        Finalizar agora
                                     </button>
                                 </div>
                             </div>
                         `;
+
+                        // Auto-disparo caso o backend ainda não tenha encerrado
+                        if (!window.autoFinalizacaoEmExecucao) {
+                            window.autoFinalizacaoEmExecucao = true;
+                            console.log("🏁 Disparando auto-finalização a partir do app...");
+                            setTimeout(() => {
+                                authFetch(`${API_BASE}manifesto/finalizar/`, {
+                                    method: 'POST',
+                                    body: JSON.stringify({
+                                        km_final: "0",
+                                        manifesto_id: numeroManifesto
+                                    })
+                                }).then(async (res) => {
+                                    const data = await res.json().catch(() => ({}));
+                                    if (res.ok || (data && data.sucesso)) {
+                                        localStorage.removeItem('manifesto_ativo');
+                                        localStorage.removeItem(`cache_notas_${numeroManifesto}`);
+                                        localStorage.removeItem(`cache_dados_puros_${numeroManifesto}`);
+                                        setTimeout(() => { window.location.reload(); }, 600);
+                                    } else {
+                                        window.autoFinalizacaoEmExecucao = false;
+                                        console.warn("Aviso auto-finalizacao app:", data);
+                                    }
+                                }).catch(() => {
+                                    window.autoFinalizacaoEmExecucao = false;
+                                });
+                            }, 500);
+                        }
                     }
                 } else {
                     containerFinalizacao.innerHTML = '';
@@ -712,10 +753,9 @@ function atualizarVisualContadores(contador, notas, totalFinalizadas) {
     html += `</div>`;
     contador.innerHTML = html;
 
-    // Se tudo foi entregue, APENAS ATUALIZA O CONTADOR (A finalização agora é manual via botão)
+    // Se tudo foi entregue, indica no log que a finalização automática está ativa
     if (notas.length > 0 && totalFinalizadas === notas.length) {
-        console.log("🏁 Todas as notas concluídas. Aguardando finalização manual.");
-        // Removido o fluxo automático: finalizarManifestoAutomatico();
+        console.log("🏁 Todas as notas concluídas. Auto-finalização ativa.");
     }
 }
 // =====================================================

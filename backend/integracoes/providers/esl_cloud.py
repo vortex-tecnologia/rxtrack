@@ -1726,7 +1726,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     if b.nota_fiscal and b.nota_fiscal.tipo_operacao == 'COLETA':
                         self.enviar_coleta(b.id)
                     elif b.nota_fiscal and b.nota_fiscal.chave_acesso:
-                        self.enviar_baixa_nfe(b.id)
+                        self.enviar_baixa(b.id)
                     else:
                         self.enviar_baixa_minuta(b.id)
                 except Exception as b_err:

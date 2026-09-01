@@ -72,6 +72,24 @@ def finalizar_manifesto_tms_task(self, manifesto_id):
     return "TMS Desativado."
 
 
+@shared_task
+def verificar_autofinalizacao_manifesto_task(manifesto_id, schema_name=None):
+    """
+    Avalia em background se o manifesto tem 100% das notas concluídas e fotos validadas pela IA.
+    Se sim, auto-finaliza o manifesto automaticamente.
+    """
+    if schema_name:
+        from django_tenants.utils import schema_context
+        with schema_context(schema_name):
+            from manifesto.services import tentar_autofinalizar_manifesto
+            sucesso, msg = tentar_autofinalizar_manifesto(manifesto_id)
+            return {"sucesso": sucesso, "mensagem": msg}
+    else:
+        from manifesto.services import tentar_autofinalizar_manifesto
+        sucesso, msg = tentar_autofinalizar_manifesto(manifesto_id)
+        return {"sucesso": sucesso, "mensagem": msg}
+
+
 @shared_task(bind=True, max_retries=2)
 def enviar_baixa_minuta_task(self, baixa_id):
     """Delegated to the correct TMS Adapter."""

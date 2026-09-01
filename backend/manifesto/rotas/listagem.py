@@ -154,6 +154,20 @@ class ListarNotasManifestoView(APIView):
         # === METADADOS DO MANIFESTO (status TMS, WhatsApp, Veículo) ===
         meta_manifesto = {}
         if mft:
+            # 🏁 Avalia se o manifesto já pode ser finalizado automaticamente
+            if mft.status == 'EM_TRANSPORTE' and not mft.finalizado:
+                total_mft = len(notas)
+                if total_mft > 0 and not any(n.status == 'PENDENTE' for n in notas):
+                    try:
+                        from manifesto.services import tentar_autofinalizar_manifesto
+                        sucesso_auto, _ = tentar_autofinalizar_manifesto(mft)
+                        if sucesso_auto:
+                            mft.refresh_from_db()
+                    except Exception as e_auto:
+                        pass
+
+            meta_manifesto['status'] = mft.status
+            meta_manifesto['finalizado'] = mft.finalizado
             meta_manifesto['status_tms'] = getattr(mft, 'status_tms', 'in_transit')
             meta_manifesto['placa_veiculo'] = mft.veiculo.placa if mft.veiculo else None
             if mft.filial:

@@ -75,3 +75,52 @@ def auto_recuperar_baixas_pendentes_ia():
 
     if total_reenfileiradas > 0:
         print(f"[SENTINELA-IA] Total: {total_reenfileiradas} baixa(s) re-enfileirada(s) para processamento IA.")
+
+
+@shared_task
+def auto_finalizar_manifestos_concluidos_task():
+    """
+    Sentinela 24h: Varre periodicamente manifestos em transporte.
+    Se todas as notas foram baixadas e todas as fotos foram validadas/aprovadas pela IA,
+    finaliza o manifesto automaticamente sem depender do motorista no aplicativo.
+    """
+    from django_tenants.utils import schema_context
+    from tenants.models import Client
+    from manifesto.services import tentar_autofinalizar_manifesto
+
+    tenants = list(Client.objects.exclude(schema_name='public'))
+    if not tenants:
+        # Modo single-tenant fallback
+        _varrer_e_finalizar_manifestos_tenant()
+        return
+
+    for tenant in tenants:
+        with schema_context(tenant.schema_name):
+            _varrer_e_finalizar_manifestos_tenant(tenant.schema_name)
+
+
+def _varrer_e_finalizar_manifestos_tenant(schema_name=None):
+    from manifesto.models import Manifesto, NotaFiscal
+    from manifesto.services import tentar_autofinalizar_manifesto
+
+    manifestos_ativos = Manifesto.objects.filter(
+        status__in=['EM_TRANSPORTE', 'AGUARDANDO'],
+        finalizado=False
+    )
+
+    for mft in manifestos_ativos:
+        try:
+            total_notas = mft.notas_fiscais.count()
+            if total_notas == 0:
+                continue
+
+            # Se não houver notas pendentes de baixa
+            tem_pendente = mft.notas_fiscais.filter(status='PENDENTE').exists()
+            if not tem_pendente:
+                sucesso, msg = tentar_autofinalizar_manifesto(mft)
+                if sucesso:
+                    schema_str = f" no tenant '{schema_name}'" if schema_name else ""
+                    print(f"🏁 [SENTINELA AUTO-FINALIZAÇÃO] Manifesto #{mft.numero_manifesto}{schema_str}: {msg}")
+        except Exception as e:
+            print(f"⚠️ [SENTINELA AUTO-FINALIZAÇÃO] Erro ao verificar Manifesto #{mft.numero_manifesto}: {e}")
+

@@ -376,3 +376,17 @@ def finalizar_fluxo_tms(baixa, somente_comprovante=False):
     elif nf:
         enviar_baixa_minuta_task.apply_async(args=[baixa.id], countdown=2)
         print(f"TMS: Fluxo de baixa de Minuta {nf.numero_nota} despachado.")
+
+    # 🏁 Auto-finalização: Se todas as notas do manifesto estiverem concluídas e verificadas, fecha o manifesto sozinho
+    try:
+        if nf and nf.manifesto_id:
+            from manifesto.tasks import verificar_autofinalizacao_manifesto_task
+            from django.db import connection
+            verificar_autofinalizacao_manifesto_task.apply_async(
+                args=[nf.manifesto_id],
+                kwargs={'schema_name': getattr(connection, 'schema_name', None)},
+                countdown=4
+            )
+    except Exception as auto_err:
+        print(f"[IA-GUARDIÃO] Aviso: Erro ao agendar auto-finalizacao em finalizar_fluxo_tms: {auto_err}")
+

@@ -374,6 +374,19 @@ class RegistrarBaixaView(APIView):
                             msg_log = "Minuta agendada para TMS (Frete Endpoint)."
                     else:
                         msg_log = "Baixa salva localmente (TMS desligado nas configurações)."
+
+                # 🏁 Se a baixa não requer IA (coletas, ocorrências sem foto, retidas, etc.), dispara a auto-finalização
+                if not is_analise_ia_necessaria and manifesto:
+                    try:
+                        from manifesto.tasks import verificar_autofinalizacao_manifesto_task
+                        from django.db import connection
+                        verificar_autofinalizacao_manifesto_task.apply_async(
+                            args=[manifesto.id],
+                            kwargs={'schema_name': getattr(connection, 'schema_name', None)},
+                            countdown=3
+                        )
+                    except Exception as auto_err:
+                        print(f"Aviso: Erro ao agendar auto-finalizacao na baixa: {auto_err}")
                 
                 _trace.append(f"[DISPATCH] {msg_log} | NF status='{nf.status}', chave_acesso={'SIM' if nf.chave_acesso else 'NAO'}")
                 _trace_str = " | ".join(_trace)
@@ -494,6 +507,23 @@ class RegistrarBaixaOperacionalView(APIView):
                         enviar_baixa_minuta_task.apply_async(args=[baixa.id], countdown=delay)
                     
                     contador += 1
+
+            # 🏁 Auto-finalização para baixas operacionais em lote
+            if numero_mft:
+                try:
+                    from manifesto.models import Manifesto
+                    mft_obj = Manifesto.objects.filter(numero_manifesto=str(numero_mft)).first()
+                    if mft_obj:
+                        from manifesto.tasks import verificar_autofinalizacao_manifesto_task
+                        from django.db import connection
+                        countdown_auto = max(4, (contador * 2) + 2)
+                        verificar_autofinalizacao_manifesto_task.apply_async(
+                            args=[mft_obj.id],
+                            kwargs={'schema_name': getattr(connection, 'schema_name', None)},
+                            countdown=countdown_auto
+                        )
+                except Exception as auto_op_err:
+                    print(f"Aviso: Erro ao agendar auto-finalizacao operacional: {auto_op_err}")
 
             print(f"SUCESSO: {contador} notas processadas.")
             return Response({
