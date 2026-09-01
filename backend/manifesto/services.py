@@ -309,10 +309,12 @@ def tentar_autofinalizar_manifesto(manifesto_ou_id, km_final=None):
         except Exception as p_err:
             logger.error(f"Erro ao enviar painel na auto-finalização do manifesto #{manifesto.id}: {p_err}")
 
-        # Dispara integração de encerramento no TMS ESL Cloud em background
+        # Dispara integração de encerramento no TMS ESL Cloud em background com o schema correto do cliente
         try:
             from manifesto.tasks import finalizar_manifesto_tms_task
-            finalizar_manifesto_tms_task.delay(manifesto_atualizado.id)
+            from django.db import connection
+            schema_atual = getattr(connection, 'schema_name', 'public')
+            finalizar_manifesto_tms_task.delay(manifesto_atualizado.id, schema_name=schema_atual)
         except Exception as tms_err:
             logger.error(f"Erro ao agendar task finalizar_manifesto_tms_task #{manifesto.id}: {tms_err}")
 

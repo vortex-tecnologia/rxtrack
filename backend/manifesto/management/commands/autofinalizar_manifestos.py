@@ -16,12 +16,33 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         num_mft = options.get('manifesto')
         if num_mft:
-            self.stdout.write(self.style.NOTICE(f"🔍 Testando auto-finalização para manifesto #{num_mft}..."))
-            sucesso, msg = tentar_autofinalizar_manifesto(num_mft)
-            if sucesso:
-                self.stdout.write(self.style.SUCCESS(f"✅ {msg}"))
-            else:
-                self.stdout.write(self.style.ERROR(f"❌ {msg}"))
+            self.stdout.write(self.style.NOTICE(f"🔍 Buscando manifesto #{num_mft} em todos os schemas/tenants..."))
+            encontrado = False
+            try:
+                from django_tenants.utils import get_tenant_model, schema_context
+                for tenant in get_tenant_model().objects.all():
+                    with schema_context(tenant.schema_name):
+                        m = Manifesto.objects.filter(
+                            Q(numero_manifesto=str(num_mft)) | Q(id=str(num_mft))
+                        ).first()
+                        if m:
+                            encontrado = True
+                            self.stdout.write(self.style.HTTP_INFO(f"🏢 Encontrado no Tenant: {tenant.schema_name}"))
+                            sucesso, msg = tentar_autofinalizar_manifesto(m)
+                            if sucesso:
+                                self.stdout.write(self.style.SUCCESS(f"✅ {msg}"))
+                            else:
+                                self.stdout.write(self.style.ERROR(f"❌ {msg}"))
+                            break
+            except Exception as e_ten:
+                pass
+
+            if not encontrado:
+                sucesso, msg = tentar_autofinalizar_manifesto(num_mft)
+                if sucesso:
+                    self.stdout.write(self.style.SUCCESS(f"✅ {msg}"))
+                else:
+                    self.stdout.write(self.style.ERROR(f"❌ {msg}"))
             return
 
         self.stdout.write(self.style.NOTICE("🔍 Iniciando varredura de auto-finalização em todos os manifestos ativos..."))

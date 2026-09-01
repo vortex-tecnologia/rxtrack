@@ -63,31 +63,56 @@ def enviar_baixa_esl_task(self, baixa_id):
     return "TMS Desativado."
 
 
+def _descobrir_schema_manifesto(manifesto_id):
+    """Localiza em qual schema de tenant o manifesto reside."""
+    from django.db import connection
+    current_schema = getattr(connection, 'schema_name', 'public')
+    if current_schema != 'public':
+        return current_schema
+
+    try:
+        from django_tenants.utils import get_tenant_model, schema_context
+        from manifesto.models import Manifesto
+        from django.db.models import Q
+        for tenant in get_tenant_model().objects.all():
+            try:
+                with schema_context(tenant.schema_name):
+                    if Manifesto.objects.filter(Q(id=str(manifesto_id)) | Q(numero_manifesto=str(manifesto_id))).exists():
+                        return tenant.schema_name
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return 'public'
+
+
 @shared_task(bind=True, max_retries=5)
-def finalizar_manifesto_tms_task(self, manifesto_id):
-    """Delegated to the correct TMS Adapter."""
-    adapter = get_tms_adapter()
-    if adapter:
-        return adapter.finalizar_manifesto(manifesto_id, task=self)
-    return "TMS Desativado."
+def finalizar_manifesto_tms_task(self, manifesto_id, schema_name=None):
+    """Delegated to the correct TMS Adapter dentro do schema correto do cliente."""
+    from django_tenants.utils import schema_context
+
+    target_schema = schema_name or _descobrir_schema_manifesto(manifesto_id)
+    with schema_context(target_schema):
+        adapter = get_tms_adapter()
+        if adapter:
+            return adapter.finalizar_manifesto(manifesto_id, task=self)
+        return "TMS Desativado."
 
 
 @shared_task
 def verificar_autofinalizacao_manifesto_task(manifesto_id, schema_name=None):
     """
     Avalia em background se o manifesto tem 100% das notas concluídas e fotos validadas pela IA.
-    Se sim, auto-finaliza o manifesto automaticamente.
+    Executa rigorosamente dentro do schema_context do tenant do cliente.
     """
-    if schema_name:
-        from django_tenants.utils import schema_context
-        with schema_context(schema_name):
-            from manifesto.services import tentar_autofinalizar_manifesto
-            sucesso, msg = tentar_autofinalizar_manifesto(manifesto_id)
-            return {"sucesso": sucesso, "mensagem": msg}
-    else:
+    from django_tenants.utils import schema_context
+
+    target_schema = schema_name or _descobrir_schema_manifesto(manifesto_id)
+    with schema_context(target_schema):
         from manifesto.services import tentar_autofinalizar_manifesto
         sucesso, msg = tentar_autofinalizar_manifesto(manifesto_id)
-        return {"sucesso": sucesso, "mensagem": msg}
+        return {"sucesso": sucesso, "mensagem": msg, "schema": target_schema}
+
 
 
 @shared_task(bind=True, max_retries=2)
