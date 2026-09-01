@@ -84,29 +84,37 @@ def auto_finalizar_manifestos_concluidos_task():
     Se todas as notas foram baixadas e todas as fotos foram validadas/aprovadas pela IA,
     finaliza o manifesto automaticamente sem depender do motorista no aplicativo.
     """
-    from django_tenants.utils import schema_context
-    from tenants.models import Client
-    from manifesto.services import tentar_autofinalizar_manifesto
+    try:
+        from django_tenants.utils import get_tenant_model, schema_context
+        tenants = list(get_tenant_model().objects.all())
+        if tenants:
+            for tenant in tenants:
+                try:
+                    with schema_context(tenant.schema_name):
+                        _varrer_e_finalizar_manifestos_tenant(tenant.schema_name)
+                except Exception as t_err:
+                    print(f"⚠️ [SENTINELA] Erro no tenant '{tenant.schema_name}': {t_err}")
+            return
+    except Exception:
+        pass
 
-    tenants = list(Client.objects.exclude(schema_name='public'))
-    if not tenants:
-        # Modo single-tenant fallback
-        _varrer_e_finalizar_manifestos_tenant()
-        return
-
-    for tenant in tenants:
-        with schema_context(tenant.schema_name):
-            _varrer_e_finalizar_manifestos_tenant(tenant.schema_name)
+    # Modo single-tenant fallback
+    _varrer_e_finalizar_manifestos_tenant()
 
 
 def _varrer_e_finalizar_manifestos_tenant(schema_name=None):
     from manifesto.models import Manifesto, NotaFiscal
     from manifesto.services import tentar_autofinalizar_manifesto
+    from django.db.models import Q
 
-    manifestos_ativos = Manifesto.objects.filter(
-        status__in=['EM_TRANSPORTE', 'AGUARDANDO'],
-        finalizado=False
+    # Pega qualquer manifesto que ainda não esteja marcado como FINALIZADO
+    manifestos_ativos = Manifesto.objects.exclude(
+        status='FINALIZADO'
+    ).filter(
+        Q(finalizado=False) | Q(finalizado__isnull=True)
     )
+
+    schema_str = f" [{schema_name}]" if schema_name else ""
 
     for mft in manifestos_ativos:
         try:
@@ -114,13 +122,12 @@ def _varrer_e_finalizar_manifestos_tenant(schema_name=None):
             if total_notas == 0:
                 continue
 
-            # Se não houver notas pendentes de baixa
-            tem_pendente = mft.notas_fiscais.filter(status='PENDENTE').exists()
-            if not tem_pendente:
-                sucesso, msg = tentar_autofinalizar_manifesto(mft)
-                if sucesso:
-                    schema_str = f" no tenant '{schema_name}'" if schema_name else ""
-                    print(f"🏁 [SENTINELA AUTO-FINALIZAÇÃO] Manifesto #{mft.numero_manifesto}{schema_str}: {msg}")
+            sucesso, msg = tentar_autofinalizar_manifesto(mft)
+            if sucesso:
+                print(f"🏁 [SENTINELA AUTO-FINALIZAÇÃO]{schema_str} Manifesto #{mft.numero_manifesto}: FINALIZADO COM SUCESSO! ({msg})")
+            else:
+                print(f"ℹ️ [SENTINELA AUTO-FINALIZAÇÃO]{schema_str} Manifesto #{mft.numero_manifesto}: Não finalizado -> {msg}")
         except Exception as e:
-            print(f"⚠️ [SENTINELA AUTO-FINALIZAÇÃO] Erro ao verificar Manifesto #{mft.numero_manifesto}: {e}")
+            print(f"⚠️ [SENTINELA AUTO-FINALIZAÇÃO]{schema_str} Erro ao verificar Manifesto #{mft.numero_manifesto}: {e}")
+
 

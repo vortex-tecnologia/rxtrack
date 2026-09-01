@@ -193,16 +193,25 @@ def tentar_autofinalizar_manifesto(manifesto_ou_id, km_final=None):
     if total_notas == 0:
         return False, f"Manifesto #{manifesto.numero_manifesto} sem notas vinculadas."
 
-    # 3. Conferência de Notas Pendentes
-    notas_pendentes = NotaFiscal.objects.filter(
+    # 3. Auto-sincronização: Notas que possuem baixa registrada mas porventura ficaram com status 'PENDENTE'
+    NotaFiscal.objects.filter(
+        manifesto=manifesto,
+        status='PENDENTE',
+        baixa_info__isnull=False
+    ).update(status='BAIXADA')
+
+    # 4. Conferência de Notas Pendentes (que verdadeiramente não possuem baixa)
+    notas_pendentes_qs = NotaFiscal.objects.filter(
         manifesto=manifesto,
         status='PENDENTE'
-    ).count()
+    )
+    notas_pendentes = notas_pendentes_qs.count()
 
     if notas_pendentes > 0:
-        return False, f"Ainda existem {notas_pendentes} nota(s) pendente(s) de baixa."
+        nfs_nums = list(notas_pendentes_qs.values_list('numero_nota', flat=True)[:5])
+        return False, f"Ainda existem {notas_pendentes} nota(s) pendente(s) de baixa (NFs: {', '.join(str(n) for n in nfs_nums)})."
 
-    # 4. Auto-recuperação 1: Baixas sem IA (coleta, retida, sem foto ou ocorrência != 01)
+    # 5. Auto-recuperação 1: Baixas sem IA (coleta, retida, sem foto ou ocorrência != 01)
     baixas_sem_ia = BaixaNF.objects.filter(
         nota_fiscal__manifesto=manifesto,
         qualidade_canhoto='PENDENTE_ANALISE'
@@ -218,12 +227,13 @@ def tentar_autofinalizar_manifesto(manifesto_ou_id, km_final=None):
         b.solicitar_nova_foto = False
         b.save(update_fields=['qualidade_canhoto', 'solicitar_nova_foto'])
 
-    # 5. Auto-recuperação 2: Baixas com mais de 45s travadas em PENDENTE_ANALISE
+    # 6. Auto-recuperação 2: Baixas com mais de 45s travadas em PENDENTE_ANALISE (ou com data_baixa nula)
     limite_recente = timezone.now() - timedelta(seconds=45)
     baixas_travadas = BaixaNF.objects.filter(
         nota_fiscal__manifesto=manifesto,
-        qualidade_canhoto='PENDENTE_ANALISE',
-        data_baixa__lt=limite_recente
+        qualidade_canhoto='PENDENTE_ANALISE'
+    ).filter(
+        Q(data_baixa__lt=limite_recente) | Q(data_baixa__isnull=True)
     )
     for b in baixas_travadas:
         b.qualidade_canhoto = 'APROVADO'
@@ -236,7 +246,18 @@ def tentar_autofinalizar_manifesto(manifesto_ou_id, km_final=None):
             except Exception as e_rec:
                 logger.warning(f"Erro auto-recuperacao finalizar_fluxo_tms baixa #{b.id}: {e_rec}")
 
-    # 6. Conferência de Fotos em Análise pela IA
+    # 7. Auto-recuperação 3: Baixas que atingiram 3 ou mais tentativas de foto não devem travar
+    baixas_limite = BaixaNF.objects.filter(
+        nota_fiscal__manifesto=manifesto,
+        solicitar_nova_foto=True,
+        tentativa_foto__gte=3
+    )
+    for bl in baixas_limite:
+        bl.solicitar_nova_foto = False
+        bl.qualidade_canhoto = 'REPROVADO_LIMITE_3X'
+        bl.save(update_fields=['qualidade_canhoto', 'solicitar_nova_foto'])
+
+    # 8. Conferência de Fotos em Análise pela IA
     notas_em_analise = BaixaNF.objects.filter(
         nota_fiscal__manifesto=manifesto,
         qualidade_canhoto='PENDENTE_ANALISE',
@@ -254,14 +275,16 @@ def tentar_autofinalizar_manifesto(manifesto_ou_id, km_final=None):
     if notas_em_analise > 0:
         return False, f"Existem {notas_em_analise} foto(s) de canhoto sendo analisadas pela IA. Aguarde a conclusão."
 
-    # 7. Conferência de Canhotos Ilegíveis / Reprovados pela IA
-    notas_foto_ruim = BaixaNF.objects.filter(
+    # 9. Conferência de Canhotos Ilegíveis / Reprovados pela IA
+    baixas_ruins_qs = BaixaNF.objects.filter(
         nota_fiscal__manifesto=manifesto,
         solicitar_nova_foto=True
-    ).count()
+    )
+    notas_foto_ruim = baixas_ruins_qs.count()
 
     if notas_foto_ruim > 0:
-        return False, f"Existem {notas_foto_ruim} nota(s) com canhoto ilegível pendente(s) de nova foto ou liberação do SAC."
+        nfs_ruins = list(baixas_ruins_qs.values_list('nota_fiscal__numero_nota', flat=True)[:5])
+        return False, f"Existem {notas_foto_ruim} nota(s) com canhoto ilegível pendente(s) de nova foto (NFs: {', '.join(str(n) for n in nfs_ruins)})."
 
     # --- 8. TODAS AS NOTAS BAIXADAS E TODAS AS FOTOS VERIFICADAS COM SUCESSO! ---
     try:
