@@ -97,6 +97,17 @@ def obter_codigo_ocorrencia_seguro(codigo_tms_val, tipo_operacao=None, nota_fisc
 
 
 
+def _is_chave_nfe_valida(chave):
+    """Verifica se a chave de acesso é uma chave NF-e válida (44 dígitos numéricos).
+    A ESL pode retornar valores curtos (ex: número da nota) no campo 'key' para minutas,
+    que NÃO são chaves de acesso válidas e não funcionam no endpoint de NF-e.
+    """
+    if not chave:
+        return False
+    chave_str = str(chave).strip()
+    return len(chave_str) == 44 and chave_str.isdigit()
+
+
 class ESLCloudAdapter(BaseTMSAdapter):
     """Implementação para o TMS ESL Cloud."""
 
@@ -991,26 +1002,23 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 logger.info(f"⏭️ Baixa #{baixa_id} (NF {nf.numero_nota}) já integrada ao TMS com sucesso. Pulando reenvio.")
                 return f"Baixa {baixa_id} já integrada previamente."
             
-            # --- DESPACHO SEM CHAVE: Usa endpoint de Frete (Minuta) ---
-            # REGRA: Se tem chave_acesso, SEMPRE usa o endpoint de NF-e (normal).
-            # O endpoint de Frete/Minuta só é usado quando NÃO há chave de acesso.
+            # --- MINUTAS SEM CHAVE VÁLIDA: Usa endpoint de Frete (/api/v1/freights/{id}/invoice_occurrences) ---
+            # REGRA: O endpoint geral (/api/invoice_occurrences) exige uma chave NF-e válida (44 dígitos).
+            # Minutas podem ter um valor curto no campo chave_acesso (ex: número da nota),
+            # que NÃO é aceito pelo endpoint geral e causa erro 404.
+            # Apenas chaves com 44 dígitos numéricos são consideradas válidas para o endpoint de NF-e.
+            tem_chave_valida = _is_chave_nfe_valida(nf.chave_acesso)
             tipo_op = str(nf.tipo_operacao or '').strip().upper()
-            if ('DESPACHO' in tipo_op or tipo_op == 'DESPACHO') and not nf.chave_acesso:
-                logger.info(f"🚀 NF {nf.numero_nota} é DESPACHO sem chave. Redirecionando para enviar_baixa_minuta (Frete ESL V1)")
-                return self.enviar_baixa_minuta(baixa_id, task=task)
             
-            # NOTA: O endpoint de Frete/Minuta só é usado quando a NF NÃO possui chave de acesso.
-
-
-
-
-
-            if not nf.chave_acesso:
+            if not tem_chave_valida:
                 # Coletas usam endpoint próprio (/api/v1/picks/) e não precisam de freight_id
                 if nf.numero_coleta or nf.tipo_operacao == 'COLETA':
-                    logger.info(f"Redirecionando baixa {baixa_id} (coleta) para enviar_coleta")
+                    logger.info(f"Redirecionando baixa {baixa_id} (coleta sem chave válida) para enviar_coleta")
                     return self.enviar_coleta(baixa_id, task=task)
-                logger.info(f"Redirecionando baixa {baixa_id} (minuta) para enviar_baixa_minuta")
+                logger.info(
+                    f"🚀 NF {nf.numero_nota} sem chave NF-e válida (chave_acesso='{nf.chave_acesso}'). "
+                    f"Redirecionando para enviar_baixa_minuta (Frete ESL V1)"
+                )
                 return self.enviar_baixa_minuta(baixa_id, task=task)
 
             manifesto = nf.manifesto
