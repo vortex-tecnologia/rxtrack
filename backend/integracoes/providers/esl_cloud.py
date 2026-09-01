@@ -1104,34 +1104,42 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 
                 print(f"Enviando recusa (125) para FRETE {frete.freight_id_tms} - CT-e: {frete.numero_cte}")
                 
-                response = requests.post(
-                    url_frete_endpoint,
-                    json=payload_frete,
-                    headers=headers,
-                    timeout=30
-                )
-                
-                response.raise_for_status()
-                
-                # Sucesso! Marca a baixa como integrada
-                baixa.processado_tms = True
-                baixa.integrado_tms = True
-                baixa.data_integracao = timezone.now()
-                baixa.log_erro_tms = f"Sucesso: Recusa integrada via Frete {frete.freight_id_tms} (CT-e {frete.numero_cte})"
-                baixa.save()
-                
-                # Marca TODAS as notas deste frete no mesmo manifesto como OCORRENCIA
-                notas_do_frete = NotaFiscal.objects.filter(frete=frete, manifesto=manifesto)
-                notas_atualizadas = notas_do_frete.exclude(status='OCORRENCIA').update(status='OCORRENCIA')
-                logger.info(f"Marcadas {notas_atualizadas} notas do Frete {frete.freight_id_tms} como OCORRENCIA.")
-                
                 try:
-                    from operacional.services import resolver_erros_automaticamente
-                    resolver_erros_automaticamente(manifesto.numero_manifesto, nf.numero_nota, manifesto.filial)
-                except Exception as e:
-                    logger.error(f"Erro auto-resolucao: {e}")
-                
-                return f"Baixa {baixa_id} integrada via Frete {frete.freight_id_tms}."
+                    response = requests.post(
+                        url_frete_endpoint,
+                        json=payload_frete,
+                        headers=headers,
+                        timeout=30
+                    )
+                    
+                    response.raise_for_status()
+                    
+                    # Sucesso! Marca a baixa como integrada
+                    baixa.processado_tms = True
+                    baixa.integrado_tms = True
+                    baixa.data_integracao = timezone.now()
+                    baixa.log_erro_tms = f"Sucesso: Recusa integrada via Frete {frete.freight_id_tms} (CT-e {frete.numero_cte})"
+                    baixa.save()
+                    
+                    # Marca TODAS as notas deste frete no mesmo manifesto como OCORRENCIA
+                    notas_do_frete = NotaFiscal.objects.filter(frete=frete, manifesto=manifesto)
+                    notas_atualizadas = notas_do_frete.exclude(status='OCORRENCIA').update(status='OCORRENCIA')
+                    logger.info(f"Marcadas {notas_atualizadas} notas do Frete {frete.freight_id_tms} como OCORRENCIA.")
+                    
+                    try:
+                        from operacional.services import resolver_erros_automaticamente
+                        resolver_erros_automaticamente(manifesto.numero_manifesto, nf.numero_nota, manifesto.filial)
+                    except Exception as e:
+                        logger.error(f"Erro auto-resolucao: {e}")
+                    
+                    return f"Baixa {baixa_id} integrada via Frete {frete.freight_id_tms}."
+
+                except requests.exceptions.HTTPError as err_frete:
+                    status_f = err_frete.response.status_code if err_frete.response is not None else None
+                    if status_f == 404:
+                        logger.warning(f"⚠️ Frete ID {id_interno_frete} retornou 404 na ESL para NF {nf.numero_nota}. Fazendo fallback para o endpoint padrão de NF-e (/api/invoice_occurrences)...")
+                    else:
+                        raise
             
             # =====================================================
             # FLUXO NORMAL (entregas, ocorrências parciais, etc.)
