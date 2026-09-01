@@ -74,7 +74,7 @@ def _descobrir_schema_manifesto(manifesto_id):
         from django_tenants.utils import get_tenant_model, schema_context
         from manifesto.models import Manifesto
         from django.db.models import Q
-        for tenant in get_tenant_model().objects.all():
+        for tenant in get_tenant_model().objects.exclude(schema_name='public'):
             try:
                 with schema_context(tenant.schema_name):
                     if Manifesto.objects.filter(Q(id=str(manifesto_id)) | Q(numero_manifesto=str(manifesto_id))).exists():

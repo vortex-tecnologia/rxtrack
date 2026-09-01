@@ -86,7 +86,7 @@ def auto_finalizar_manifestos_concluidos_task():
     """
     try:
         from django_tenants.utils import get_tenant_model, schema_context
-        tenants = list(get_tenant_model().objects.all())
+        tenants = list(get_tenant_model().objects.exclude(schema_name='public'))
         if tenants:
             for tenant in tenants:
                 try:
@@ -97,9 +97,6 @@ def auto_finalizar_manifestos_concluidos_task():
             return
     except Exception:
         pass
-
-    # Modo single-tenant fallback
-    _varrer_e_finalizar_manifestos_tenant()
 
 
 def _varrer_e_finalizar_manifestos_tenant(schema_name=None):

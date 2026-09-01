@@ -20,7 +20,7 @@ class Command(BaseCommand):
             encontrado = False
             try:
                 from django_tenants.utils import get_tenant_model, schema_context
-                for tenant in get_tenant_model().objects.all():
+                for tenant in get_tenant_model().objects.exclude(schema_name='public'):
                     with schema_context(tenant.schema_name):
                         m = Manifesto.objects.filter(
                             Q(numero_manifesto=str(num_mft)) | Q(id=str(num_mft))
@@ -38,18 +38,14 @@ class Command(BaseCommand):
                 pass
 
             if not encontrado:
-                sucesso, msg = tentar_autofinalizar_manifesto(num_mft)
-                if sucesso:
-                    self.stdout.write(self.style.SUCCESS(f"✅ {msg}"))
-                else:
-                    self.stdout.write(self.style.ERROR(f"❌ {msg}"))
+                self.stdout.write(self.style.ERROR(f"❌ Manifesto #{num_mft} não encontrado em nenhum tenant."))
             return
 
         self.stdout.write(self.style.NOTICE("🔍 Iniciando varredura de auto-finalização em todos os manifestos ativos..."))
 
         try:
             from django_tenants.utils import get_tenant_model, schema_context
-            tenants = list(get_tenant_model().objects.all())
+            tenants = list(get_tenant_model().objects.exclude(schema_name='public'))
             if tenants:
                 for tenant in tenants:
                     self.stdout.write(self.style.HTTP_INFO(f"\n🏢 Tenant: {tenant.schema_name}"))
@@ -57,9 +53,7 @@ class Command(BaseCommand):
                         self._processar_manifestos(tenant.schema_name)
                 return
         except Exception as e_tenants:
-            self.stdout.write(self.style.WARNING(f"Aviso tenants: {e_tenants}. Executando modo padrão..."))
-
-        self._processar_manifestos()
+            self.stdout.write(self.style.WARNING(f"Aviso tenants: {e_tenants}."))
 
     def _processar_manifestos(self, schema_name=None):
         manifestos = Manifesto.objects.exclude(
