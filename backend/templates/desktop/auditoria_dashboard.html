@@ -277,11 +277,41 @@
 
     /* Efeito de flash quando recebe WS */
     .card-updated-pulse {
-        animation: flash-border 1.5s ease-out;
+    /* 11. Tour Guiado - Custom Driver.js Popover */
+    .qt-tour-popover .driver-popover-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        font-family: 'Inter', sans-serif;
+        color: #0f172a;
     }
-    @keyframes flash-border {
-        0% { background-color: rgba(13, 110, 253, 0.15) !important; }
-        100% { background-color: transparent; }
+    .qt-tour-popover .driver-popover-description {
+        font-size: 0.88rem;
+        line-height: 1.6;
+        color: #334155;
+        font-family: 'Inter', sans-serif;
+    }
+    .qt-tour-popover .driver-popover-progress-text {
+        font-size: 0.75rem;
+        color: #64748b;
+    }
+    .qt-tour-popover .driver-popover-next-btn {
+        background-color: #0d6efd;
+        color: white;
+        border: none;
+        font-weight: 600;
+        padding: 6px 16px;
+        border-radius: 6px;
+    }
+    .qt-tour-popover .driver-popover-next-btn:hover {
+        background-color: #0b5ed7;
+    }
+    .qt-tour-popover .driver-popover-prev-btn {
+        color: #475569;
+        border: 1px solid #cbd5e1;
+        background: white;
+        font-weight: 500;
+        padding: 6px 16px;
+        border-radius: 6px;
     }
 </style>
 
@@ -309,6 +339,9 @@
                     </span>
                 {% endif %}
 
+                <button id="btnTutorialCockpit" class="btn btn-outline-info btn-sm px-3 text-white border-info" onclick="iniciarTourAuditoria()" title="Iniciar Tutorial Guiado">
+                    <i class="bi bi-question-circle me-1"></i> Tutorial
+                </button>
                 <button class="btn btn-outline-light btn-sm px-3" onclick="location.reload()" title="Atualizar tela">
                     <i class="bi bi-arrow-clockwise me-1"></i> Atualizar
                 </button>
@@ -319,7 +352,7 @@
 
 <!-- SELETOR DE FILIAIS EM PILLS (EXCLUSIVO GESTOR/ADMIN) -->
 {% if is_gestor %}
-<div class="filial-selector-bar d-flex align-items-center gap-2 flex-wrap mb-4">
+<div id="filialSelectorSection" class="filial-selector-bar d-flex align-items-center gap-2 flex-wrap mb-4">
     <span class="small fw-bold text-secondary me-1"><i class="bi bi-funnel me-1"></i>Filtrar Filial:</span>
     <a href="?tab={{ active_tab }}&filial=todas" class="filial-pill-btn {% if modo_todas_filiais %}active-pill{% endif %}">
         🌐 Todas as Filiais
@@ -333,7 +366,7 @@
 {% endif %}
 
 <!-- TOP KPIS CARDS -->
-<div class="row g-3 mb-4">
+<div id="kpiCardsSection" class="row g-3 mb-4">
     <div class="col-6 col-md-3 col-xl">
         <div class="kpi-cockpit-card kpi-blue h-100">
             <div class="d-flex align-items-center justify-content-between mb-2">
@@ -401,7 +434,7 @@
 </div>
 
 <!-- SUB-MENU / NAVEGAÇÃO ENTRE ABAS -->
-<ul class="cockpit-tabs-nav">
+<ul id="cockpitTabsSection" class="cockpit-tabs-nav">
     <li class="cockpit-tab-item">
         <a class="cockpit-tab-link {% if active_tab == 'cockpit' %}active-tab{% endif %}" href="?tab=cockpit{% if filial_ativa_id %}&filial={{ filial_ativa_id }}{% endif %}">
             <i class="bi bi-truck"></i> Cockpit de Motoristas
@@ -445,14 +478,14 @@
     <div class="table-responsive">
         <table class="table cockpit-table align-middle mb-0">
             <thead>
-                <tr>
-                    <th class="ps-3" style="min-width: 230px;">Motorista / Veículo</th>
-                    <th style="min-width: 170px;">Telemetria Hardware</th>
-                    <th style="min-width: 140px;">Carga / Tipo</th>
-                    <th style="min-width: 170px;">Progresso da Rota</th>
-                    <th style="min-width: 160px;">Cadência & ETA</th>
-                    <th style="min-width: 120px;">Score IA</th>
-                    <th class="text-end pe-3" style="min-width: 130px;">Ações</th>
+                <tr id="cockpitTableHead">
+                    <th class="ps-3 cockpit-col-motorista" style="min-width: 230px;">Motorista / Veículo</th>
+                    <th class="cockpit-col-telemetria" style="min-width: 170px;">Telemetria Hardware</th>
+                    <th class="cockpit-col-carga" style="min-width: 140px;">Carga / Tipo</th>
+                    <th class="cockpit-col-progresso" style="min-width: 170px;">Progresso da Rota</th>
+                    <th class="cockpit-col-cadencia" style="min-width: 160px;">Cadência & ETA</th>
+                    <th class="cockpit-col-score" style="min-width: 120px;">Score IA</th>
+                    <th class="text-end pe-3 cockpit-col-acoes" style="min-width: 130px;">Ações</th>
                 </tr>
             </thead>
             <tbody>
@@ -982,6 +1015,7 @@
     };
 </script>
 <script src="{% static 'desktop/js/auditoria_ws.js' %}"></script>
+<script src="{% static 'desktop/js/auditoria_tour.js' %}"></script>
 <script>
     function getCookie(name) {
         let cookieValue = null;
