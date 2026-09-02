@@ -1,141 +1,409 @@
 {% extends 'desktop/base.html' %}
 {% load static %}
 
-{% block title %}Auditoria de Processos | RXTrack{% endblock %}
+{% block title %}Auditoria de Processos & Cockpit | RXTrack{% endblock %}
 
-{% block usuario %}{{ request.user.first_name }} ({{ request.user.motorista_perfil.cargo }}){% endblock %}
+{% block usuario %}{{ request.user.first_name }} ({{ request.user.motorista_perfil.cargo|default:"Auditor" }}){% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Estilos Cockpit de Auditoria & Telemetria */
+    .cockpit-header {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        border-radius: 12px;
+        color: #fff;
+        padding: 1.25rem 1.5rem;
+    }
+    .pulse-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        animation: pulse-glow 2s infinite;
+    }
+    @keyframes pulse-glow {
+        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7); }
+        70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(25, 135, 84, 0); }
+        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0); }
+    }
+    .card-updated-pulse {
+        animation: flash-border 1.5s ease-out;
+    }
+    @keyframes flash-border {
+        0% { background-color: rgba(13, 110, 253, 0.18); }
+        100% { background-color: transparent; }
+    }
+    .nav-tabs-cockpit {
+        border-bottom: 2px solid #e2e8f0;
+        gap: 0.5rem;
+    }
+    .nav-tabs-cockpit .nav-link {
+        border: none;
+        border-bottom: 3px solid transparent;
+        color: #64748b;
+        font-weight: 600;
+        font-size: 0.92rem;
+        padding: 0.75rem 1.25rem;
+        border-radius: 0;
+        transition: all 0.2s ease;
+    }
+    .nav-tabs-cockpit .nav-link:hover {
+        color: #0f172a;
+        border-bottom-color: #cbd5e1;
+    }
+    .nav-tabs-cockpit .nav-link.active {
+        color: #0d6efd;
+        border-bottom-color: #0d6efd;
+        background: transparent;
+    }
+    .filial-pill {
+        font-size: 0.8rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 20px;
+        text-decoration: none;
+        transition: all 0.2s;
+        border: 1px solid #cbd5e1;
+        color: #475569;
+        background: #fff;
+    }
+    .filial-pill:hover {
+        background: #f1f5f9;
+        color: #0f172a;
+    }
+    .filial-pill.active {
+        background: #0d6efd;
+        color: #fff;
+        border-color: #0d6efd;
+        font-weight: 600;
+    }
+    .score-badge-circle {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.9rem;
+    }
+    .drawer-360 {
+        width: 580px !important;
+    }
+    @media (max-width: 768px) {
+        .drawer-360 { width: 100% !important; }
+    }
+    .timeline-dot {
+        position: absolute;
+        left: 0;
+        top: 6px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid #fff;
+        box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-12 d-flex justify-content-between align-items-center">
-        <div>
-            <h4 class="mb-1 fw-bold">Auditoria de Processos</h4>
-            <p class="text-muted small mb-0">Monitoramento de conformidade e performance de motoristas em tempo real.</p>
-        </div>
-        <div class="d-flex gap-2">
-            <button class="btn btn-outline-primary btn-sm" onclick="location.reload()">
-                <i class="bi bi-arrow-clockwise me-1"></i> Atualizar
-            </button>
+<!-- HEADER OPERACIONAL & FILTRO POR FILIAL -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="cockpit-header shadow-sm d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+            <div>
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <h4 class="mb-0 fw-bold text-white"><i class="bi bi-cpu me-2 text-info"></i>Auditoria de Processos & Cockpit</h4>
+                    <span id="wsConnectionBadge" class="badge bg-success bg-opacity-10 text-success border border-success d-inline-flex align-items-center gap-1">
+                        <span class="pulse-dot bg-success"></span> AO VIVO (WS)
+                    </span>
+                </div>
+                <p class="text-slate-300 small mb-0 opacity-75">
+                    Telemetria de motoristas em tempo real, auditoria de canhotos por IA e governança de processos operacionais.
+                </p>
+            </div>
+            
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                {% if not is_gestor and filial_ativa %}
+                    <!-- Filial Fixa (Isolamento Estrito do Operador) -->
+                    <span class="badge bg-primary bg-opacity-25 text-white border border-primary px-3 py-2 fs-6">
+                        <i class="bi bi-shield-lock me-1"></i> Filial: {{ filial_ativa.nome }}
+                    </span>
+                {% endif %}
+
+                <button class="btn btn-outline-light btn-sm" onclick="location.reload()" title="Recarregar Dados">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Atualizar
+                </button>
+            </div>
         </div>
     </div>
 </div>
 
-<!-- Resumo em Cards -->
-<div class="row g-4 mb-4">
-    <div class="col-md-4">
-        <div class="card border-0 shadow-sm p-3 bg-white h-100">
-            <div class="d-flex align-items-center mb-2">
-                <div class="rounded-circle bg-primary bg-opacity-10 p-2 me-3">
-                    <i class="bi bi-truck text-primary fs-4"></i>
-                </div>
-                <h6 class="mb-0 text-muted fw-semibold">MANIFESTOS ATIVOS</h6>
+<!-- SELETOR DE FILIAIS (EXCLUSIVO PARA GESTOR/ADMIN) -->
+{% if is_gestor %}
+<div class="card border-0 shadow-sm p-2 mb-4 bg-light">
+    <div class="d-flex align-items-center gap-2 flex-wrap ps-2">
+        <span class="small fw-bold text-muted"><i class="bi bi-funnel me-1"></i>Filial:</span>
+        <a href="?tab={{ active_tab }}&filial=todas" class="filial-pill {% if modo_todas_filiais %}active{% endif %}">
+            🌐 Todas as Filiais
+        </a>
+        {% for f in todas_filiais %}
+        <a href="?tab={{ active_tab }}&filial={{ f.id }}" class="filial-pill {% if filial_ativa_id == f.id|stringformat:'s' and not modo_todas_filiais %}active{% endif %}">
+            🏢 {{ f.nome }}
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- TOP KPIS EM CARDS -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3 col-xl">
+        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-start border-primary border-4">
+            <div class="d-flex align-items-center justify-content-between mb-1">
+                <span class="text-muted small fw-bold">MANIFESTOS ATIVOS</span>
+                <i class="bi bi-truck text-primary fs-5"></i>
             </div>
-            <h2 class="mb-0 fw-bold">{{ total_ativos }}</h2>
-            <small class="text-muted">Viagens em transporte agora</small>
+            <h3 class="mb-0 fw-bold">{{ total_ativos }}</h3>
+            <small class="text-muted">Em transporte agora</small>
         </div>
     </div>
-    <div class="col-md-4">
+
+    <div class="col-6 col-md-3 col-xl">
         <div class="card border-0 shadow-sm p-3 bg-white h-100 border-start border-danger border-4">
-            <div class="d-flex align-items-center mb-2">
-                <div class="rounded-circle bg-danger bg-opacity-10 p-2 me-3">
-                    <i class="bi bi-exclamation-triangle text-danger fs-4"></i>
-                </div>
-                <h6 class="mb-0 text-muted fw-semibold">ALERTAS CRÍTICOS</h6>
+            <div class="d-flex align-items-center justify-content-between mb-1">
+                <span class="text-muted small fw-bold">ALERTAS CRÍTICOS</span>
+                <i class="bi bi-exclamation-triangle text-danger fs-5"></i>
             </div>
-            <h2 class="mb-0 fw-bold text-danger">{{ total_criticos }}</h2>
-            <small class="text-muted">Sem sinal há mais de 4h com notas pendentes</small>
+            <h3 class="mb-0 fw-bold text-danger">{{ total_criticos }}</h3>
+            <small class="text-muted">Sem sinal há &gt; 4h c/ notas</small>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-start border-warning border-4">
-            <div class="d-flex align-items-center mb-2">
-                <div class="rounded-circle bg-warning bg-opacity-10 p-2 me-3">
-                    <i class="bi bi-person-x text-warning fs-4"></i>
-                </div>
-                <h6 class="mb-0 text-muted fw-semibold">TOTAL PENALIDADES</h6>
+
+    <div class="col-6 col-md-3 col-xl">
+        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-start border-info border-4">
+            <div class="d-flex align-items-center justify-content-between mb-1">
+                <span class="text-muted small fw-bold">CADÊNCIA DA BASE</span>
+                <i class="bi bi-speedometer2 text-info fs-5"></i>
             </div>
-            <h2 class="mb-0 fw-bold text-warning">{{ total_penalidades }}</h2>
-            <small class="text-muted">Notas baixadas por desleixo do motorista</small>
+            <h3 class="mb-0 fw-bold text-info">{{ ritmo_medio_base }} <span class="fs-6 fw-normal text-muted">n/h</span></h3>
+            <small class="text-muted">Velocidade média de baixas</small>
+        </div>
+    </div>
+
+    <div class="col-6 col-md-3 col-xl">
+        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-start border-success border-4">
+            <div class="d-flex align-items-center justify-content-between mb-1">
+                <span class="text-muted small fw-bold">SCORE MÉDIO</span>
+                <i class="bi bi-award text-success fs-5"></i>
+            </div>
+            <h3 class="mb-0 fw-bold text-success">{{ score_medio_base }}<span class="fs-6 fw-normal text-muted">/100</span></h3>
+            <small class="text-muted">Conformidade da frota</small>
+        </div>
+    </div>
+
+    <div class="col-6 col-md-3 col-xl">
+        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-start border-warning border-4">
+            <div class="d-flex align-items-center justify-content-between mb-1">
+                <span class="text-muted small fw-bold">PENALIDADES SAC</span>
+                <i class="bi bi-person-x text-warning fs-5"></i>
+            </div>
+            <h3 class="mb-0 fw-bold text-warning">{{ total_penalidades }}</h3>
+            <small class="text-muted">Baixas por desleixo</small>
         </div>
     </div>
 </div>
 
-<!-- Tabela de Auditoria -->
-<div class="card border-0 shadow-sm overflow-hidden">
-    <div class="card-header bg-white py-3 border-0">
-        <h6 class="mb-0 fw-bold"><i class="bi bi-list-check me-2"></i>Monitoramento de Manifestos</h6>
+<!-- SUB-MENU DE AUDITORIA (NAVEGAÇÃO POR ABAS) -->
+<ul class="nav nav-tabs-cockpit mb-4">
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'cockpit' %}active{% endif %}" href="?tab=cockpit{% if filial_ativa_id %}&filial={{ filial_ativa_id }}{% endif %}">
+            <i class="bi bi-truck me-2"></i>Cockpit de Motoristas
+            <span class="badge bg-primary bg-opacity-10 text-primary ms-1 rounded-pill">{{ total_ativos }}</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'batalha' %}active{% endif %}" href="?tab=batalha{% if filial_ativa_id %}&filial={{ filial_ativa_id }}{% endif %}">
+            <i class="bi bi-trophy me-2"></i>Batalha de Filiais & Benchmarking
+            <span class="badge bg-warning bg-opacity-25 text-dark ms-1 rounded-pill">Ranking</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'penalidades' %}active{% endif %}" href="?tab=penalidades{% if filial_ativa_id %}&filial={{ filial_ativa_id }}{% endif %}">
+            <i class="bi bi-shield-x me-2"></i>Central de Penalidades & SAC
+            <span class="badge bg-danger bg-opacity-10 text-danger ms-1 rounded-pill">{{ total_penalidades }}</span>
+        </a>
+    </li>
+</ul>
+
+<!-- ========================================== -->
+<!-- ABA 1: COCKPIT DE MOTORISTAS EM TEMPO REAL -->
+<!-- ========================================== -->
+{% if active_tab == 'cockpit' %}
+<div class="card border-0 shadow-sm overflow-hidden mb-4">
+    <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h6 class="mb-0 fw-bold"><i class="bi bi-broadcast me-2 text-primary"></i>Monitoramento de Manifestos & Telemetria</h6>
+            <small class="text-muted">Visão operacional viva dos motoristas da base</small>
+        </div>
+        <span class="badge bg-light text-dark border">
+            Mostrando {{ manifestos|length }} manifesto(s) ativo(s)
+        </span>
     </div>
+
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead class="bg-light">
                 <tr>
-                    <th class="ps-4">Motorista / Filial</th>
-                    <th>Manifesto</th>
-                    <th>Início</th>
-                    <th>Progresso</th>
-                    <th>Último Sinal</th>
-                    <th>Ações</th>
+                    <th class="ps-3" style="min-width: 220px;">Motorista / Veículo</th>
+                    <th style="min-width: 160px;">Telemetria Hardware</th>
+                    <th style="min-width: 140px;">Carga / Tipo</th>
+                    <th style="min-width: 170px;">Progresso da Rota</th>
+                    <th style="min-width: 150px;">Cadência & ETA</th>
+                    <th style="min-width: 120px;">Score IA</th>
+                    <th class="text-end pe-3" style="min-width: 140px;">Ações</th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in manifestos %}
-                <tr>
-                    <td class="ps-4">
+                <tr data-manifesto-id="{{ item.obj.id }}" 
+                    data-motorista-id="{{ item.obj.motorista_id|default:'' }}"
+                    data-motorista-cpf="{{ item.obj.motorista.cpf|default:'' }}">
+                    
+                    <!-- Motorista / Veículo -->
+                    <td class="ps-3">
                         <div class="d-flex align-items-center">
-                            <div class="avatar-sm bg-light rounded-circle me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                <i class="bi bi-person text-secondary"></i>
-                            </div>
+                            {% if item.motorista_foto %}
+                                <img src="{{ item.motorista_foto }}" alt="Foto" class="rounded-circle me-2 object-fit-cover shadow-sm border" style="width: 40px; height: 40px;">
+                            {% else %}
+                                <div class="bg-light rounded-circle me-2 d-flex align-items-center justify-content-center text-secondary border shadow-sm" style="width: 40px; height: 40px;">
+                                    <i class="bi bi-person fs-5"></i>
+                                </div>
+                            {% endif %}
                             <div>
-                                <h6 class="mb-0 fw-bold" style="font-size: 0.9rem;">{{ item.obj.motorista.nome_completo|default:"Não Identificado" }}</h6>
-                                <small class="text-muted">{{ item.obj.filial.nome }}</small>
+                                <h6 class="mb-0 fw-bold text-dark" style="font-size: 0.9rem;">{{ item.motorista_nome }}</h6>
+                                <div class="d-flex align-items-center gap-1 mt-1">
+                                    <span class="badge bg-light text-secondary border" style="font-size: 0.7rem;">
+                                        {{ item.motorista_categoria }}
+                                    </span>
+                                    <span class="badge bg-dark bg-opacity-10 text-dark border" style="font-size: 0.7rem;">
+                                        <i class="bi bi-truck me-1"></i>{{ item.placa }}
+                                    </span>
+                                    <span class="badge bg-light text-dark border" style="font-size: 0.7rem;">
+                                        #{{ item.obj.numero_manifesto }}
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     </td>
+
+                    <!-- Telemetria Hardware -->
                     <td>
-                        <span class="badge bg-light text-dark border fw-medium">#{{ item.obj.numero_manifesto }}</span>
-                    </td>
-                    <td>
-                        <small class="text-muted">{{ item.obj.data_criacao|date:"d/m H:i" }}</small>
-                    </td>
-                    <td style="width: 200px;">
-                        <div class="d-flex align-items-center">
-                            <div class="progress flex-grow-1" style="height: 6px; border-radius: 10px;">
-                                <div class="progress-bar bg-{{ item.status_cor }}" role="progressbar" style="width: {{ item.progresso }}%"></div>
+                        <div class="d-flex flex-column gap-1">
+                            <!-- Bateria -->
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="motorista-bateria-icon bi bi-battery-charging text-muted" style="font-size: 1.1rem;"></i>
+                                <div class="progress flex-grow-1" style="height: 6px; border-radius: 4px; max-width: 60px;">
+                                    <div class="motorista-bateria-bar progress-bar {% if item.bateria <= 15 %}bg-danger{% elif item.bateria <= 35 %}bg-warning{% else %}bg-success{% endif %}" 
+                                         role="progressbar" style="width: {{ item.bateria|default:100 }}%"></div>
+                                </div>
+                                <span class="motorista-bateria-val small fw-bold">{{ item.bateria|default:"--" }}%</span>
                             </div>
-                            <span class="ms-2 small fw-bold">{{ item.progresso }}%</span>
-                        </div>
-                        <small class="text-muted" style="font-size: 0.75rem;">{{ item.obj.notas_pendentes }} notas pendentes</small>
-                    </td>
-                    <td>
-                        {% if item.obj.ultimo_acesso %}
-                            <div class="d-flex flex-column">
-                                <span class="badge bg-{{ item.status_cor }} bg-opacity-10 text-{{ item.status_cor }} border-{{ item.status_cor }} border rounded-pill px-2 py-1" style="font-size: 0.7rem; width: fit-content;">
-                                    <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i>
-                                    {{ item.obj.ultimo_acesso|date:"H:i" }}
+
+                            <!-- Rede & Sinal -->
+                            <div class="d-flex align-items-center gap-1">
+                                <span class="motorista-rede-badge badge bg-secondary bg-opacity-25 border text-dark" style="font-size: 0.68rem;">
+                                    {{ item.rede }}
                                 </span>
-                                <small class="text-muted mt-1" style="font-size: 0.7rem;">
-                                    {% if item.horas_sem_sinal == 0 %}
-                                        Sinal agora
-                                    {% else %}
-                                        Hán {{ item.horas_sem_sinal }}h
-                                    {% endif %}
-                                </small>
+                                <span class="motorista-sinal-badge badge bg-{{ item.status_cor }} bg-opacity-10 text-{{ item.status_cor }} border border-{{ item.status_cor }} rounded-pill px-2" style="font-size: 0.68rem;">
+                                    <i class="bi bi-circle-fill me-1" style="font-size: 0.45rem;"></i>
+                                    {{ item.status_texto }}
+                                </span>
                             </div>
-                        {% else %}
-                            <span class="text-muted small">Sem sinal</span>
-                        {% endif %}
+                        </div>
                     </td>
+
+                    <!-- Carga / Tipo -->
                     <td>
-                        <button class="btn btn-sm btn-light border" onclick="abrirModalAuditoria('{{ item.obj.id }}', '{{ item.obj.numero_manifesto }}')">
-                            <i class="bi bi-search"></i> Detalhes
-                        </button>
+                        <div class="small">
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary me-1" style="font-size: 0.7rem;">
+                                <i class="bi bi-box-seam me-1"></i>{{ item.qtd_entrega }} Entregas
+                            </span>
+                            {% if item.qtd_coleta > 0 %}
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success mt-1" style="font-size: 0.7rem;">
+                                <i class="bi bi-arrow-repeat me-1"></i>{{ item.qtd_coleta }} Coletas
+                            </span>
+                            {% endif %}
+                            {% if item.qtd_despacho > 0 %}
+                            <span class="badge bg-warning bg-opacity-10 text-dark border border-warning mt-1" style="font-size: 0.7rem;">
+                                <i class="bi bi-send me-1"></i>{{ item.qtd_despacho }} Despachos
+                            </span>
+                            {% endif %}
+                        </div>
+                    </td>
+
+                    <!-- Progresso -->
+                    <td>
+                        <div class="d-flex align-items-center mb-1">
+                            <div class="progress flex-grow-1" style="height: 7px; border-radius: 6px;">
+                                <div class="manifesto-progresso-bar progress-bar bg-{{ item.status_cor }}" 
+                                     role="progressbar" style="width: {{ item.progresso }}%"></div>
+                            </div>
+                            <span class="manifesto-progresso-text ms-2 small fw-bold">{{ item.progresso }}%</span>
+                        </div>
+                        <small class="manifesto-pendentes-text text-muted d-block" style="font-size: 0.75rem;">
+                            {{ item.notas_pendentes }} nota(s) pendente(s)
+                        </small>
+                    </td>
+
+                    <!-- Cadência & ETA -->
+                    <td>
+                        <div class="d-flex flex-column">
+                            <span class="fw-bold text-dark" style="font-size: 0.85rem;">
+                                <i class="bi bi-speedometer text-info me-1"></i>{{ item.ritmo_entregas_hora }} n/h
+                            </span>
+                            <div class="d-flex align-items-center gap-1 mt-1">
+                                <span class="badge bg-dark bg-opacity-10 text-dark" style="font-size: 0.7rem;">
+                                    ETA: <strong>{{ item.eta_str }}</strong>
+                                </span>
+                                <small class="text-muted" style="font-size: 0.7rem;">({{ item.tempo_em_rota_horas }}h em rota)</small>
+                            </div>
+                        </div>
+                    </td>
+
+                    <!-- Score de Conformidade -->
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="score-badge-circle bg-{{ item.score_badge }} bg-opacity-10 text-{{ item.score_badge }} border border-{{ item.score_badge }}">
+                                {{ item.score }}
+                            </div>
+                            <div class="small">
+                                <span class="fw-bold text-{{ item.score_badge }} d-block" style="font-size: 0.75rem;">{{ item.score_label }}</span>
+                                <span class="text-muted" style="font-size: 0.7rem;">{{ item.taxa_qualidade_ia }}% IA</span>
+                            </div>
+                        </div>
+                    </td>
+
+                    <!-- Ações -->
+                    <td class="text-end pe-3">
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" onclick="abrirDrawer360('{{ item.obj.id }}')">
+                                <i class="bi bi-eye"></i> 360º
+                            </button>
+                            {% if item.motorista_telefone %}
+                            <a href="https://wa.me/55{{ item.motorista_telefone|cut:' '|cut:'-'|cut:'('|cut:')' }}?text=Ol%C3%A1%20{{ item.motorista_nome|urlencode }}%2C%20aqui%20%C3%A9%20do%20monitoramento%20da%20{{ item.filial_nome|urlencode }}.%20Como%20est%C3%A1%20sua%20rota%20no%20manifesto%20%23{{ item.obj.numero_manifesto }}%3F" 
+                               target="_blank" class="btn btn-sm btn-outline-success" title="Chamar no WhatsApp">
+                                <i class="bi bi-whatsapp"></i>
+                            </a>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" class="text-center py-5">
-                        <i class="bi bi-check-circle text-success fs-1 mb-3 d-block"></i>
-                        <h6 class="text-muted">Nenhum manifesto ativo no momento.</h6>
+                    <td colspan="7" class="text-center py-5">
+                        <i class="bi bi-check-circle text-success fs-1 mb-2 d-block"></i>
+                        <h6 class="text-muted mb-1">Nenhum manifesto ativo nesta filial no momento.</h6>
+                        <small class="text-muted">Todos os motoristas concluíram suas rotas ou aguardam carregamento.</small>
                     </td>
                 </tr>
                 {% endfor %}
@@ -143,211 +411,407 @@
         </table>
     </div>
 </div>
+{% endif %}
 
-<!-- Ranking de Penalidades -->
-<div class="row mt-4">
+<!-- ================================================= -->
+<!-- ABA 2: BATALHA DE FILIAIS & BENCHMARKING (DISPUTA) -->
+<!-- ================================================= -->
+{% if active_tab == 'batalha' %}
+<!-- PÓDIO DOS CAMPEÕES -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-top border-primary border-4 text-center">
+            <span class="badge bg-primary bg-opacity-10 text-primary mb-2 align-self-center px-3 py-1">
+                <i class="bi bi-trophy-fill me-1"></i> MAIOR VOLUME DE ENTREGAS
+            </span>
+            <h4 class="fw-bold mb-1 text-primary">{{ benchmarking.campeao_entregas.nome }}</h4>
+            <h2 class="fw-bold mb-0 text-dark">{{ benchmarking.campeao_entregas.valor }} <span class="fs-6 text-muted fw-normal">entregas hoje</span></h2>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-top border-success border-4 text-center">
+            <span class="badge bg-success bg-opacity-10 text-success mb-2 align-self-center px-3 py-1">
+                <i class="bi bi-trophy-fill me-1"></i> MAIOR VOLUME DE COLETAS
+            </span>
+            <h4 class="fw-bold mb-1 text-success">{{ benchmarking.campeao_coletas.nome }}</h4>
+            <h2 class="fw-bold mb-0 text-dark">{{ benchmarking.campeao_coletas.valor }} <span class="fs-6 text-muted fw-normal">coletas hoje</span></h2>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-top border-warning border-4 text-center">
+            <span class="badge bg-warning bg-opacity-25 text-dark mb-2 align-self-center px-3 py-1">
+                <i class="bi bi-lightning-charge-fill me-1"></i> MAIOR EFICIÊNCIA OPERACIONAL
+            </span>
+            <h4 class="fw-bold mb-1 text-warning">{{ benchmarking.campeao_eficiencia.nome }}</h4>
+            <h2 class="fw-bold mb-0 text-dark">{{ benchmarking.campeao_eficiencia.valor }}% <span class="fs-6 text-muted fw-normal">conclusão</span></h2>
+        </div>
+    </div>
+</div>
+
+<!-- TABELA COMPARATIVA DE FILIAIS -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white py-3 border-0">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-bar-chart-line me-2 text-primary"></i>Ranking Geral de Bases & Filiais</h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="bg-light">
+                <tr>
+                    <th class="ps-3">Posição</th>
+                    <th>Filial</th>
+                    <th>Viagens Ativas / Total</th>
+                    <th>Entregas Concluídas</th>
+                    <th>Coletas Concluídas</th>
+                    <th style="min-width: 160px;">Taxa de Eficiência</th>
+                    <th>Qualidade Canhotos IA</th>
+                    <th>Alertas Críticos</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in benchmarking.filiais %}
+                <tr>
+                    <td class="ps-3">
+                        {% if forloop.counter == 1 %}
+                            <span class="badge bg-warning text-dark px-2 py-1"><i class="bi bi-award-fill me-1"></i>1º Lugar</span>
+                        {% elif forloop.counter == 2 %}
+                            <span class="badge bg-secondary text-white px-2 py-1">2º Lugar</span>
+                        {% elif forloop.counter == 3 %}
+                            <span class="badge bg-light text-dark border px-2 py-1">3º Lugar</span>
+                        {% else %}
+                            <span class="text-muted fw-bold ps-2">{{ forloop.counter }}º</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <strong class="text-dark">{{ f.nome }}</strong>
+                    </td>
+                    <td>
+                        <span class="badge bg-primary bg-opacity-10 text-primary">{{ f.ativos }} ativas</span>
+                        <small class="text-muted">de {{ f.total_manifestos }} viagens</small>
+                    </td>
+                    <td>
+                        <span class="fw-bold text-success">{{ f.entregas_feitas }}</span>
+                        <small class="text-muted">/ {{ f.total_entregas }}</small>
+                    </td>
+                    <td>
+                        <span class="fw-bold text-info">{{ f.coletas_feitas }}</span>
+                        <small class="text-muted">/ {{ f.total_coletas }}</small>
+                    </td>
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <div class="progress flex-grow-1" style="height: 7px; border-radius: 5px;">
+                                <div class="progress-bar {% if f.taxa_eficiencia >= 80 %}bg-success{% elif f.taxa_eficiencia >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                     role="progressbar" style="width: {{ f.taxa_eficiencia }}%"></div>
+                            </div>
+                            <span class="ms-2 small fw-bold">{{ f.taxa_eficiencia }}%</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge bg-success bg-opacity-10 text-success border border-success">
+                            {{ f.taxa_ia }}% Aprovados
+                        </span>
+                        {% if f.reprovados_ia > 0 %}
+                            <span class="badge bg-danger bg-opacity-10 text-danger ms-1">{{ f.reprovados_ia }} ilegíveis</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if f.criticos > 0 %}
+                            <span class="badge bg-danger">{{ f.criticos }} crítico(s)</span>
+                        {% else %}
+                            <span class="badge bg-light text-success border">0</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-4 text-muted">Nenhum dado de filial computado hoje.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- HALL DA FAMA VS RADAR DE ATENÇÃO -->
+<div class="row g-4 mb-4">
     <div class="col-md-6">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white py-3 border-0">
-                <h6 class="mb-0 fw-bold text-warning"><i class="bi bi-trophy me-2"></i>Ranking de Penalidades (Top 5)</h6>
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold text-success"><i class="bi bi-star-fill text-warning me-2"></i>Hall da Fama (Top 5 Motoristas)</h6>
+                <small class="text-muted">Melhor conformidade e ritmo</small>
             </div>
             <div class="card-body p-0">
                 <ul class="list-group list-group-flush">
-                    {% for motorista in top_penalidades %}
+                    {% for m in benchmarking.hall_da_fama %}
                     <li class="list-group-item d-flex justify-content-between align-items-center py-3">
-                        <div>
-                            <span class="badge bg-light text-dark me-2">{{ forloop.counter }}º</span>
-                            <span class="fw-bold">{{ motorista.nota_fiscal__manifesto__motorista__nome_completo|default:"Motorista Externo" }}</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-warning text-dark rounded-circle" style="width:26px; height:26px; line-height:18px;">{{ forloop.counter }}</span>
+                            <div>
+                                <span class="fw-bold text-dark d-block">{{ m.motorista_nome }}</span>
+                                <small class="text-muted">{{ m.filial_nome }} • Placa: {{ m.placa }}</small>
+                            </div>
                         </div>
-                        <span class="badge bg-danger rounded-pill">{{ motorista.total }} ocorrências</span>
+                        <div class="text-end">
+                            <span class="badge bg-success rounded-pill fs-6">{{ m.score }}/100</span>
+                            <small class="text-muted d-block" style="font-size:0.7rem;">{{ m.ritmo_entregas_hora }} n/h • {{ m.progresso }}%</small>
+                        </div>
                     </li>
                     {% empty %}
-                    <li class="list-group-item text-center py-4 text-muted">
-                        Nenhuma penalidade registrada hoje.
+                    <li class="list-group-item text-center py-4 text-muted">Nenhum motorista avaliado hoje.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold text-danger"><i class="bi bi-shield-exclamation me-2"></i>Radar de Atenção (Apoio Necessário)</h6>
+                <small class="text-muted">Atrasos, fotos ilegíveis ou sem sinal</small>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for m in benchmarking.radar_atencao %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-danger bg-opacity-25 text-danger rounded-circle" style="width:26px; height:26px; line-height:18px;">{{ forloop.counter }}</span>
+                            <div>
+                                <span class="fw-bold text-dark d-block">{{ m.motorista_nome }}</span>
+                                <small class="text-danger">{{ m.status_texto }} • {{ m.notas_pendentes }} pendentes</small>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-danger rounded-pill">{{ m.score }}/100</span>
+                            <button class="btn btn-xs btn-outline-danger mt-1 d-block ms-auto" onclick="abrirDrawer360('{{ m.obj.id }}')">
+                                Inspecionar
+                            </button>
+                        </div>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-center py-4 text-success">
+                        <i class="bi bi-check-circle me-1"></i> Todos os motoristas estão em conformidade e com bom sinal!
                     </li>
                     {% endfor %}
                 </ul>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="card border-0 shadow-sm h-100 bg-primary bg-opacity-10 border-primary border-opacity-25">
-            <div class="card-body d-flex flex-column justify-content-center align-items-center text-center p-4">
-                <i class="bi bi-shield-lock fs-1 text-primary mb-3"></i>
-                <h5 class="fw-bold text-primary">Regra de Auditoria</h5>
-                <p class="text-primary small">Baixas realizadas pelo SAC como "Desleixo" são descontadas automaticamente do prêmio de produtividade conforme política da diretoria.</p>
+</div>
+{% endif %}
+
+<!-- ============================================== -->
+<!-- ABA 3: CENTRAL DE PENALIDADES & AUDITORIA SAC  -->
+<!-- ============================================== -->
+{% if active_tab == 'penalidades' %}
+<div class="row g-4 mb-4">
+    <div class="col-md-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-0 fw-bold text-danger"><i class="bi bi-clipboard-x me-2"></i>Histórico de Penalidades Aplicadas (SAC)</h6>
+                    <small class="text-muted">Baixas efetuadas pela central classificadas como Desleixo do Motorista</small>
+                </div>
+                <span class="badge bg-danger rounded-pill">{{ total_penalidades }} registro(s)</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th class="ps-3">Nota / Manifesto</th>
+                            <th>Motorista Penalizado</th>
+                            <th>Ocorrência</th>
+                            <th>Data / Horário</th>
+                            <th>Aplicado Por</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for b in ultimas_penalidades %}
+                        <tr>
+                            <td class="ps-3">
+                                <span class="fw-bold">NF #{{ b.nota_fiscal.numero_nota }}</span>
+                                <small class="text-muted d-block">Mft: #{{ b.nota_fiscal.manifesto.numero_manifesto }}</small>
+                            </td>
+                            <td>
+                                <strong>{{ b.nota_fiscal.manifesto.motorista.nome_completo|default:"Motorista Não Identificado" }}</strong>
+                                <small class="text-muted d-block">{{ b.nota_fiscal.manifesto.filial.nome }}</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger">
+                                    {{ b.ocorrencia.descricao|default:"Desleixo" }}
+                                </span>
+                                {% if b.observacao %}
+                                    <small class="text-muted d-block text-truncate" style="max-width:200px;" title="{{ b.observacao }}">{{ b.observacao }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small class="text-muted">{{ b.data_baixa|date:"d/m/Y H:i" }}</small>
+                            </td>
+                            <td>
+                                <small class="text-primary fw-semibold">{{ b.autor_baixa.nome_completo|default:"SAC Central" }}</small>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-5 text-muted">
+                                <i class="bi bi-shield-check text-success fs-1 mb-2 d-block"></i>
+                                Nenhuma penalidade por desleixo registrada no período para esta base.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
-</div>
 
-<!-- Modal de Detalhes e Auditoria -->
-<div class="modal fade" id="modalAuditoria" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-dark text-white">
-                <h6 class="modal-title fw-bold" id="modalTitle">Detalhes do Manifesto</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+    <div class="col-md-4">
+        <!-- RANKING DE REINCIDÊNCIA -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h6 class="mb-0 fw-bold text-warning"><i class="bi bi-exclamation-octagon me-2"></i>Ranking de Reincidência (Top 5)</h6>
             </div>
-            <div class="modal-body p-0">
-                <div id="modalLoading" class="text-center py-5">
-                    <div class="spinner-border text-primary" role="status"></div>
-                    <p class="mt-2 text-muted">Carregando dados das notas...</p>
-                </div>
-                <div id="modalContent" style="display: none;">
-                    <div class="p-3 bg-light border-bottom">
-                        <div class="row text-center">
-                            <div class="col-4 border-end">
-                                <small class="text-muted d-block">Total de Notas</small>
-                                <span class="fw-bold fs-5" id="totalNotas">0</span>
-                            </div>
-                            <div class="col-4 border-end">
-                                <small class="text-muted d-block text-danger">Pendentes</small>
-                                <span class="fw-bold fs-5 text-danger" id="pendentesNotas">0</span>
-                            </div>
-                            <div class="col-4">
-                                <small class="text-muted d-block text-success">Baixadas</small>
-                                <span class="fw-bold fs-5 text-success" id="baixadasNotas">0</span>
-                            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for m in top_penalidades %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-3">
+                        <span class="fw-bold text-dark">{{ m.nota_fiscal__manifesto__motorista__nome_completo|default:"Não Identificado" }}</span>
+                        <span class="badge bg-danger rounded-pill">{{ m.total }} penalidade(s)</span>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-center py-4 text-muted">Sem registros reincidentes.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm bg-primary bg-opacity-10 border-primary border-opacity-25 p-3">
+            <h6 class="fw-bold text-primary mb-2"><i class="bi bi-info-circle me-1"></i>Política de Penalização</h6>
+            <p class="small text-primary mb-0">
+                Baixas realizadas pelo SAC como "Desleixo do Motorista" impactam o Score de Conformidade e são contabilizadas para desconto do prêmio de produtividade conforme política interna da diretoria.
+            </p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ============================================== -->
+<!-- DRAWER LATERAL: FICHA TÉCNICA 360º DO MOTORISTA -->
+<!-- ============================================== -->
+<div class="offcanvas offcanvas-end drawer-360 shadow-lg border-0" tabindex="-1" id="drawerAuditoria360" aria-labelledby="drawerLabel">
+    <div class="offcanvas-header bg-dark text-white py-3">
+        <div>
+            <h5 class="offcanvas-title fw-bold" id="drawerLabel">
+                <i class="bi bi-cpu text-info me-2"></i>Ficha Técnica 360º
+            </h5>
+            <small class="text-slate-300">Auditoria aprofundada de viagem e telemetria</small>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+
+    <div class="offcanvas-body p-0">
+        <!-- SPINNER DE CARREGAMENTO -->
+        <div id="drawerLoading" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="text-muted mt-2 small">Carregando telemetria viva e notas...</p>
+        </div>
+
+        <!-- CONTEÚDO 360 -->
+        <div id="drawerContent" style="display: none;">
+            <!-- CABEÇALHO DO MOTORISTA -->
+            <div class="p-3 bg-light border-bottom">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h5 class="fw-bold mb-0 text-dark" id="drawerMotoristaNome">--</h5>
+                        <div class="d-flex align-items-center gap-1 mt-1">
+                            <span class="badge bg-primary" id="drawerManifestoNum">#--</span>
+                            <span class="badge bg-dark bg-opacity-10 text-dark border" id="drawerFilialNome">--</span>
+                            <span class="badge bg-secondary" id="drawerPlaca">--</span>
+                            <span class="badge bg-light text-dark border" id="drawerCategoria">--</span>
                         </div>
                     </div>
-                    <div class="table-responsive" style="max-height: 400px;">
-                        <table class="table align-middle">
-                            <thead class="table-light sticky-top">
-                                <tr>
-                                    <th class="ps-3">Nota / Destinatário</th>
-                                    <th>Status</th>
-                                    <th class="text-end pe-3">Ações SAC</th>
-                                </tr>
-                            </thead>
-                            <tbody id="listaNotas">
-                                <!-- Preenchido via JS -->
-                            </tbody>
-                        </table>
+                    <a id="drawerWhatsappBtn" href="#" target="_blank" class="btn btn-success btn-sm d-inline-flex align-items-center gap-1">
+                        <i class="bi bi-whatsapp"></i> Contato
+                    </a>
+                </div>
+            </div>
+
+            <!-- GAUGES DE TELEMETRIA -->
+            <div class="p-3 border-bottom bg-white">
+                <div class="row text-center g-2">
+                    <div class="col-4 border-end">
+                        <small class="text-muted d-block" style="font-size: 0.75rem;">Bateria</small>
+                        <strong class="fs-6 text-dark" id="drawerBateriaVal">--%</strong>
                     </div>
+                    <div class="col-4 border-end">
+                        <small class="text-muted d-block" style="font-size: 0.75rem;">Rede</small>
+                        <strong class="fs-6 text-dark" id="drawerRedeVal">--</strong>
+                    </div>
+                    <div class="col-4">
+                        <small class="text-muted d-block" style="font-size: 0.75rem;">Último Sinal</small>
+                        <strong class="fs-6 text-dark" id="drawerSinalVal">--</strong>
+                    </div>
+                </div>
+                <div class="row text-center g-2 mt-2 pt-2 border-top">
+                    <div class="col-4 border-end">
+                        <small class="text-muted d-block" style="font-size: 0.75rem;">Cadência</small>
+                        <strong class="fs-6 text-info" id="drawerRitmoVal">-- n/h</strong>
+                    </div>
+                    <div class="col-4 border-end">
+                        <small class="text-muted d-block" style="font-size: 0.75rem;">Previsão Término</small>
+                        <strong class="fs-6 text-primary" id="drawerEtaVal">--:--</strong>
+                    </div>
+                    <div class="col-4">
+                        <small class="text-muted d-block" style="font-size: 0.75rem;">Score Conformidade</small>
+                        <strong class="fs-6 text-success" id="drawerScoreVal">--/100</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TIMELINE DE NOTAS E CANHOTOS -->
+            <div class="p-3">
+                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-list-check me-1"></i>Linha do Tempo de Entregas & Canhotos</h6>
+                <div id="drawerTimelineNotas">
+                    <!-- Preenchido via JS -->
                 </div>
             </div>
         </div>
     </div>
 </div>
-
-<style>
-    .avatar-sm { width: 32px; height: 32px; }
-    .table thead th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; color: #6c757d; }
-    .progress-bar { transition: width 0.6s ease; }
-</style>
 {% endblock %}
 
 {% block extra_js %}
+<!-- Configuração do WebSocket para a Filial Ativa -->
 <script>
-    let modalAuditoria;
-    
-    document.addEventListener('DOMContentLoaded', function() {
-        modalAuditoria = new bootstrap.Modal(document.getElementById('modalAuditoria'));
-    });
-
-    async function abrirModalAuditoria(id, numero) {
-        document.getElementById('modalTitle').innerText = `Auditoria: Manifesto #${numero}`;
-        document.getElementById('modalLoading').style.display = 'block';
-        document.getElementById('modalContent').style.display = 'none';
-        modalAuditoria.show();
-
-        try {
-            // Reutiliza a API de listagem de notas que já existe (Prefixo correto é /api/)
-            const response = await fetch(`/api/manifesto/notas/?numero_manifesto=${numero}`);
-            const data = await response.json();
-
-            // A API retorna uma lista direta de notas
-            if (Array.isArray(data)) {
-                renderizarNotas(data);
-            } else {
-                Swal.fire('Erro', 'Formato de dados inválido.', 'error');
-            }
-        } catch (err) {
-            Swal.fire('Erro', 'Falha na comunicação com o servidor.', 'error');
-        }
-    }
-
-    function renderizarNotas(notas) {
-        const tbody = document.getElementById('listaNotas');
-        tbody.innerHTML = '';
-        
-        let pendentes = 0;
-        let baixadas = 0;
-
-        notas.forEach(nota => {
-            let badgeColor = 'secondary';
-            if (nota.status === 'PENDENTE') {
-                pendentes++;
-                badgeColor = 'warning';
-            } else if (nota.status === 'BAIXADA') {
-                baixadas++;
-                badgeColor = 'success';
-            } else if (nota.status === 'OCORRENCIA') {
-                baixadas++;
-                badgeColor = 'danger';
-            } else {
-                baixadas++;
-            }
-
-            let badgesSac = '';
-            if (nota.dados_baixa && nota.dados_baixa.motivo_baixa) {
-                if (nota.dados_baixa.motivo_baixa === 'MOTORISTA_DESLEIXO') {
-                    badgesSac = '<span class="badge bg-danger rounded-pill ms-1" style="font-size: 0.65rem;">PENALIDADE (SAC)</span>';
-                } else if (nota.dados_baixa.motivo_baixa === 'APP_ERROR') {
-                    badgesSac = '<span class="badge bg-info text-dark rounded-pill ms-1" style="font-size: 0.65rem;">ERRO APP (SAC)</span>';
+    window.AUDITORIA_CONFIG = {
+        filialId: "{{ filial_ativa_id|default:'todas' }}",
+        activeTab: "{{ active_tab }}"
+    };
+</script>
+<script src="{% static 'desktop/js/auditoria_ws.js' %}"></script>
+<script>
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
                 }
             }
-
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="ps-3">
-                    <div class="d-flex align-items-center">
-                        <div class="fw-bold" style="font-size: 0.85rem;">NF ${nota.numero_nota}</div>
-                        ${badgesSac}
-                    </div>
-                    <small class="text-muted d-block" style="font-size: 0.75rem; max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                        ${nota.destinatario}
-                    </small>
-                </td>
-                <td>
-                    <span class="badge bg-${badgeColor} bg-opacity-10 text-${badgeColor} rounded-pill">
-                        ${nota.status}
-                    </span>
-                </td>
-                <td class="text-end pe-3">
-                    ${nota.status === 'PENDENTE' ? `
-                        <button class="btn btn-sm btn-primary" onclick="realizarBaixaSAC('${nota.id}', '${nota.numero_nota}', '${nota.tipo_operacao || 'ENTREGA'}')">
-                            <i class="bi bi-check-lg"></i> Baixa Forçada
-                        </button>
-                    ` : `
-                        <div class="d-flex flex-column align-items-end">
-                            <span class="text-muted small"><i class="bi bi-info-circle"></i> Já processado</span>
-                            ${nota.dados_baixa && (nota.dados_baixa.autor || nota.dados_baixa.recebedor) ? `
-                                <small class="text-primary fw-bold" style="font-size: 0.7rem;">Por: ${nota.dados_baixa.autor || nota.dados_baixa.recebedor}</small>
-                            ` : ''}
-                        </div>
-                    `}
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-
-        document.getElementById('totalNotas').innerText = notas.length;
-        document.getElementById('pendentesNotas').innerText = pendentes;
-        document.getElementById('baixadasNotas').innerText = baixadas;
-        
-        document.getElementById('modalLoading').style.display = 'none';
-        document.getElementById('modalContent').style.display = 'block';
+        }
+        return cookieValue;
     }
 
-    async function realizarBaixaSAC(notaId, numeroNota, tipoOperacao = 'ENTREGA') {
+    async function abrirModalBaixaSAC(notaId, numeroNota, destinatario) {
         Swal.showLoading();
 
-        // 1. Busca ocorrências dinâmicas do banco filtradas pelo tipo de operação (COLETA vs ENTREGA/NFE)
         let ocorrencias = [];
         try {
-            const resOc = await fetch(`/api/manifesto/ocorrencias/?tipo_operacao=${encodeURIComponent(tipoOperacao)}`);
+            const resOc = await fetch(`/api/manifesto/ocorrencias/`);
             ocorrencias = await resOc.json();
         } catch (err) {
             console.error("Erro ao buscar ocorrências:", err);
@@ -367,56 +831,33 @@
             optionsHtml += `<option value="${oc.codigo_tms}">${oc.codigo_tms} - ${oc.descricao}</option>`;
         });
 
-        const isColeta = (tipoOperacao === 'COLETA');
-
         const { value: formValues } = await Swal.fire({
-            title: `Baixa SAC - ${isColeta ? 'Coleta' : 'Doc'} ${numeroNota}`,
+            title: `Baixa SAC - NF #${numeroNota}`,
             html: `
                 <div class="text-start">
-                    <label class="small fw-bold mb-1">Tipo de Ocorrência:</label>
-                    <select id="swal-ocorrencia" class="form-select mb-3" onchange="atualizarIndicadorFoto('${tipoOperacao}')">
+                    <p class="small text-muted mb-2">Destinatário: <strong>${destinatario}</strong></p>
+                    
+                    <label class="small fw-bold mb-1">Ocorrência:</label>
+                    <select id="swal-ocorrencia" class="form-select mb-3">
                         ${optionsHtml}
                     </select>
 
-                    <label class="small fw-bold mb-1">Motivo da Baixa (Auditoria):</label>
+                    <label class="small fw-bold mb-1">Classificação da Auditoria:</label>
                     <select id="swal-motivo" class="form-select mb-3">
-                        <option value="OPERACAO_NORMAL">Operação Normal / Processado pelo SAC</option>
                         <option value="MOTORISTA_DESLEIXO">Desleixo do Motorista (Penalização)</option>
+                        <option value="OPERACAO_NORMAL">Operação Normal / Processado pelo SAC</option>
                         <option value="APP_ERROR">Erro de Aplicativo / Sistema</option>
                     </select>
 
                     <div class="mb-3">
-                        <label class="small fw-bold mb-1 d-flex justify-content-between align-items-center">
-                            <span>Foto / Comprovante:</span>
-                            <span id="badge-foto-req" class="badge bg-danger">Obrigatório</span>
-                        </label>
-                        <input type="file" id="swal-foto" class="form-control" accept="image/*" capture="environment">
+                        <label class="small fw-bold mb-1">Comprovante / Canhoto:</label>
+                        <input type="file" id="swal-foto" class="form-control" accept="image/*">
                     </div>
 
-                    <label class="small fw-bold mb-1">Observação Interna:</label>
-                    <textarea id="swal-obs" class="form-control" placeholder="Motivo da baixa manual pelo SAC..."></textarea>
+                    <label class="small fw-bold mb-1">Observação da Auditoria:</label>
+                    <textarea id="swal-obs" class="form-control" placeholder="Justificativa do SAC..."></textarea>
                 </div>
             `,
-            didOpen: () => {
-                window.atualizarIndicadorFoto = function(tipoOp) {
-                    const select = document.getElementById('swal-ocorrencia');
-                    const badge = document.getElementById('badge-foto-req');
-                    if (!select || !badge) return;
-
-                    const val = select.value;
-                    const eColeta = (tipoOp === 'COLETA');
-
-                    // Regra: Entregas 01/02 exigem foto. Coleta 01 NÃO exige foto.
-                    if (!eColeta && (val === '01' || val === '02' || val === '1' || val === '2')) {
-                        badge.className = 'badge bg-danger';
-                        badge.innerText = 'Obrigatório para 01/02';
-                    } else {
-                        badge.className = 'badge bg-secondary';
-                        badge.innerText = 'Opcional';
-                    }
-                };
-                window.atualizarIndicadorFoto(tipoOperacao);
-            },
             focusConfirm: false,
             showCancelButton: true,
             confirmButtonText: 'Confirmar Baixa',
@@ -427,14 +868,6 @@
                 const obs = document.getElementById('swal-obs').value;
                 const fotoInput = document.getElementById('swal-foto');
                 const temFoto = fotoInput && fotoInput.files && fotoInput.files.length > 0;
-
-                // Validação estrita: Entrega 01/02 EXIGE foto
-                if (tipoOperacao !== 'COLETA' && (selectOc === '01' || selectOc === '02' || selectOc === '1' || selectOc === '2')) {
-                    if (!temFoto) {
-                        Swal.showValidationMessage('Anexo de foto/comprovante é OBRIGATÓRIO para baixas de entrega com código 01 ou 02.');
-                        return false;
-                    }
-                }
 
                 return {
                     codigo_tms: selectOc,
