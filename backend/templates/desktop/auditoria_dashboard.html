@@ -5,77 +5,201 @@
 
 {% block usuario %}{{ request.user.first_name }} ({{ request.user.motorista_perfil.cargo|default:"Auditor" }}){% endblock %}
 
-{% block extra_css %}
+{% block content %}
 <style>
-    /* Estilos Cockpit de Auditoria & Telemetria */
-    .cockpit-header {
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-        border-radius: 12px;
-        color: #fff;
-        padding: 1.25rem 1.5rem;
+    /* =========================================================
+       RXTRACK COCKPIT - SISTEMA DE DESIGN DE ALTA FIDELIDADE
+       ========================================================= */
+    :root {
+        --cockpit-dark: #0f172a;
+        --cockpit-card-border: #e2e8f0;
+        --cockpit-text-muted: #64748b;
+        --cockpit-primary: #0d6efd;
+        --cockpit-success: #10b981;
+        --cockpit-warning: #f59e0b;
+        --cockpit-danger: #ef4444;
     }
-    .pulse-dot {
-        width: 8px;
-        height: 8px;
+
+    /* 1. Header Mission Control */
+    .cockpit-header-box {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        border-radius: 16px;
+        color: #ffffff;
+        padding: 1.5rem 1.75rem;
+        box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.2), 0 8px 10px -6px rgba(15, 23, 42, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        position: relative;
+        overflow: hidden;
+    }
+    .cockpit-header-box::after {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(13, 110, 253, 0.25) 0%, rgba(13, 110, 253, 0) 70%);
+        pointer-events: none;
+    }
+
+    /* 2. Pulso de Conexão WebSocket */
+    .pulse-dot-ws {
+        width: 9px;
+        height: 9px;
         border-radius: 50%;
         display: inline-block;
-        animation: pulse-glow 2s infinite;
+        animation: pulse-ws-glow 2s infinite;
     }
-    @keyframes pulse-glow {
-        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7); }
-        70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(25, 135, 84, 0); }
-        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0); }
+    @keyframes pulse-ws-glow {
+        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.8); }
+        70% { transform: scale(1.15); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
     }
-    .card-updated-pulse {
-        animation: flash-border 1.5s ease-out;
+
+    /* 3. Seletor de Filiais em Pills Modernas */
+    .filial-selector-bar {
+        background: #ffffff;
+        border: 1px solid var(--cockpit-card-border);
+        border-radius: 14px;
+        padding: 0.6rem 1rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
     }
-    @keyframes flash-border {
-        0% { background-color: rgba(13, 110, 253, 0.18); }
-        100% { background-color: transparent; }
-    }
-    .nav-tabs-cockpit {
-        border-bottom: 2px solid #e2e8f0;
-        gap: 0.5rem;
-    }
-    .nav-tabs-cockpit .nav-link {
-        border: none;
-        border-bottom: 3px solid transparent;
-        color: #64748b;
-        font-weight: 600;
-        font-size: 0.92rem;
-        padding: 0.75rem 1.25rem;
-        border-radius: 0;
-        transition: all 0.2s ease;
-    }
-    .nav-tabs-cockpit .nav-link:hover {
-        color: #0f172a;
-        border-bottom-color: #cbd5e1;
-    }
-    .nav-tabs-cockpit .nav-link.active {
-        color: #0d6efd;
-        border-bottom-color: #0d6efd;
-        background: transparent;
-    }
-    .filial-pill {
-        font-size: 0.8rem;
-        padding: 0.35rem 0.75rem;
+    .filial-pill-btn {
+        font-size: 0.82rem;
+        padding: 0.4rem 0.95rem;
         border-radius: 20px;
         text-decoration: none;
-        transition: all 0.2s;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         border: 1px solid #cbd5e1;
         color: #475569;
-        background: #fff;
+        background: #f8fafc;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-weight: 500;
     }
-    .filial-pill:hover {
-        background: #f1f5f9;
+    .filial-pill-btn:hover {
+        background: #e2e8f0;
         color: #0f172a;
+        transform: translateY(-1px);
     }
-    .filial-pill.active {
-        background: #0d6efd;
-        color: #fff;
+    .filial-pill-btn.active-pill {
+        background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+        color: #ffffff;
         border-color: #0d6efd;
         font-weight: 600;
+        box-shadow: 0 4px 12px rgba(13, 110, 253, 0.35);
+        transform: translateY(-1px);
     }
+
+    /* 4. Top KPI Cards */
+    .kpi-cockpit-card {
+        background: #ffffff;
+        border-radius: 14px;
+        border: 1px solid var(--cockpit-card-border);
+        padding: 1.15rem 1.25rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    .kpi-cockpit-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+    }
+    .kpi-cockpit-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 4px;
+        height: 100%;
+    }
+    .kpi-blue::before { background: #0d6efd; }
+    .kpi-red::before { background: #ef4444; }
+    .kpi-cyan::before { background: #06b6d4; }
+    .kpi-green::before { background: #10b981; }
+    .kpi-amber::before { background: #f59e0b; }
+
+    .kpi-icon-wrapper {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+    }
+
+    /* 5. Sub-Menu / Abas Estilo Segmented Control */
+    .cockpit-tabs-nav {
+        display: flex;
+        gap: 0.5rem;
+        background: #f1f5f9;
+        padding: 0.35rem;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        list-style: none;
+        margin-bottom: 1.5rem;
+    }
+    .cockpit-tab-item {
+        flex: 1;
+    }
+    .cockpit-tab-link {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.65rem 1rem;
+        border-radius: 9px;
+        text-decoration: none;
+        color: #64748b;
+        font-weight: 600;
+        font-size: 0.88rem;
+        transition: all 0.2s ease;
+    }
+    .cockpit-tab-link:hover {
+        color: #0f172a;
+        background: rgba(255, 255, 255, 0.6);
+    }
+    .cockpit-tab-link.active-tab {
+        background: #ffffff;
+        color: #0d6efd;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    /* 6. Tabela Cockpit de Alta Densidade */
+    .cockpit-table-card {
+        background: #ffffff;
+        border-radius: 16px;
+        border: 1px solid var(--cockpit-card-border);
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);
+        overflow: hidden;
+    }
+    .cockpit-table thead th {
+        background: #f8fafc;
+        color: #64748b;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-weight: 700;
+        padding: 0.95rem 1rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .cockpit-table tbody td {
+        padding: 1rem 1rem;
+        vertical-align: middle;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: 0.88rem;
+    }
+    .cockpit-table tbody tr {
+        transition: background 0.15s ease;
+    }
+    .cockpit-table tbody tr:hover {
+        background: #f8fafc;
+    }
+
+    /* 7. Score Badge Circular */
     .score-badge-circle {
         width: 44px;
         height: 44px;
@@ -83,11 +207,59 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        font-weight: 700;
-        font-size: 0.9rem;
+        font-weight: 800;
+        font-size: 0.92rem;
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
     }
+
+    /* 8. ETA Badge */
+    .eta-badge {
+        background: #0f172a;
+        color: #38bdf8;
+        font-size: 0.76rem;
+        font-weight: 700;
+        padding: 0.2rem 0.55rem;
+        border-radius: 6px;
+        letter-spacing: 0.02em;
+    }
+
+    /* 9. Botões de Ação */
+    .btn-action-360 {
+        background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+        color: #ffffff;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        padding: 0.38rem 0.75rem;
+        box-shadow: 0 2px 6px rgba(13, 110, 253, 0.25);
+        transition: all 0.2s ease;
+    }
+    .btn-action-360:hover {
+        background: #0b5ed7;
+        color: #ffffff;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(13, 110, 253, 0.35);
+    }
+    .btn-action-zap {
+        background: #10b981;
+        color: #ffffff;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        padding: 0.38rem 0.65rem;
+        transition: all 0.2s ease;
+    }
+    .btn-action-zap:hover {
+        background: #059669;
+        color: #ffffff;
+        transform: translateY(-1px);
+    }
+
+    /* 10. Drawer Lateral 360 */
     .drawer-360 {
         width: 580px !important;
+        border-left: 1px solid var(--cockpit-card-border);
     }
     @media (max-width: 768px) {
         .drawer-360 { width: 100% !important; }
@@ -100,37 +272,44 @@
         height: 12px;
         border-radius: 50%;
         border: 2px solid #fff;
-        box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
+        box-shadow: 0 0 0 2px rgba(0,0,0,0.12);
+    }
+
+    /* Efeito de flash quando recebe WS */
+    .card-updated-pulse {
+        animation: flash-border 1.5s ease-out;
+    }
+    @keyframes flash-border {
+        0% { background-color: rgba(13, 110, 253, 0.15) !important; }
+        100% { background-color: transparent; }
     }
 </style>
-{% endblock %}
 
-{% block content %}
-<!-- HEADER OPERACIONAL & FILTRO POR FILIAL -->
+<!-- HEADER MISSION CONTROL -->
 <div class="row mb-3">
     <div class="col-12">
-        <div class="cockpit-header shadow-sm d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+        <div class="cockpit-header-box d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
             <div>
                 <div class="d-flex align-items-center gap-2 mb-1">
-                    <h4 class="mb-0 fw-bold text-white"><i class="bi bi-cpu me-2 text-info"></i>Auditoria de Processos & Cockpit</h4>
-                    <span id="wsConnectionBadge" class="badge bg-success bg-opacity-10 text-success border border-success d-inline-flex align-items-center gap-1">
-                        <span class="pulse-dot bg-success"></span> AO VIVO (WS)
+                    <span class="fs-4 text-info"><i class="bi bi-cpu"></i></span>
+                    <h4 class="mb-0 fw-bold text-white tracking-wide">Auditoria de Processos & Cockpit</h4>
+                    <span id="wsConnectionBadge" class="badge bg-success bg-opacity-25 text-white border border-success border-opacity-50 px-2.5 py-1 d-inline-flex align-items-center gap-1.5" style="font-size: 0.72rem;">
+                        <span class="pulse-dot-ws bg-success"></span> AO VIVO (WS)
                     </span>
                 </div>
-                <p class="text-slate-300 small mb-0 opacity-75">
-                    Telemetria de motoristas em tempo real, auditoria de canhotos por IA e governança de processos operacionais.
+                <p class="small mb-0 opacity-75 text-light" style="font-size: 0.85rem;">
+                    Telemetria de frota em tempo real, governança de canhotos com IA e monitoramento de conformidade operacional.
                 </p>
             </div>
             
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 {% if not is_gestor and filial_ativa %}
-                    <!-- Filial Fixa (Isolamento Estrito do Operador) -->
-                    <span class="badge bg-primary bg-opacity-25 text-white border border-primary px-3 py-2 fs-6">
+                    <span class="badge bg-primary bg-opacity-25 text-white border border-primary px-3 py-2" style="font-size: 0.85rem;">
                         <i class="bi bi-shield-lock me-1"></i> Filial: {{ filial_ativa.nome }}
                     </span>
                 {% endif %}
 
-                <button class="btn btn-outline-light btn-sm" onclick="location.reload()" title="Recarregar Dados">
+                <button class="btn btn-outline-light btn-sm px-3" onclick="location.reload()" title="Atualizar tela">
                     <i class="bi bi-arrow-clockwise me-1"></i> Atualizar
                 </button>
             </div>
@@ -138,99 +317,107 @@
     </div>
 </div>
 
-<!-- SELETOR DE FILIAIS (EXCLUSIVO PARA GESTOR/ADMIN) -->
+<!-- SELETOR DE FILIAIS EM PILLS (EXCLUSIVO GESTOR/ADMIN) -->
 {% if is_gestor %}
-<div class="card border-0 shadow-sm p-2 mb-4 bg-light">
-    <div class="d-flex align-items-center gap-2 flex-wrap ps-2">
-        <span class="small fw-bold text-muted"><i class="bi bi-funnel me-1"></i>Filial:</span>
-        <a href="?tab={{ active_tab }}&filial=todas" class="filial-pill {% if modo_todas_filiais %}active{% endif %}">
-            🌐 Todas as Filiais
-        </a>
-        {% for f in todas_filiais %}
-        <a href="?tab={{ active_tab }}&filial={{ f.id }}" class="filial-pill {% if filial_ativa_id == f.id|stringformat:'s' and not modo_todas_filiais %}active{% endif %}">
-            🏢 {{ f.nome }}
-        </a>
-        {% endfor %}
-    </div>
+<div class="filial-selector-bar d-flex align-items-center gap-2 flex-wrap mb-4">
+    <span class="small fw-bold text-secondary me-1"><i class="bi bi-funnel me-1"></i>Filtrar Filial:</span>
+    <a href="?tab={{ active_tab }}&filial=todas" class="filial-pill-btn {% if modo_todas_filiais %}active-pill{% endif %}">
+        🌐 Todas as Filiais
+    </a>
+    {% for f in todas_filiais %}
+    <a href="?tab={{ active_tab }}&filial={{ f.id }}" class="filial-pill-btn {% if filial_ativa_id == f.id|stringformat:'s' and not modo_todas_filiais %}active-pill{% endif %}">
+        🏢 {{ f.nome }}
+    </a>
+    {% endfor %}
 </div>
 {% endif %}
 
-<!-- TOP KPIS EM CARDS -->
+<!-- TOP KPIS CARDS -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-3 col-xl">
-        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-start border-primary border-4">
-            <div class="d-flex align-items-center justify-content-between mb-1">
-                <span class="text-muted small fw-bold">MANIFESTOS ATIVOS</span>
-                <i class="bi bi-truck text-primary fs-5"></i>
+        <div class="kpi-cockpit-card kpi-blue h-100">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small fw-bold" style="font-size: 0.72rem;">MANIFESTOS ATIVOS</span>
+                <div class="kpi-icon-wrapper bg-primary bg-opacity-10 text-primary">
+                    <i class="bi bi-truck"></i>
+                </div>
             </div>
-            <h3 class="mb-0 fw-bold">{{ total_ativos }}</h3>
-            <small class="text-muted">Em transporte agora</small>
+            <h3 class="mb-0 fw-bold text-dark">{{ total_ativos }}</h3>
+            <small class="text-muted" style="font-size: 0.76rem;">Viagens em trânsito agora</small>
         </div>
     </div>
 
     <div class="col-6 col-md-3 col-xl">
-        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-start border-danger border-4">
-            <div class="d-flex align-items-center justify-content-between mb-1">
-                <span class="text-muted small fw-bold">ALERTAS CRÍTICOS</span>
-                <i class="bi bi-exclamation-triangle text-danger fs-5"></i>
+        <div class="kpi-cockpit-card kpi-red h-100">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small fw-bold" style="font-size: 0.72rem;">ALERTAS CRÍTICOS</span>
+                <div class="kpi-icon-wrapper bg-danger bg-opacity-10 text-danger">
+                    <i class="bi bi-exclamation-triangle"></i>
+                </div>
             </div>
             <h3 class="mb-0 fw-bold text-danger">{{ total_criticos }}</h3>
-            <small class="text-muted">Sem sinal há &gt; 4h c/ notas</small>
+            <small class="text-muted" style="font-size: 0.76rem;">Sem sinal há &gt; 4h c/ notas</small>
         </div>
     </div>
 
     <div class="col-6 col-md-3 col-xl">
-        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-start border-info border-4">
-            <div class="d-flex align-items-center justify-content-between mb-1">
-                <span class="text-muted small fw-bold">CADÊNCIA DA BASE</span>
-                <i class="bi bi-speedometer2 text-info fs-5"></i>
+        <div class="kpi-cockpit-card kpi-cyan h-100">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small fw-bold" style="font-size: 0.72rem;">CADÊNCIA DA BASE</span>
+                <div class="kpi-icon-wrapper bg-info bg-opacity-10 text-info">
+                    <i class="bi bi-speedometer2"></i>
+                </div>
             </div>
-            <h3 class="mb-0 fw-bold text-info">{{ ritmo_medio_base }} <span class="fs-6 fw-normal text-muted">n/h</span></h3>
-            <small class="text-muted">Velocidade média de baixas</small>
+            <h3 class="mb-0 fw-bold text-dark">{{ ritmo_medio_base }} <span class="fs-6 fw-normal text-muted">n/h</span></h3>
+            <small class="text-muted" style="font-size: 0.76rem;">Velocidade média de baixas</small>
         </div>
     </div>
 
     <div class="col-6 col-md-3 col-xl">
-        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-start border-success border-4">
-            <div class="d-flex align-items-center justify-content-between mb-1">
-                <span class="text-muted small fw-bold">SCORE MÉDIO</span>
-                <i class="bi bi-award text-success fs-5"></i>
+        <div class="kpi-cockpit-card kpi-green h-100">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small fw-bold" style="font-size: 0.72rem;">SCORE MÉDIO</span>
+                <div class="kpi-icon-wrapper bg-success bg-opacity-10 text-success">
+                    <i class="bi bi-award"></i>
+                </div>
             </div>
             <h3 class="mb-0 fw-bold text-success">{{ score_medio_base }}<span class="fs-6 fw-normal text-muted">/100</span></h3>
-            <small class="text-muted">Conformidade da frota</small>
+            <small class="text-muted" style="font-size: 0.76rem;">Conformidade da frota</small>
         </div>
     </div>
 
     <div class="col-6 col-md-3 col-xl">
-        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-start border-warning border-4">
-            <div class="d-flex align-items-center justify-content-between mb-1">
-                <span class="text-muted small fw-bold">PENALIDADES SAC</span>
-                <i class="bi bi-person-x text-warning fs-5"></i>
+        <div class="kpi-cockpit-card kpi-amber h-100">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small fw-bold" style="font-size: 0.72rem;">PENALIDADES SAC</span>
+                <div class="kpi-icon-wrapper bg-warning bg-opacity-10 text-warning">
+                    <i class="bi bi-person-x"></i>
+                </div>
             </div>
             <h3 class="mb-0 fw-bold text-warning">{{ total_penalidades }}</h3>
-            <small class="text-muted">Baixas por desleixo</small>
+            <small class="text-muted" style="font-size: 0.76rem;">Baixas por desleixo do motorista</small>
         </div>
     </div>
 </div>
 
-<!-- SUB-MENU DE AUDITORIA (NAVEGAÇÃO POR ABAS) -->
-<ul class="nav nav-tabs-cockpit mb-4">
-    <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'cockpit' %}active{% endif %}" href="?tab=cockpit{% if filial_ativa_id %}&filial={{ filial_ativa_id }}{% endif %}">
-            <i class="bi bi-truck me-2"></i>Cockpit de Motoristas
-            <span class="badge bg-primary bg-opacity-10 text-primary ms-1 rounded-pill">{{ total_ativos }}</span>
+<!-- SUB-MENU / NAVEGAÇÃO ENTRE ABAS -->
+<ul class="cockpit-tabs-nav">
+    <li class="cockpit-tab-item">
+        <a class="cockpit-tab-link {% if active_tab == 'cockpit' %}active-tab{% endif %}" href="?tab=cockpit{% if filial_ativa_id %}&filial={{ filial_ativa_id }}{% endif %}">
+            <i class="bi bi-truck"></i> Cockpit de Motoristas
+            <span class="badge {% if active_tab == 'cockpit' %}bg-primary text-white{% else %}bg-secondary bg-opacity-25 text-dark{% endif %} rounded-pill ms-1" style="font-size: 0.72rem;">{{ total_ativos }}</span>
         </a>
     </li>
-    <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'batalha' %}active{% endif %}" href="?tab=batalha{% if filial_ativa_id %}&filial={{ filial_ativa_id }}{% endif %}">
-            <i class="bi bi-trophy me-2"></i>Batalha de Filiais & Benchmarking
-            <span class="badge bg-warning bg-opacity-25 text-dark ms-1 rounded-pill">Ranking</span>
+    <li class="cockpit-tab-item">
+        <a class="cockpit-tab-link {% if active_tab == 'batalha' %}active-tab{% endif %}" href="?tab=batalha{% if filial_ativa_id %}&filial={{ filial_ativa_id }}{% endif %}">
+            <i class="bi bi-trophy text-warning"></i> Batalha de Filiais & Benchmarking
+            <span class="badge bg-warning bg-opacity-25 text-dark rounded-pill ms-1" style="font-size: 0.72rem;">Ranking</span>
         </a>
     </li>
-    <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'penalidades' %}active{% endif %}" href="?tab=penalidades{% if filial_ativa_id %}&filial={{ filial_ativa_id }}{% endif %}">
-            <i class="bi bi-shield-x me-2"></i>Central de Penalidades & SAC
-            <span class="badge bg-danger bg-opacity-10 text-danger ms-1 rounded-pill">{{ total_penalidades }}</span>
+    <li class="cockpit-tab-item">
+        <a class="cockpit-tab-link {% if active_tab == 'penalidades' %}active-tab{% endif %}" href="?tab=penalidades{% if filial_ativa_id %}&filial={{ filial_ativa_id }}{% endif %}">
+            <i class="bi bi-shield-x text-danger"></i> Central de Penalidades & SAC
+            <span class="badge bg-danger bg-opacity-10 text-danger rounded-pill ms-1" style="font-size: 0.72rem;">{{ total_penalidades }}</span>
         </a>
     </li>
 </ul>
@@ -239,28 +426,33 @@
 <!-- ABA 1: COCKPIT DE MOTORISTAS EM TEMPO REAL -->
 <!-- ========================================== -->
 {% if active_tab == 'cockpit' %}
-<div class="card border-0 shadow-sm overflow-hidden mb-4">
-    <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
-            <h6 class="mb-0 fw-bold"><i class="bi bi-broadcast me-2 text-primary"></i>Monitoramento de Manifestos & Telemetria</h6>
-            <small class="text-muted">Visão operacional viva dos motoristas da base</small>
+<div class="cockpit-table-card mb-4">
+    <div class="p-3 bg-white border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+            <div class="p-2 rounded-3 bg-primary bg-opacity-10 text-primary">
+                <i class="bi bi-broadcast fs-5"></i>
+            </div>
+            <div>
+                <h6 class="mb-0 fw-bold text-dark">Monitoramento de Manifestos & Telemetria</h6>
+                <small class="text-muted" style="font-size: 0.8rem;">Visão operacional viva dos motoristas da base</small>
+            </div>
         </div>
-        <span class="badge bg-light text-dark border">
-            Mostrando {{ manifestos|length }} manifesto(s) ativo(s)
+        <span class="badge bg-light text-secondary border px-3 py-2" style="font-size: 0.78rem;">
+            Mostrando <strong>{{ manifestos|length }}</strong> manifesto(s) ativo(s)
         </span>
     </div>
 
     <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-            <thead class="bg-light">
+        <table class="table cockpit-table align-middle mb-0">
+            <thead>
                 <tr>
-                    <th class="ps-3" style="min-width: 220px;">Motorista / Veículo</th>
-                    <th style="min-width: 160px;">Telemetria Hardware</th>
+                    <th class="ps-3" style="min-width: 230px;">Motorista / Veículo</th>
+                    <th style="min-width: 170px;">Telemetria Hardware</th>
                     <th style="min-width: 140px;">Carga / Tipo</th>
                     <th style="min-width: 170px;">Progresso da Rota</th>
-                    <th style="min-width: 150px;">Cadência & ETA</th>
+                    <th style="min-width: 160px;">Cadência & ETA</th>
                     <th style="min-width: 120px;">Score IA</th>
-                    <th class="text-end pe-3" style="min-width: 140px;">Ações</th>
+                    <th class="text-end pe-3" style="min-width: 130px;">Ações</th>
                 </tr>
             </thead>
             <tbody>
@@ -273,22 +465,22 @@
                     <td class="ps-3">
                         <div class="d-flex align-items-center">
                             {% if item.motorista_foto %}
-                                <img src="{{ item.motorista_foto }}" alt="Foto" class="rounded-circle me-2 object-fit-cover shadow-sm border" style="width: 40px; height: 40px;">
+                                <img src="{{ item.motorista_foto }}" alt="Foto" class="rounded-circle me-2.5 object-fit-cover shadow-sm border" style="width: 42px; height: 42px; min-width: 42px;">
                             {% else %}
-                                <div class="bg-light rounded-circle me-2 d-flex align-items-center justify-content-center text-secondary border shadow-sm" style="width: 40px; height: 40px;">
+                                <div class="bg-light rounded-circle me-2.5 d-flex align-items-center justify-content-center text-secondary border shadow-sm" style="width: 42px; height: 42px; min-width: 42px;">
                                     <i class="bi bi-person fs-5"></i>
                                 </div>
                             {% endif %}
                             <div>
                                 <h6 class="mb-0 fw-bold text-dark" style="font-size: 0.9rem;">{{ item.motorista_nome }}</h6>
-                                <div class="d-flex align-items-center gap-1 mt-1">
-                                    <span class="badge bg-light text-secondary border" style="font-size: 0.7rem;">
+                                <div class="d-flex align-items-center gap-1.5 mt-1 flex-wrap">
+                                    <span class="badge bg-light text-secondary border px-2 py-0.5" style="font-size: 0.68rem;">
                                         {{ item.motorista_categoria }}
                                     </span>
-                                    <span class="badge bg-dark bg-opacity-10 text-dark border" style="font-size: 0.7rem;">
+                                    <span class="badge bg-dark bg-opacity-10 text-dark border px-2 py-0.5" style="font-size: 0.68rem;">
                                         <i class="bi bi-truck me-1"></i>{{ item.placa }}
                                     </span>
-                                    <span class="badge bg-light text-dark border" style="font-size: 0.7rem;">
+                                    <span class="badge bg-light text-dark border px-2 py-0.5" style="font-size: 0.68rem;">
                                         #{{ item.obj.numero_manifesto }}
                                     </span>
                                 </div>
@@ -298,24 +490,24 @@
 
                     <!-- Telemetria Hardware -->
                     <td>
-                        <div class="d-flex flex-column gap-1">
+                        <div class="d-flex flex-column gap-1.5">
                             <!-- Bateria -->
                             <div class="d-flex align-items-center gap-2">
-                                <i class="motorista-bateria-icon bi bi-battery-charging text-muted" style="font-size: 1.1rem;"></i>
-                                <div class="progress flex-grow-1" style="height: 6px; border-radius: 4px; max-width: 60px;">
+                                <i class="motorista-bateria-icon bi bi-battery-charging text-secondary" style="font-size: 1.15rem;"></i>
+                                <div class="progress flex-grow-1" style="height: 6px; border-radius: 6px; max-width: 70px; background: #e2e8f0;">
                                     <div class="motorista-bateria-bar progress-bar {% if item.bateria <= 15 %}bg-danger{% elif item.bateria <= 35 %}bg-warning{% else %}bg-success{% endif %}" 
                                          role="progressbar" style="width: {{ item.bateria|default:100 }}%"></div>
                                 </div>
-                                <span class="motorista-bateria-val small fw-bold">{{ item.bateria|default:"--" }}%</span>
+                                <span class="motorista-bateria-val small fw-bold text-dark">{{ item.bateria|default:"--" }}%</span>
                             </div>
 
                             <!-- Rede & Sinal -->
-                            <div class="d-flex align-items-center gap-1">
-                                <span class="motorista-rede-badge badge bg-secondary bg-opacity-25 border text-dark" style="font-size: 0.68rem;">
+                            <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                                <span class="motorista-rede-badge badge bg-secondary bg-opacity-25 border text-dark px-2 py-0.5" style="font-size: 0.68rem;">
                                     {{ item.rede }}
                                 </span>
-                                <span class="motorista-sinal-badge badge bg-{{ item.status_cor }} bg-opacity-10 text-{{ item.status_cor }} border border-{{ item.status_cor }} rounded-pill px-2" style="font-size: 0.68rem;">
-                                    <i class="bi bi-circle-fill me-1" style="font-size: 0.45rem;"></i>
+                                <span class="motorista-sinal-badge badge bg-{{ item.status_cor }} bg-opacity-10 text-{{ item.status_cor }} border border-{{ item.status_cor }} rounded-pill px-2 py-0.5" style="font-size: 0.68rem;">
+                                    <i class="bi bi-circle-fill me-1" style="font-size: 0.4rem;"></i>
                                     {{ item.status_texto }}
                                 </span>
                             </div>
@@ -324,33 +516,33 @@
 
                     <!-- Carga / Tipo -->
                     <td>
-                        <div class="small">
-                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary me-1" style="font-size: 0.7rem;">
+                        <div class="d-flex flex-column gap-1">
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2 py-1 text-start" style="font-size: 0.72rem; width: fit-content;">
                                 <i class="bi bi-box-seam me-1"></i>{{ item.qtd_entrega }} Entregas
                             </span>
                             {% if item.qtd_coleta > 0 %}
-                            <span class="badge bg-success bg-opacity-10 text-success border border-success mt-1" style="font-size: 0.7rem;">
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1 text-start" style="font-size: 0.72rem; width: fit-content;">
                                 <i class="bi bi-arrow-repeat me-1"></i>{{ item.qtd_coleta }} Coletas
                             </span>
                             {% endif %}
                             {% if item.qtd_despacho > 0 %}
-                            <span class="badge bg-warning bg-opacity-10 text-dark border border-warning mt-1" style="font-size: 0.7rem;">
+                            <span class="badge bg-warning bg-opacity-10 text-dark border border-warning border-opacity-25 px-2 py-1 text-start" style="font-size: 0.72rem; width: fit-content;">
                                 <i class="bi bi-send me-1"></i>{{ item.qtd_despacho }} Despachos
                             </span>
                             {% endif %}
                         </div>
                     </td>
 
-                    <!-- Progresso -->
+                    <!-- Progresso da Rota -->
                     <td>
                         <div class="d-flex align-items-center mb-1">
-                            <div class="progress flex-grow-1" style="height: 7px; border-radius: 6px;">
+                            <div class="progress flex-grow-1" style="height: 8px; border-radius: 8px; background: #e2e8f0;">
                                 <div class="manifesto-progresso-bar progress-bar bg-{{ item.status_cor }}" 
                                      role="progressbar" style="width: {{ item.progresso }}%"></div>
                             </div>
-                            <span class="manifesto-progresso-text ms-2 small fw-bold">{{ item.progresso }}%</span>
+                            <span class="manifesto-progresso-text ms-2 small fw-bold text-dark">{{ item.progresso }}%</span>
                         </div>
-                        <small class="manifesto-pendentes-text text-muted d-block" style="font-size: 0.75rem;">
+                        <small class="manifesto-pendentes-text text-muted d-block" style="font-size: 0.76rem;">
                             {{ item.notas_pendentes }} nota(s) pendente(s)
                         </small>
                     </td>
@@ -358,14 +550,14 @@
                     <!-- Cadência & ETA -->
                     <td>
                         <div class="d-flex flex-column">
-                            <span class="fw-bold text-dark" style="font-size: 0.85rem;">
-                                <i class="bi bi-speedometer text-info me-1"></i>{{ item.ritmo_entregas_hora }} n/h
+                            <span class="fw-bold text-dark" style="font-size: 0.88rem;">
+                                <i class="bi bi-speedometer text-info me-1"></i>{{ item.ritmo_entregas_hora }} <span class="fw-normal text-muted" style="font-size: 0.78rem;">n/h</span>
                             </span>
-                            <div class="d-flex align-items-center gap-1 mt-1">
-                                <span class="badge bg-dark bg-opacity-10 text-dark" style="font-size: 0.7rem;">
-                                    ETA: <strong>{{ item.eta_str }}</strong>
+                            <div class="d-flex align-items-center gap-1.5 mt-1">
+                                <span class="eta-badge">
+                                    ETA: {{ item.eta_str }}
                                 </span>
-                                <small class="text-muted" style="font-size: 0.7rem;">({{ item.tempo_em_rota_horas }}h em rota)</small>
+                                <small class="text-muted" style="font-size: 0.72rem;">({{ item.tempo_em_rota_horas }}h em rota)</small>
                             </div>
                         </div>
                     </td>
@@ -373,25 +565,25 @@
                     <!-- Score de Conformidade -->
                     <td>
                         <div class="d-flex align-items-center gap-2">
-                            <div class="score-badge-circle bg-{{ item.score_badge }} bg-opacity-10 text-{{ item.score_badge }} border border-{{ item.score_badge }}">
+                            <div class="score-badge-circle bg-{{ item.score_badge }} bg-opacity-10 text-{{ item.score_badge }} border border-{{ item.score_badge }} border-opacity-50">
                                 {{ item.score }}
                             </div>
                             <div class="small">
-                                <span class="fw-bold text-{{ item.score_badge }} d-block" style="font-size: 0.75rem;">{{ item.score_label }}</span>
-                                <span class="text-muted" style="font-size: 0.7rem;">{{ item.taxa_qualidade_ia }}% IA</span>
+                                <span class="fw-bold text-{{ item.score_badge }} d-block" style="font-size: 0.76rem;">{{ item.score_label }}</span>
+                                <span class="text-muted" style="font-size: 0.72rem;">{{ item.taxa_qualidade_ia }}% IA</span>
                             </div>
                         </div>
                     </td>
 
                     <!-- Ações -->
                     <td class="text-end pe-3">
-                        <div class="btn-group">
-                            <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" onclick="abrirDrawer360('{{ item.obj.id }}')">
+                        <div class="d-inline-flex gap-1.5">
+                            <button class="btn btn-action-360 d-inline-flex align-items-center gap-1" onclick="abrirDrawer360('{{ item.obj.id }}')">
                                 <i class="bi bi-eye"></i> 360º
                             </button>
                             {% if item.motorista_telefone %}
                             <a href="https://wa.me/55{{ item.motorista_telefone|cut:' '|cut:'-'|cut:'('|cut:')' }}?text=Ol%C3%A1%20{{ item.motorista_nome|urlencode }}%2C%20aqui%20%C3%A9%20do%20monitoramento%20da%20{{ item.filial_nome|urlencode }}.%20Como%20est%C3%A1%20sua%20rota%20no%20manifesto%20%23{{ item.obj.numero_manifesto }}%3F" 
-                               target="_blank" class="btn btn-sm btn-outline-success" title="Chamar no WhatsApp">
+                               target="_blank" class="btn btn-action-zap" title="Falar no WhatsApp">
                                 <i class="bi bi-whatsapp"></i>
                             </a>
                             {% endif %}
@@ -402,7 +594,7 @@
                 <tr>
                     <td colspan="7" class="text-center py-5">
                         <i class="bi bi-check-circle text-success fs-1 mb-2 d-block"></i>
-                        <h6 class="text-muted mb-1">Nenhum manifesto ativo nesta filial no momento.</h6>
+                        <h6 class="text-muted mb-1 fw-bold">Nenhum manifesto ativo nesta filial no momento.</h6>
                         <small class="text-muted">Todos os motoristas concluíram suas rotas ou aguardam carregamento.</small>
                     </td>
                 </tr>
@@ -420,8 +612,8 @@
 <!-- PÓDIO DOS CAMPEÕES -->
 <div class="row g-3 mb-4">
     <div class="col-md-4">
-        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-top border-primary border-4 text-center">
-            <span class="badge bg-primary bg-opacity-10 text-primary mb-2 align-self-center px-3 py-1">
+        <div class="card border-0 shadow-sm p-3.5 bg-white h-100 border-top border-primary border-4 text-center rounded-3">
+            <span class="badge bg-primary bg-opacity-10 text-primary mb-2 align-self-center px-3 py-1.5" style="font-size: 0.75rem;">
                 <i class="bi bi-trophy-fill me-1"></i> MAIOR VOLUME DE ENTREGAS
             </span>
             <h4 class="fw-bold mb-1 text-primary">{{ benchmarking.campeao_entregas.nome }}</h4>
@@ -430,8 +622,8 @@
     </div>
 
     <div class="col-md-4">
-        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-top border-success border-4 text-center">
-            <span class="badge bg-success bg-opacity-10 text-success mb-2 align-self-center px-3 py-1">
+        <div class="card border-0 shadow-sm p-3.5 bg-white h-100 border-top border-success border-4 text-center rounded-3">
+            <span class="badge bg-success bg-opacity-10 text-success mb-2 align-self-center px-3 py-1.5" style="font-size: 0.75rem;">
                 <i class="bi bi-trophy-fill me-1"></i> MAIOR VOLUME DE COLETAS
             </span>
             <h4 class="fw-bold mb-1 text-success">{{ benchmarking.campeao_coletas.nome }}</h4>
@@ -440,8 +632,8 @@
     </div>
 
     <div class="col-md-4">
-        <div class="card border-0 shadow-sm p-3 bg-white h-100 border-top border-warning border-4 text-center">
-            <span class="badge bg-warning bg-opacity-25 text-dark mb-2 align-self-center px-3 py-1">
+        <div class="card border-0 shadow-sm p-3.5 bg-white h-100 border-top border-warning border-4 text-center rounded-3">
+            <span class="badge bg-warning bg-opacity-25 text-dark mb-2 align-self-center px-3 py-1.5" style="font-size: 0.75rem;">
                 <i class="bi bi-lightning-charge-fill me-1"></i> MAIOR EFICIÊNCIA OPERACIONAL
             </span>
             <h4 class="fw-bold mb-1 text-warning">{{ benchmarking.campeao_eficiencia.nome }}</h4>
@@ -451,13 +643,13 @@
 </div>
 
 <!-- TABELA COMPARATIVA DE FILIAIS -->
-<div class="card border-0 shadow-sm mb-4">
-    <div class="card-header bg-white py-3 border-0">
-        <h6 class="mb-0 fw-bold"><i class="bi bi-bar-chart-line me-2 text-primary"></i>Ranking Geral de Bases & Filiais</h6>
+<div class="cockpit-table-card mb-4">
+    <div class="p-3 bg-white border-bottom">
+        <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-bar-chart-line me-2 text-primary"></i>Ranking Geral de Bases & Filiais</h6>
     </div>
     <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-            <thead class="bg-light">
+        <table class="table cockpit-table align-middle mb-0">
+            <thead>
                 <tr>
                     <th class="ps-3">Posição</th>
                     <th>Filial</th>
@@ -474,17 +666,17 @@
                 <tr>
                     <td class="ps-3">
                         {% if forloop.counter == 1 %}
-                            <span class="badge bg-warning text-dark px-2 py-1"><i class="bi bi-award-fill me-1"></i>1º Lugar</span>
+                            <span class="badge bg-warning text-dark px-2.5 py-1" style="font-size: 0.78rem;"><i class="bi bi-award-fill me-1"></i>1º Lugar</span>
                         {% elif forloop.counter == 2 %}
-                            <span class="badge bg-secondary text-white px-2 py-1">2º Lugar</span>
+                            <span class="badge bg-secondary text-white px-2.5 py-1" style="font-size: 0.78rem;">2º Lugar</span>
                         {% elif forloop.counter == 3 %}
-                            <span class="badge bg-light text-dark border px-2 py-1">3º Lugar</span>
+                            <span class="badge bg-light text-dark border px-2.5 py-1" style="font-size: 0.78rem;">3º Lugar</span>
                         {% else %}
                             <span class="text-muted fw-bold ps-2">{{ forloop.counter }}º</span>
                         {% endif %}
                     </td>
                     <td>
-                        <strong class="text-dark">{{ f.nome }}</strong>
+                        <strong class="text-dark fs-6">{{ f.nome }}</strong>
                     </td>
                     <td>
                         <span class="badge bg-primary bg-opacity-10 text-primary">{{ f.ativos }} ativas</span>
@@ -500,11 +692,11 @@
                     </td>
                     <td>
                         <div class="d-flex align-items-center">
-                            <div class="progress flex-grow-1" style="height: 7px; border-radius: 5px;">
+                            <div class="progress flex-grow-1" style="height: 8px; border-radius: 6px; background: #e2e8f0;">
                                 <div class="progress-bar {% if f.taxa_eficiencia >= 80 %}bg-success{% elif f.taxa_eficiencia >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
                                      role="progressbar" style="width: {{ f.taxa_eficiencia }}%"></div>
                             </div>
-                            <span class="ms-2 small fw-bold">{{ f.taxa_eficiencia }}%</span>
+                            <span class="ms-2 small fw-bold text-dark">{{ f.taxa_eficiencia }}%</span>
                         </div>
                     </td>
                     <td>
@@ -536,17 +728,17 @@
 <!-- HALL DA FAMA VS RADAR DE ATENÇÃO -->
 <div class="row g-4 mb-4">
     <div class="col-md-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+        <div class="cockpit-table-card h-100">
+            <div class="p-3 bg-white border-bottom d-flex justify-content-between align-items-center">
                 <h6 class="mb-0 fw-bold text-success"><i class="bi bi-star-fill text-warning me-2"></i>Hall da Fama (Top 5 Motoristas)</h6>
-                <small class="text-muted">Melhor conformidade e ritmo</small>
+                <small class="text-muted">Maior conformidade e ritmo</small>
             </div>
             <div class="card-body p-0">
                 <ul class="list-group list-group-flush">
                     {% for m in benchmarking.hall_da_fama %}
                     <li class="list-group-item d-flex justify-content-between align-items-center py-3">
                         <div class="d-flex align-items-center gap-2">
-                            <span class="badge bg-warning text-dark rounded-circle" style="width:26px; height:26px; line-height:18px;">{{ forloop.counter }}</span>
+                            <span class="badge bg-warning text-dark rounded-circle" style="width:28px; height:28px; line-height:20px;">{{ forloop.counter }}</span>
                             <div>
                                 <span class="fw-bold text-dark d-block">{{ m.motorista_nome }}</span>
                                 <small class="text-muted">{{ m.filial_nome }} • Placa: {{ m.placa }}</small>
@@ -554,7 +746,7 @@
                         </div>
                         <div class="text-end">
                             <span class="badge bg-success rounded-pill fs-6">{{ m.score }}/100</span>
-                            <small class="text-muted d-block" style="font-size:0.7rem;">{{ m.ritmo_entregas_hora }} n/h • {{ m.progresso }}%</small>
+                            <small class="text-muted d-block" style="font-size:0.72rem;">{{ m.ritmo_entregas_hora }} n/h • {{ m.progresso }}%</small>
                         </div>
                     </li>
                     {% empty %}
@@ -566,8 +758,8 @@
     </div>
 
     <div class="col-md-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+        <div class="cockpit-table-card h-100">
+            <div class="p-3 bg-white border-bottom d-flex justify-content-between align-items-center">
                 <h6 class="mb-0 fw-bold text-danger"><i class="bi bi-shield-exclamation me-2"></i>Radar de Atenção (Apoio Necessário)</h6>
                 <small class="text-muted">Atrasos, fotos ilegíveis ou sem sinal</small>
             </div>
@@ -576,7 +768,7 @@
                     {% for m in benchmarking.radar_atencao %}
                     <li class="list-group-item d-flex justify-content-between align-items-center py-3">
                         <div class="d-flex align-items-center gap-2">
-                            <span class="badge bg-danger bg-opacity-25 text-danger rounded-circle" style="width:26px; height:26px; line-height:18px;">{{ forloop.counter }}</span>
+                            <span class="badge bg-danger bg-opacity-25 text-danger rounded-circle" style="width:28px; height:28px; line-height:20px;">{{ forloop.counter }}</span>
                             <div>
                                 <span class="fw-bold text-dark d-block">{{ m.motorista_nome }}</span>
                                 <small class="text-danger">{{ m.status_texto }} • {{ m.notas_pendentes }} pendentes</small>
@@ -584,7 +776,7 @@
                         </div>
                         <div class="text-end">
                             <span class="badge bg-danger rounded-pill">{{ m.score }}/100</span>
-                            <button class="btn btn-xs btn-outline-danger mt-1 d-block ms-auto" onclick="abrirDrawer360('{{ m.obj.id }}')">
+                            <button class="btn btn-sm btn-outline-danger mt-1 d-block ms-auto" onclick="abrirDrawer360('{{ m.obj.id }}')">
                                 Inspecionar
                             </button>
                         </div>
@@ -607,17 +799,17 @@
 {% if active_tab == 'penalidades' %}
 <div class="row g-4 mb-4">
     <div class="col-md-8">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+        <div class="cockpit-table-card">
+            <div class="p-3 bg-white border-bottom d-flex justify-content-between align-items-center">
                 <div>
                     <h6 class="mb-0 fw-bold text-danger"><i class="bi bi-clipboard-x me-2"></i>Histórico de Penalidades Aplicadas (SAC)</h6>
                     <small class="text-muted">Baixas efetuadas pela central classificadas como Desleixo do Motorista</small>
                 </div>
-                <span class="badge bg-danger rounded-pill">{{ total_penalidades }} registro(s)</span>
+                <span class="badge bg-danger rounded-pill px-3 py-1.5">{{ total_penalidades }} registro(s)</span>
             </div>
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="bg-light">
+                <table class="table cockpit-table align-middle mb-0">
+                    <thead>
                         <tr>
                             <th class="ps-3">Nota / Manifesto</th>
                             <th>Motorista Penalizado</th>
@@ -630,11 +822,11 @@
                         {% for b in ultimas_penalidades %}
                         <tr>
                             <td class="ps-3">
-                                <span class="fw-bold">NF #{{ b.nota_fiscal.numero_nota }}</span>
+                                <span class="fw-bold text-dark">NF #{{ b.nota_fiscal.numero_nota }}</span>
                                 <small class="text-muted d-block">Mft: #{{ b.nota_fiscal.manifesto.numero_manifesto }}</small>
                             </td>
                             <td>
-                                <strong>{{ b.nota_fiscal.manifesto.motorista.nome_completo|default:"Motorista Não Identificado" }}</strong>
+                                <strong class="text-dark">{{ b.nota_fiscal.manifesto.motorista.nome_completo|default:"Motorista Não Identificado" }}</strong>
                                 <small class="text-muted d-block">{{ b.nota_fiscal.manifesto.filial.nome }}</small>
                             </td>
                             <td>
@@ -642,7 +834,7 @@
                                     {{ b.ocorrencia.descricao|default:"Desleixo" }}
                                 </span>
                                 {% if b.observacao %}
-                                    <small class="text-muted d-block text-truncate" style="max-width:200px;" title="{{ b.observacao }}">{{ b.observacao }}</small>
+                                    <small class="text-muted d-block text-truncate" style="max-width:220px;" title="{{ b.observacao }}">{{ b.observacao }}</small>
                                 {% endif %}
                             </td>
                             <td>
@@ -668,8 +860,8 @@
 
     <div class="col-md-4">
         <!-- RANKING DE REINCIDÊNCIA -->
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-white py-3 border-0">
+        <div class="cockpit-table-card mb-4">
+            <div class="p-3 bg-white border-bottom">
                 <h6 class="mb-0 fw-bold text-warning"><i class="bi bi-exclamation-octagon me-2"></i>Ranking de Reincidência (Top 5)</h6>
             </div>
             <div class="card-body p-0">
@@ -677,7 +869,7 @@
                     {% for m in top_penalidades %}
                     <li class="list-group-item d-flex justify-content-between align-items-center py-3">
                         <span class="fw-bold text-dark">{{ m.nota_fiscal__manifesto__motorista__nome_completo|default:"Não Identificado" }}</span>
-                        <span class="badge bg-danger rounded-pill">{{ m.total }} penalidade(s)</span>
+                        <span class="badge bg-danger rounded-pill px-2.5 py-1">{{ m.total }} penalidade(s)</span>
                     </li>
                     {% empty %}
                     <li class="list-group-item text-center py-4 text-muted">Sem registros reincidentes.</li>
@@ -686,9 +878,9 @@
             </div>
         </div>
 
-        <div class="card border-0 shadow-sm bg-primary bg-opacity-10 border-primary border-opacity-25 p-3">
+        <div class="card border-0 shadow-sm bg-primary bg-opacity-10 border-primary border-opacity-25 p-3.5 rounded-3">
             <h6 class="fw-bold text-primary mb-2"><i class="bi bi-info-circle me-1"></i>Política de Penalização</h6>
-            <p class="small text-primary mb-0">
+            <p class="small text-primary mb-0" style="line-height: 1.5;">
                 Baixas realizadas pelo SAC como "Desleixo do Motorista" impactam o Score de Conformidade e são contabilizadas para desconto do prêmio de produtividade conforme política interna da diretoria.
             </p>
         </div>
@@ -705,7 +897,7 @@
             <h5 class="offcanvas-title fw-bold" id="drawerLabel">
                 <i class="bi bi-cpu text-info me-2"></i>Ficha Técnica 360º
             </h5>
-            <small class="text-slate-300">Auditoria aprofundada de viagem e telemetria</small>
+            <small class="text-light opacity-75">Auditoria aprofundada de viagem e telemetria</small>
         </div>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
@@ -724,14 +916,14 @@
                 <div class="d-flex align-items-center justify-content-between">
                     <div>
                         <h5 class="fw-bold mb-0 text-dark" id="drawerMotoristaNome">--</h5>
-                        <div class="d-flex align-items-center gap-1 mt-1">
+                        <div class="d-flex align-items-center gap-1.5 mt-1">
                             <span class="badge bg-primary" id="drawerManifestoNum">#--</span>
                             <span class="badge bg-dark bg-opacity-10 text-dark border" id="drawerFilialNome">--</span>
                             <span class="badge bg-secondary" id="drawerPlaca">--</span>
                             <span class="badge bg-light text-dark border" id="drawerCategoria">--</span>
                         </div>
                     </div>
-                    <a id="drawerWhatsappBtn" href="#" target="_blank" class="btn btn-success btn-sm d-inline-flex align-items-center gap-1">
+                    <a id="drawerWhatsappBtn" href="#" target="_blank" class="btn btn-success btn-sm d-inline-flex align-items-center gap-1 shadow-sm">
                         <i class="bi bi-whatsapp"></i> Contato
                     </a>
                 </div>
@@ -741,29 +933,29 @@
             <div class="p-3 border-bottom bg-white">
                 <div class="row text-center g-2">
                     <div class="col-4 border-end">
-                        <small class="text-muted d-block" style="font-size: 0.75rem;">Bateria</small>
+                        <small class="text-muted d-block" style="font-size: 0.72rem;">Bateria</small>
                         <strong class="fs-6 text-dark" id="drawerBateriaVal">--%</strong>
                     </div>
                     <div class="col-4 border-end">
-                        <small class="text-muted d-block" style="font-size: 0.75rem;">Rede</small>
+                        <small class="text-muted d-block" style="font-size: 0.72rem;">Rede</small>
                         <strong class="fs-6 text-dark" id="drawerRedeVal">--</strong>
                     </div>
                     <div class="col-4">
-                        <small class="text-muted d-block" style="font-size: 0.75rem;">Último Sinal</small>
+                        <small class="text-muted d-block" style="font-size: 0.72rem;">Último Sinal</small>
                         <strong class="fs-6 text-dark" id="drawerSinalVal">--</strong>
                     </div>
                 </div>
                 <div class="row text-center g-2 mt-2 pt-2 border-top">
                     <div class="col-4 border-end">
-                        <small class="text-muted d-block" style="font-size: 0.75rem;">Cadência</small>
+                        <small class="text-muted d-block" style="font-size: 0.72rem;">Cadência</small>
                         <strong class="fs-6 text-info" id="drawerRitmoVal">-- n/h</strong>
                     </div>
                     <div class="col-4 border-end">
-                        <small class="text-muted d-block" style="font-size: 0.75rem;">Previsão Término</small>
+                        <small class="text-muted d-block" style="font-size: 0.72rem;">Previsão Término</small>
                         <strong class="fs-6 text-primary" id="drawerEtaVal">--:--</strong>
                     </div>
                     <div class="col-4">
-                        <small class="text-muted d-block" style="font-size: 0.75rem;">Score Conformidade</small>
+                        <small class="text-muted d-block" style="font-size: 0.72rem;">Score Conformidade</small>
                         <strong class="fs-6 text-success" id="drawerScoreVal">--/100</strong>
                     </div>
                 </div>
