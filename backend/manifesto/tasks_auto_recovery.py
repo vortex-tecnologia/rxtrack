@@ -95,8 +95,14 @@ def auto_finalizar_manifestos_concluidos_task():
                 except Exception as t_err:
                     print(f"⚠️ [SENTINELA] Erro no tenant '{tenant.schema_name}': {t_err}")
             return
-    except Exception:
-        pass
+    except Exception as e_ten:
+        print(f"⚠️ [SENTINELA] Aviso tenants: {e_ten}")
+
+    # Fallback para schema public caso não utilize multi-tenancy ou tenants estejam vazios
+    try:
+        _varrer_e_finalizar_manifestos_tenant('public')
+    except Exception as e_pub:
+        print(f"⚠️ [SENTINELA] Erro schema public: {e_pub}")
 
 
 def _varrer_e_finalizar_manifestos_tenant(schema_name=None):

@@ -117,7 +117,7 @@ function conectarWebSocket() {
                     }
                 }
 
-                if (d.remover) {
+                if (d.remover || d.status === 'FINALIZADO') {
                     const card = document.getElementById(`card-mft-${mID}`);
                     if (card && !card.dataset.removendo) {
                         card.dataset.removendo = 'true';

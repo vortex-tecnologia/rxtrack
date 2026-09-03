@@ -57,6 +57,23 @@ def painel_monitoramento(request):
         total_ilegivel=Count('notas_fiscais__baixa_info', filter=Q(notas_fiscais__baixa_info__solicitar_nova_foto=True), distinct=True)
     ).order_by('status', 'filial', 'motorista__user__first_name')
 
+    # 4.1 Auto-finalização proativa no Backend:
+    # Se qualquer manifesto na grade ativa estiver com 100% das notas concluídas e nenhum canhoto ilegível pendente,
+    # o backend finaliza o manifesto de forma autônoma e o remove da grade ativa da torre de controle,
+    # sem depender de ação do motorista ou da versão do PWA.
+    manifestos_ativos = []
+    for m in manifestos:
+        if m.total_nfe > 0 and m.baixadas >= m.total_nfe and m.total_ilegivel == 0:
+            try:
+                from manifesto.services import tentar_autofinalizar_manifesto
+                sucesso, _ = tentar_autofinalizar_manifesto(m)
+                if sucesso:
+                    continue  # Foi finalizado com sucesso! Sai da grade de viagens ativas
+            except Exception:
+                pass
+        manifestos_ativos.append(m)
+    manifestos = manifestos_ativos
+
     context = {
         'manifestos': manifestos,
         'filiais': filiais_data,

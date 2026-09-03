@@ -376,17 +376,41 @@ class RegistrarBaixaView(APIView):
                     else:
                         msg_log = "Baixa salva localmente (TMS desligado nas configurações)."
 
-                # 🏁 Se a baixa não requer IA (coletas, ocorrências sem foto, retidas, etc.), dispara a auto-finalização
+                # 🏁 Auto-finalização resiliente no Backend (independente de versão do app/PWA do motorista):
+                # Se o manifesto atingiu 100% de notas concluídas, o backend finaliza automaticamente!
                 try:
                     manifesto_alvo = manifesto or (nf.manifesto if nf else None)
-                    if not is_analise_ia_necessaria and manifesto_alvo:
+                    if manifesto_alvo:
+                        total_mft = manifesto_alvo.notas_fiscais.count()
+                        pendentes_mft = manifesto_alvo.notas_fiscais.filter(status='PENDENTE').exclude(id=nf.id).count()
+                        
                         from manifesto.tasks import verificar_autofinalizacao_manifesto_task
                         from django.db import connection
-                        verificar_autofinalizacao_manifesto_task.apply_async(
-                            args=[manifesto_alvo.id],
-                            kwargs={'schema_name': getattr(connection, 'schema_name', None)},
-                            countdown=3
-                        )
+                        schema_atual = getattr(connection, 'schema_name', None)
+
+                        if total_mft > 0 and pendentes_mft == 0:
+                            # 100% das notas concluídas!
+                            if not is_analise_ia_necessaria:
+                                from manifesto.services import tentar_autofinalizar_manifesto
+                                tentar_autofinalizar_manifesto(manifesto_alvo)
+                            else:
+                                # Se precisa de IA na foto da última nota, agenda verificações resilientes
+                                verificar_autofinalizacao_manifesto_task.apply_async(
+                                    args=[manifesto_alvo.id],
+                                    kwargs={'schema_name': schema_atual},
+                                    countdown=4
+                                )
+                                verificar_autofinalizacao_manifesto_task.apply_async(
+                                    args=[manifesto_alvo.id],
+                                    kwargs={'schema_name': schema_atual},
+                                    countdown=25
+                                )
+                        elif not is_analise_ia_necessaria:
+                            verificar_autofinalizacao_manifesto_task.apply_async(
+                                args=[manifesto_alvo.id],
+                                kwargs={'schema_name': schema_atual},
+                                countdown=5
+                            )
                 except Exception as auto_err:
                     print(f"Aviso: Erro ao agendar auto-finalizacao na baixa: {auto_err}")
                 

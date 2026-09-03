@@ -73,7 +73,7 @@ def enviar_painel(manifesto):
             "motorista_categoria_display": manifesto.motorista.get_categoria_display() if (manifesto.motorista and hasattr(manifesto.motorista, 'get_categoria_display')) else "Empresa",
             "foto_motorista": manifesto.motorista.foto_perfil.url if (manifesto.motorista and manifesto.motorista.foto_perfil) else None,
             "icone_dispositivo": manifesto.motorista.icone_dispositivo_html if manifesto.motorista else "",
-            "remover": remover,
+            "remover": remover or (manifesto.status == 'FINALIZADO') or bool(manifesto.finalizado),
             "total": total_notas, 
             "data_registro": data_registro,
             "data_criacao_iso": manifesto.data_criacao.isoformat() if manifesto.data_criacao else None,
@@ -305,9 +305,9 @@ def tentar_autofinalizar_manifesto(manifesto_ou_id, km_final=None):
         logger.info(f"🏁 [AUTO-FINALIZAÇÃO] Manifesto #{manifesto.numero_manifesto} (ID: {manifesto.id}) FINALIZADO com sucesso pelo backend!")
         print(f"🏁 [AUTO-FINALIZAÇÃO] Manifesto #{manifesto.numero_manifesto} (ID: {manifesto.id}) FINALIZADO com sucesso pelo backend!")
 
-        # Notifica a Torre de Controle via WebSocket
+        # Notifica a Torre de Controle via WebSocket para remover o card da grade ativa
         try:
-            enviar_painel(manifesto_atualizado)
+            enviar_painel(manifesto_atualizado, remover=True)
         except Exception as p_err:
             logger.error(f"Erro ao enviar painel na auto-finalização do manifesto #{manifesto.id}: {p_err}")
 
