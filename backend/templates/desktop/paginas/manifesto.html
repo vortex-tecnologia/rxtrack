@@ -1015,14 +1015,25 @@
                     return res.json();
                 })
                 .then(data => {
-                    let pontosParaRota = [`${lngFilial},${latFilial}`];
+                    const coordValidaBrasil = (lat, lng) => {
+                        if (!lat || !lng) return false;
+                        const nLat = parseFloat(lat);
+                        const nLng = parseFloat(lng);
+                        if (isNaN(nLat) || isNaN(nLng)) return false;
+                        if (nLat === 0 && nLng === 0) return false;
+                        return (nLat >= -34.0 && nLat <= 5.5 && nLng >= -74.0 && nLng <= -34.0);
+                    };
 
-                    L.marker([latFilial, lngFilial]).bindPopup("<b>Filial RDexpresso</b>").addTo(mapaEntregaBaixas);
+                    let pontosParaRota = [];
+                    if (coordValidaBrasil(latFilial, lngFilial)) {
+                        pontosParaRota.push(`${lngFilial},${latFilial}`);
+                        L.marker([latFilial, lngFilial]).bindPopup("<b>Filial RDexpresso</b>").addTo(mapaEntregaBaixas);
+                    }
 
                     if (data.pontos && data.pontos.length > 0) {
                         data.pontos.forEach((ponto, index) => {
-                            if (!ponto.lat || !ponto.lng || Math.abs(ponto.lat) < 0.5 || Math.abs(ponto.lng) < 0.5 || ponto.lng >= -30) {
-                                return; // Ignora coordenadas zeradas ou fora do Brasil
+                            if (!coordValidaBrasil(ponto.lat, ponto.lng)) {
+                                return; // Ignora coordenadas zeradas ou fora do território nacional
                             }
                             const latLng = [ponto.lat, ponto.lng];
                             pontosParaRota.push(`${ponto.lng},${ponto.lat}`);
@@ -1040,10 +1051,13 @@
                                 .addTo(mapaEntregaBaixas);
                         });
 
-                        const latLngsFallback = [[latFilial, lngFilial]];
+                        const latLngsFallback = [];
+                        if (coordValidaBrasil(latFilial, lngFilial)) {
+                            latLngsFallback.push([latFilial, lngFilial]);
+                        }
                         if (data.pontos && data.pontos.length > 0) {
                             data.pontos.forEach(p => {
-                                if (p.lat && p.lng && Math.abs(p.lat) > 0.5 && Math.abs(p.lng) > 0.5 && p.lng < -30) {
+                                if (coordValidaBrasil(p.lat, p.lng)) {
                                     latLngsFallback.push([p.lat, p.lng]);
                                 }
                             });

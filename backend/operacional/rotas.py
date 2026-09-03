@@ -193,6 +193,25 @@ from django.shortcuts import get_object_or_404
 from manifesto.models import Manifesto, NotaFiscal
 
 
+def coordenadas_validas_brasil(lat, lng):
+    """
+    Valida se as coordenadas pertencem ao território brasileiro:
+    - Latitude: entre -34.0 (extremo Sul - RS) e +5.5 (extremo Norte - RR/AP)
+    - Longitude: entre -74.0 (Acre) e -34.0 (Paraíba / Costa Leste)
+    - Rejeita (0,0 - Null Island) e qualquer ponto fora do Brasil
+    """
+    if lat is None or lng is None:
+        return False
+    try:
+        n_lat = float(lat)
+        n_lng = float(lng)
+        if n_lat == 0.0 and n_lng == 0.0:
+            return False
+        return -34.0 <= n_lat <= 5.5 and -74.0 <= n_lng <= -34.0
+    except (ValueError, TypeError):
+        return False
+
+
 def api_rastreio_manifesto(request, manifesto_id):
     # Busca o manifesto pelo número operacional (ex: 58134)
     manifesto = get_object_or_404(
@@ -214,22 +233,18 @@ def api_rastreio_manifesto(request, manifesto_id):
         baixa = nota.baixa_info.first() 
         
         if baixa and baixa.latitude is not None and baixa.longitude is not None:
-            try:
-                lat = float(baixa.latitude)
-                lng = float(baixa.longitude)
-                # Filtra coordenadas inválidas ou zeradas (0,0 - Null Island no Oceano Atlântico)
-                # Coordenadas válidas no Brasil ficam entre Lat -35 e +6, Long -75 e -30
-                if abs(lat) > 0.5 and abs(lng) > 0.5 and lng < -30:
-                    pontos.append({
-                        'nota': nota.numero_nota,
-                        'status': nota.status,
-                        'lat': lat,
-                        'lng': lng,
-                        'horario': localtime(baixa.data_baixa).strftime('%H:%M'),
-                        'tipo': baixa.get_tipo_display()
-                    })
-            except (ValueError, TypeError):
-                pass
+            lat = baixa.latitude
+            lng = baixa.longitude
+            # Valida qualquer estado do Brasil e rejeita (0,0) ou fora do país
+            if coordenadas_validas_brasil(lat, lng):
+                pontos.append({
+                    'nota': nota.numero_nota,
+                    'status': nota.status,
+                    'lat': float(lat),
+                    'lng': float(lng),
+                    'horario': localtime(baixa.data_baixa).strftime('%H:%M'),
+                    'tipo': baixa.get_tipo_display()
+                })
 
     # Ordenar os pontos pelo horário da baixa para o rastro fazer sentido
     pontos = sorted(pontos, key=lambda x: x['horario'])
@@ -262,19 +277,14 @@ def api_rastreio_manifesto(request, manifesto_id):
     # Posição atual do veículo (enviada pelo GPS nativo Java)
     posicao_atual = None
     if manifesto.ultima_lat and manifesto.ultima_lng:
-        try:
-            pos_lat = float(manifesto.ultima_lat)
-            pos_lng = float(manifesto.ultima_lng)
-            if abs(pos_lat) > 0.5 and abs(pos_lng) > 0.5 and pos_lng < -30:
-                posicao_atual = {
-                    'lat': pos_lat,
-                    'lng': pos_lng,
-                    'battery': manifesto.ultima_bateria,
-                    'network': manifesto.ultima_rede,
-                    'last_seen': localtime(manifesto.ultimo_acesso).strftime('%H:%M') if manifesto.ultimo_acesso else None
-                }
-        except (ValueError, TypeError):
-            pass
+        if coordenadas_validas_brasil(manifesto.ultima_lat, manifesto.ultima_lng):
+            posicao_atual = {
+                'lat': float(manifesto.ultima_lat),
+                'lng': float(manifesto.ultima_lng),
+                'battery': manifesto.ultima_bateria,
+                'network': manifesto.ultima_rede,
+                'last_seen': localtime(manifesto.ultimo_acesso).strftime('%H:%M') if manifesto.ultimo_acesso else None
+            }
 
     # DEBUG TEMPORÁRIO — remover depois de validar
     fo = manifesto.filial_operacao

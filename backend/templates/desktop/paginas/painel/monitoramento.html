@@ -712,18 +712,29 @@
                         const lngFilial = data.filial ? data.filial.lng : -43.2886202;
                         const nomeFilial = data.filial ? data.filial.nome : 'Base';
 
+                        const coordValidaBrasil = (lat, lng) => {
+                            if (!lat || !lng) return false;
+                            const nLat = parseFloat(lat);
+                            const nLng = parseFloat(lng);
+                            if (isNaN(nLat) || isNaN(nLng)) return false;
+                            if (nLat === 0 && nLng === 0) return false;
+                            return (nLat >= -34.0 && nLat <= 5.5 && nLng >= -74.0 && nLng <= -34.0);
+                        };
+
                         // Centraliza o mapa na filial correta
                         mapaEntrega.setView([latFilial, lngFilial], 13);
 
-                        let pontosParaRota = [`${lngFilial},${latFilial}`];
-
-                        L.marker([latFilial, lngFilial]).bindPopup(`<b>${nomeFilial}</b>`).addTo(mapaEntrega);
+                        let pontosParaRota = [];
+                        if (coordValidaBrasil(latFilial, lngFilial)) {
+                            pontosParaRota.push(`${lngFilial},${latFilial}`);
+                            L.marker([latFilial, lngFilial]).bindPopup(`<b>${nomeFilial}</b>`).addTo(mapaEntrega);
+                        }
 
                         // Plotar pontos de entrega (notas baixadas)
                         if (data.pontos && data.pontos.length > 0) {
                             data.pontos.forEach((ponto) => {
-                                if (!ponto.lat || !ponto.lng || Math.abs(ponto.lat) < 0.5 || Math.abs(ponto.lng) < 0.5 || ponto.lng >= -30) {
-                                    return; // Ignora coordenadas zeradas ou fora do Brasil
+                                if (!coordValidaBrasil(ponto.lat, ponto.lng)) {
+                                    return; // Ignora coordenadas zeradas ou fora do território nacional
                                 }
                                 const latLng = [ponto.lat, ponto.lng];
                                 pontosParaRota.push(`${ponto.lng},${ponto.lat}`);
@@ -737,7 +748,7 @@
                         }
 
                         // POSIÇÃO ATUAL DO CAMINHÃO (GPS Nativo Java)
-                        if (data.posicao_atual && Math.abs(data.posicao_atual.lat) > 0.5 && Math.abs(data.posicao_atual.lng) > 0.5 && data.posicao_atual.lng < -30) {
+                        if (data.posicao_atual && coordValidaBrasil(data.posicao_atual.lat, data.posicao_atual.lng)) {
                             const pos = data.posicao_atual;
                             const caminhaoLatLng = [pos.lat, pos.lng];
                             pontosParaRota.push(`${pos.lng},${pos.lat}`);
@@ -762,17 +773,17 @@
                         // Desenhar rota (se houver pontos suficientes)
                         if (pontosParaRota.length > 1) {
                             const latLngsFallback = [];
-                            if (data.filial && data.filial.lat && data.filial.lng && Math.abs(data.filial.lat) > 0.5 && data.filial.lng < -30) {
-                                latLngsFallback.push([data.filial.lat, data.filial.lng]);
+                            if (coordValidaBrasil(latFilial, lngFilial)) {
+                                latLngsFallback.push([latFilial, lngFilial]);
                             }
                             if (data.pontos && data.pontos.length > 0) {
                                 data.pontos.forEach(p => {
-                                    if (p.lat && p.lng && Math.abs(p.lat) > 0.5 && Math.abs(p.lng) > 0.5 && p.lng < -30) {
+                                    if (coordValidaBrasil(p.lat, p.lng)) {
                                         latLngsFallback.push([p.lat, p.lng]);
                                     }
                                 });
                             }
-                            if (data.posicao_atual && Math.abs(data.posicao_atual.lat) > 0.5 && data.posicao_atual.lng < -30) {
+                            if (data.posicao_atual && coordValidaBrasil(data.posicao_atual.lat, data.posicao_atual.lng)) {
                                 latLngsFallback.push([data.posicao_atual.lat, data.posicao_atual.lng]);
                             }
 
