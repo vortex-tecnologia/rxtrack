@@ -213,15 +213,23 @@ def api_rastreio_manifesto(request, manifesto_id):
         # pegamos o primeiro registro de baixa associado a essa nota
         baixa = nota.baixa_info.first() 
         
-        if baixa:
-            pontos.append({
-                'nota': nota.numero_nota,
-                'status': nota.status,
-                'lat': float(baixa.latitude),
-                'lng': float(baixa.longitude),
-                'horario': localtime(baixa.data_baixa).strftime('%H:%M'),
-                'tipo': baixa.get_tipo_display()
-            })
+        if baixa and baixa.latitude is not None and baixa.longitude is not None:
+            try:
+                lat = float(baixa.latitude)
+                lng = float(baixa.longitude)
+                # Filtra coordenadas inválidas ou zeradas (0,0 - Null Island no Oceano Atlântico)
+                # Coordenadas válidas no Brasil ficam entre Lat -35 e +6, Long -75 e -30
+                if abs(lat) > 0.5 and abs(lng) > 0.5 and lng < -30:
+                    pontos.append({
+                        'nota': nota.numero_nota,
+                        'status': nota.status,
+                        'lat': lat,
+                        'lng': lng,
+                        'horario': localtime(baixa.data_baixa).strftime('%H:%M'),
+                        'tipo': baixa.get_tipo_display()
+                    })
+            except (ValueError, TypeError):
+                pass
 
     # Ordenar os pontos pelo horário da baixa para o rastro fazer sentido
     pontos = sorted(pontos, key=lambda x: x['horario'])
@@ -254,13 +262,19 @@ def api_rastreio_manifesto(request, manifesto_id):
     # Posição atual do veículo (enviada pelo GPS nativo Java)
     posicao_atual = None
     if manifesto.ultima_lat and manifesto.ultima_lng:
-        posicao_atual = {
-            'lat': float(manifesto.ultima_lat),
-            'lng': float(manifesto.ultima_lng),
-            'battery': manifesto.ultima_bateria,
-            'network': manifesto.ultima_rede,
-            'last_seen': localtime(manifesto.ultimo_acesso).strftime('%H:%M') if manifesto.ultimo_acesso else None
-        }
+        try:
+            pos_lat = float(manifesto.ultima_lat)
+            pos_lng = float(manifesto.ultima_lng)
+            if abs(pos_lat) > 0.5 and abs(pos_lng) > 0.5 and pos_lng < -30:
+                posicao_atual = {
+                    'lat': pos_lat,
+                    'lng': pos_lng,
+                    'battery': manifesto.ultima_bateria,
+                    'network': manifesto.ultima_rede,
+                    'last_seen': localtime(manifesto.ultimo_acesso).strftime('%H:%M') if manifesto.ultimo_acesso else None
+                }
+        except (ValueError, TypeError):
+            pass
 
     # DEBUG TEMPORÁRIO — remover depois de validar
     fo = manifesto.filial_operacao

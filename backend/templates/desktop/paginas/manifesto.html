@@ -1021,6 +1021,9 @@
 
                     if (data.pontos && data.pontos.length > 0) {
                         data.pontos.forEach((ponto, index) => {
+                            if (!ponto.lat || !ponto.lng || Math.abs(ponto.lat) < 0.5 || Math.abs(ponto.lng) < 0.5 || ponto.lng >= -30) {
+                                return; // Ignora coordenadas zeradas ou fora do Brasil
+                            }
                             const latLng = [ponto.lat, ponto.lng];
                             pontosParaRota.push(`${ponto.lng},${ponto.lat}`);
 
@@ -1039,7 +1042,11 @@
 
                         const latLngsFallback = [[latFilial, lngFilial]];
                         if (data.pontos && data.pontos.length > 0) {
-                            data.pontos.forEach(p => latLngsFallback.push([p.lat, p.lng]));
+                            data.pontos.forEach(p => {
+                                if (p.lat && p.lng && Math.abs(p.lat) > 0.5 && Math.abs(p.lng) > 0.5 && p.lng < -30) {
+                                    latLngsFallback.push([p.lat, p.lng]);
+                                }
+                            });
                         }
 
                         const desenharFallback = () => {
