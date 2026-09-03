@@ -174,72 +174,132 @@ class DashboardView(TemplateView):
 
         notas_do_dia = NotaFiscal.objects.filter(manifesto__in=manifestos_do_dia)
 
-        # para filtrar as notas que pertencem aos manifestos ativos do dia
-        context['notas_em_transporte'] = NotaFiscal.objects.filter(
+        # Contagem e estatísticas avançadas
+        notas_em_transporte = NotaFiscal.objects.filter(
             status='PENDENTE',
-            manifesto__in=manifestos_do_dia, # Notas que pertencem aos manifestos do dia...
-            manifesto__status='EM_TRANSPORTE' # ...e que o manifesto esteja em transporte
+            manifesto__in=manifestos_do_dia,
+            manifesto__status='EM_TRANSPORTE'
         ).count()
-        context['mfts_ativos'] = manifestos_do_dia.filter(status='EM_TRANSPORTE').count()
-        context['total_notas'] = notas_do_dia.filter(status='BAIXADA').count()
-        context['notas_ocorrencia'] = notas_do_dia.filter(status='OCORRENCIA').count()
-        # Pega todas as notas em transporte junto com as que foram baixadas e com ocorrencias 
-        
+        mfts_ativos = manifestos_do_dia.filter(status='EM_TRANSPORTE').count()
+        total_notas = notas_do_dia.filter(status='BAIXADA').count()
+        notas_ocorrencia = notas_do_dia.filter(status='OCORRENCIA').count()
+        total_geral_notas = notas_do_dia.count()
+        total_concluidas = total_notas + notas_ocorrencia
 
+        taxa_sucesso = round((total_notas / total_concluidas * 100), 1) if total_concluidas > 0 else 100.0
+        progresso_geral = round((total_concluidas / total_geral_notas * 100), 1) if total_geral_notas > 0 else 0.0
+
+        # Divisão entregas vs coletas
+        coletas_totais = notas_do_dia.filter(tipo_operacao='COLETA').count()
+        coletas_concluidas = notas_do_dia.filter(tipo_operacao='COLETA', status='BAIXADA').count()
+        entregas_totais = notas_do_dia.exclude(tipo_operacao='COLETA').count()
+        entregas_concluidas = notas_do_dia.exclude(tipo_operacao='COLETA', status='BAIXADA').count()
+
+        context['notas_em_transporte'] = notas_em_transporte
+        context['mfts_ativos'] = mfts_ativos
+        context['total_notas'] = total_notas
+        context['notas_ocorrencia'] = notas_ocorrencia
+        context['total_geral_notas'] = total_geral_notas
+        context['taxa_sucesso'] = taxa_sucesso
+        context['progresso_geral'] = progresso_geral
+        context['coletas_totais'] = coletas_totais
+        context['coletas_concluidas'] = coletas_concluidas
+        context['entregas_totais'] = entregas_totais
+        context['entregas_concluidas'] = entregas_concluidas
 
         # --- 2. TOP PERFORMANCE (MOTORISTAS REAIS) ---
-        # Pegamos motoristas que tiveram notas baixadas hoje
         top_motoristas = (
             Motorista.objects.filter(manifestos__in=manifestos_do_dia)
             .annotate(
                 total=Count('manifestos__notas_fiscais'),
                 entregues=Count('manifestos__notas_fiscais', filter=Q(manifestos__notas_fiscais__status__in=['BAIXADA', 'OCORRENCIA'])),
+                sucessos=Count('manifestos__notas_fiscais', filter=Q(manifestos__notas_fiscais__status='BAIXADA')),
             )
             .filter(total__gt=0)
-            .order_by('-entregues')[:5] # Top 5
+            .order_by('-entregues', '-sucessos')[:6]
         )
 
-        # Calculamos o percentual para cada um
-        for m in top_motoristas:
+        for i, m in enumerate(top_motoristas):
+            m.posicao = i + 1
             m.percentual = int((m.entregues / m.total) * 100) if m.total > 0 else 0
             m.ultimo_mft = m.manifestos.filter(data_criacao__range=(hoje_inicio, hoje_fim)).last()
+            ultima_baixa = BaixaNF.objects.filter(motorista=m, data_baixa__range=(hoje_inicio, hoje_fim)).order_by('-data_baixa').first()
+            if ultima_baixa:
+                m.ultima_baixa_hora = timezone.localtime(ultima_baixa.data_baixa).strftime('%H:%M')
+                minutos_atras = (agora_local - timezone.localtime(ultima_baixa.data_baixa)).total_seconds() / 60
+                m.ativo_recente = minutos_atras <= 45
+            else:
+                m.ultima_baixa_hora = None
+                m.ativo_recente = False
 
         context['top_motoristas'] = top_motoristas
 
-        # --- 3. DADOS DO GRÁFICO (ENTREGAS POR HORA) ---
-        # Agrupamos as baixas de hoje por hora
+        # --- 3. DADOS DO GRÁFICO (POR HORA E ACUMULADO) ---
         from collections import defaultdict
 
         baixas_hoje = BaixaNF.objects.filter(
             data_baixa__range=(hoje_inicio, hoje_fim)
         )
+        if filial_param and filial_param != 'todas':
+            baixas_hoje = baixas_hoje.filter(nota_fiscal__manifesto__filial_id=filial_param)
+        elif usuario_filial and not filial_param:
+            baixas_hoje = baixas_hoje.filter(nota_fiscal__manifesto__filial=usuario_filial)
 
         contador_por_hora = defaultdict(int)
-
         for baixa in baixas_hoje:
             hora_local = timezone.localtime(baixa.data_baixa).hour
             contador_por_hora[hora_local] += 1
 
         horas_labels = [f"{h:02d}:00" for h in range(8, 21)]
-
         acumulado = 0
-        valores_finais = []
+        valores_acumulados = []
+        valores_por_hora = []
+        pico_volume = 0
+        pico_hora = "12:00"
 
         for h in range(8, 21):
-            acumulado += contador_por_hora.get(h, 0)
-            valores_finais.append(acumulado)
+            vol = contador_por_hora.get(h, 0)
+            valores_por_hora.append(vol)
+            acumulado += vol
+            valores_acumulados.append(acumulado)
+            if vol > pico_volume:
+                pico_volume = vol
+                pico_hora = f"{h:02d}:00"
 
         context['grafico_labels'] = json.dumps(horas_labels)
-        context['grafico_valores'] = json.dumps(valores_finais)
-        
+        context['grafico_valores'] = json.dumps(valores_acumulados)
+        context['grafico_valores_hora'] = json.dumps(valores_por_hora)
+        context['pico_hora'] = pico_hora
+        context['pico_volume'] = pico_volume
+
+        # --- 4. LIVE FEED DE ÚLTIMAS BAIXAS (TEMPO REAL) ---
+        feed_baixas = (
+            baixas_hoje.select_related('nota_fiscal', 'motorista', 'ocorrencia')
+            .order_by('-data_baixa')[:6]
+        )
+        ultimas_atividades = []
+        for b in feed_baixas:
+            tipo_op = (b.nota_fiscal.tipo_operacao if b.nota_fiscal else 'ENTREGA') or 'ENTREGA'
+            is_sucesso = b.ocorrencia is None or (b.ocorrencia.codigo_tms in ['1', '01'])
+            ultimas_atividades.append({
+                'hora': timezone.localtime(b.data_baixa).strftime('%H:%M'),
+                'motorista_nome': b.motorista.nome_completo if b.motorista else 'Motorista',
+                'destinatario': (b.nota_fiscal.destinatario if b.nota_fiscal else 'Cliente')[:28],
+                'numero_nota': b.nota_fiscal.numero_nota if b.nota_fiscal else '--',
+                'tipo': tipo_op,
+                'is_sucesso': is_sucesso,
+                'status_desc': b.ocorrencia.descricao if b.ocorrencia else 'Concluído com Sucesso'
+            })
+        context['ultimas_atividades'] = ultimas_atividades
+
         context['titulo'] = "Painel de Controle Operacional"
         context['usuario_nome'] = self.request.user.get_full_name() or self.request.user.username
-        
+
         # Passar lista de filiais e filial ativa para o Dropdown no Frontend
         context['filiais'] = Filial.objects.all().order_by('nome')
         context['filial_selecionada'] = filial_param if filial_param else (str(usuario_filial.id) if usuario_filial else 'todas')
         context['sem_filial'] = sem_filial
-        
+
         return context
 
 

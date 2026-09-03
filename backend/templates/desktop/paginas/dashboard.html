@@ -6,40 +6,111 @@
 
 {% block content %}
 <style>
-    /* Estilo da bolinha de Live */
+/* =========================================================
+   ESTILOS HIGH-END / DESIGN SYSTEM DA DASHBOARD OPERACIONAL
+   ========================================================= */
+
+.card-kpi {
+    border-radius: 18px;
+    border: 1px solid rgba(226, 232, 240, 0.8) !important;
+    background: #ffffff;
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+.card-kpi:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 25px -4px rgba(0, 0, 0, 0.08);
+}
+.card-kpi::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    border-radius: 18px 18px 0 0;
+}
+.kpi-blue::before { background: linear-gradient(90deg, #2563eb, #60a5fa); }
+.kpi-slate::before { background: linear-gradient(90deg, #475569, #94a3b8); }
+.kpi-green::before { background: linear-gradient(90deg, #059669, #34d399); }
+.kpi-red::before { background: linear-gradient(90deg, #dc2626, #f87171); }
+
+.kpi-icon-wrapper {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+}
+
+/* Bolinha de Live Pulsante Vermelha */
 .live-dot {
-    width: 10px;
-    height: 10px;
-    background-color: #ff0000; /* Vermelho vivo */
+    width: 9px;
+    height: 9px;
+    background-color: #ef4444;
     border-radius: 50%;
     display: inline-block;
     margin-right: 8px;
     position: relative;
     vertical-align: middle;
 }
-
-/* Efeito de pulso */
 .live-dot::after {
     content: '';
     width: 100%;
     height: 100%;
-    background-color: #ff0000;
+    background-color: #ef4444;
     border-radius: 50%;
     position: absolute;
     top: 0;
     left: 0;
-    animation: pulse-live 1.5s infinite;
+    animation: pulse-live 1.6s infinite;
+}
+@keyframes pulse-live {
+    0% { transform: scale(1); opacity: 0.8; }
+    100% { transform: scale(2.8); opacity: 0; }
 }
 
-@keyframes pulse-live {
-    0% {
-        transform: scale(1);
-        opacity: 0.8;
-    }
-    100% {
-        transform: scale(2.5);
-        opacity: 0;
-    }
+/* Ponto verde pulsante para motoristas com atividade recente */
+.pulse-green {
+    width: 8px;
+    height: 8px;
+    background-color: #10b981;
+    border-radius: 50%;
+    display: inline-block;
+    position: relative;
+}
+.pulse-green::after {
+    content: '';
+    width: 100%;
+    height: 100%;
+    background-color: #10b981;
+    border-radius: 50%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    animation: pulse-green-anim 1.8s infinite;
+}
+@keyframes pulse-green-anim {
+    0% { transform: scale(1); opacity: 0.8; }
+    100% { transform: scale(2.6); opacity: 0; }
+}
+
+.driver-progress-bar {
+    height: 6px;
+    border-radius: 10px;
+    background-color: #f1f5f9;
+    overflow: hidden;
+}
+
+.feed-item {
+    transition: background-color 0.15s ease;
+}
+.feed-item:hover {
+    background-color: #f8fafc;
 }
 </style>
 
@@ -49,27 +120,27 @@
     <div class="col-12">
         <a href="{% url 'blog:lista' %}" class="text-decoration-none">
             <div class="card border-0 shadow-sm overflow-hidden" 
-                 style="background: linear-gradient(135deg, #ffffff 0%, #fff7ed 100%); border-left: 5px solid #ea580c !important; border-radius: 14px; transition: transform 0.2s ease, box-shadow 0.2s ease;"
-                 onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 8px 16px rgba(234,88,12,0.15)';"
+                 style="background: linear-gradient(135deg, #ffffff 0%, #fff7ed 100%); border-left: 5px solid #ea580c !important; border-radius: 16px; transition: transform 0.2s ease, box-shadow 0.2s ease;"
+                 onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 8px 18px rgba(234,88,12,0.12)';"
                  onmouseout="this.style.transform='none'; this.style.boxShadow='';">
                 <div class="card-body p-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
                     <div class="d-flex align-items-center gap-3">
-                        <div class="position-relative d-flex align-items-center justify-content-center" style="width: 52px; height: 52px; min-width: 52px;">
-                            <img src="{% static 'images/megafone_3d.png' %}" alt="Novidades" class="img-fluid" style="max-height: 48px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(234, 88, 12, 0.25));">
+                        <div class="position-relative d-flex align-items-center justify-content-center" style="width: 48px; height: 48px; min-width: 48px;">
+                            <img src="{% static 'images/megafone_3d.png' %}" alt="Novidades" class="img-fluid" style="max-height: 44px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(234, 88, 12, 0.25));">
                         </div>
                         <div>
                             <div class="d-flex align-items-center gap-2 mb-1">
-                                <span class="badge bg-warning text-dark fw-bold px-2 py-1" style="font-size: 0.75rem;">
+                                <span class="badge bg-warning text-dark fw-bold px-2 py-0" style="font-size: 0.72rem;">
                                     {{ ultima_novidade.versao }}
                                 </span>
-                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.7rem;">
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0" style="font-size: 0.7rem;">
                                     {{ ultima_novidade.categoria_display }}
                                 </span>
                                 <small class="text-muted" style="font-size: 0.75rem;">
                                     <i class="bi bi-clock me-1"></i>{{ ultima_novidade.data }}
                                 </small>
                             </div>
-                            <h6 class="mb-0 fw-bold text-dark text-truncate" style="max-width: 750px;">
+                            <h6 class="mb-0 fw-bold text-dark text-truncate" style="max-width: 780px; font-size: 0.95rem;">
                                 {{ ultima_novidade.titulo }} — <span class="text-muted fw-normal fs-6">{{ ultima_novidade.resumo }}</span>
                             </h6>
                         </div>
@@ -87,124 +158,307 @@
 </div>
 {% endif %}
 
-<div class="row mb-4">
-    <div class="col-12 d-flex justify-content-between align-items-center">
-        <h3 class="fw-bold">
-            Resumo da Operação 
-            <small class="text-muted fs-6">| Hoje, {{ "now"|date:"d/m/Y" }}</small>
-        </h3>
-        <div class="badge bg-dark-subtle text-dark p-2 border">
-            <i class="bi bi-arrow-clockwise me-1"></i> 
-            <span id="refresh-timer" class="fw-bold">3:00</span>
-        </div>
-    </div>
-</div>
-
-<div class="row g-4 mb-4 justify-content-center"> <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between px-md-1">
-                    <div>
-                        <h3 class="text-primary fw-bold">{{ mfts_ativos }}</h3>
-                        <p class="mb-0 text-muted">Manifestos Ativos</p>
-                    </div>
-                    <div class="align-self-center">
-                        <i class="bi bi-truck fs-1 text-primary opacity-50"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>    
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between px-md-1">
-                    <div>
-                        <h3 class="fw-bold">{{ notas_em_transporte }}</h3>
-                        <p class="mb-0 text-muted">Total de Notas</p>
-                    </div>
-                    <div class="align-self-center">
-                        <i class="bi bi-file-earmark-bar-graph fs-1 opacity-50"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between px-md-1">
-                    <div>
-                        <h3 class="text-success fw-bold">{{ total_notas }}</h3>
-                        <p class="mb-0 text-muted">Notas Entregues</p>
-                    </div>
-                    <div class="align-self-center">
-                        <i class="bi bi-check-all fs-1 text-success opacity-50"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between px-md-1">
-                    <div>
-                        <h3 class="text-danger fw-bold">{{ notas_ocorrencia }}</h3>
-                        <p class="mb-0 text-muted">Insucesso/Devolução</p>
-                    </div>
-                    <div class="align-self-center">
-                        <i class="bi bi-x-circle fs-1 text-danger opacity-50"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row g-4">
-   <div class="col-lg-8">
-    <div class="card border-0 shadow-sm p-4 h-100">
-        <h5 class="fw-bold mb-4">Fluxo de Entregas por Hora</h5>
-        <div style="position: relative; height: 300px; width: 100%;">
-            <canvas id="entregasChart"></canvas>
-        </div>
-    </div>
-</div>
-
-    <div class="col-lg-4">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white border-0 pt-4 px-4">
-                <h5 class="fw-bold">Motoristas ativos</h5>
-            </div>
-            <div class="card-body">
-                <div class="list-group list-group-flush">
-    {% for m in top_motoristas %}
-    <div class="list-group-item border-0 d-flex justify-content-between align-items-center px-0">
-        <div class="d-flex align-items-center">
-            <div class="rounded-circle bg-light p-2 me-3" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
-                {% if m.foto %} <img src="{{ m.foto.url }}" class="rounded-circle w-100 h-100"> {% else %} 👨‍✈️ {% endif %}
-            </div>
+<!-- CABEÇALHO DA DASHBOARD -->
+<div class="row mb-4 align-items-center">
+    <div class="col-lg-7">
+        <div class="d-flex align-items-center gap-3">
             <div>
-                <h6 class="mb-0 fw-bold small">{{ m.nome_completo }}</h6>
-                <small class="text-muted">Manifesto #{{ m.ultimo_mft.numero_manifesto|default:"--" }}</small>
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <h3 class="fw-bold mb-0 text-dark">Centro de Comando Operacional</h3>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill small">
+                        <span class="pulse-green me-1"></span> Operação Online
+                    </span>
+                </div>
+                <p class="text-muted small mb-0">
+                    <i class="bi bi-calendar3 me-1"></i> Hoje, {{ "now"|date:"d \d\e F \d\e Y" }} &bull; Visão executiva em tempo real da frota
+                </p>
             </div>
         </div>
-        <span class="badge {% if m.percentual > 90 %}bg-success-subtle text-success{% else %}bg-primary-subtle text-primary{% endif %}">
-            {{ m.percentual }}% Concluído
-        </span>
     </div>
-    {% empty %}
-    <div class="text-center py-3 text-muted">Sem atividade registrada hoje.</div>
-    {% endfor %}
+    <div class="col-lg-5 text-lg-end mt-3 mt-lg-0 d-flex align-items-center justify-content-lg-end gap-2">
+        <!-- Filtro de Filial -->
+        <div class="dropdown">
+            <button class="btn btn-white border shadow-xs rounded-pill px-3 py-2 dropdown-toggle small fw-semibold text-dark bg-white" type="button" data-bs-toggle="dropdown">
+                <i class="bi bi-geo-alt me-1 text-primary"></i>
+                {% if filial_selecionada == 'todas' %}
+                    Todas as Filiais
+                {% else %}
+                    {% for f in filiais %}{% if filial_selecionada == f.id|stringformat:"s" %}{{ f.nome }}{% endif %}{% endfor %}
+                {% endif %}
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 rounded-3">
+                <li><a class="dropdown-item small" href="?filial=todas">🌐 Todas as Filiais</a></li>
+                <li><hr class="dropdown-divider"></li>
+                {% for f in filiais %}
+                <li><a class="dropdown-item small" href="?filial={{ f.id }}">{{ f.nome }} ({{ f.uf|default:"-" }})</a></li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <!-- Timer / Refresh -->
+        <button class="btn btn-white border shadow-xs rounded-pill px-3 py-2 d-flex align-items-center gap-2 small text-muted bg-white" onclick="window.location.reload();" title="Recarregar dados agora">
+            <i class="bi bi-arrow-clockwise text-primary" id="refresh-icon"></i>
+            <span id="refresh-timer" class="fw-bold text-dark">3:00</span>
+        </button>
+    </div>
 </div>
-                <div class="mt-4">
-    <a href="{% url 'manifesto:painel_monitoramento' %}" class="btn btn-outline-dark btn-sm w-100 fw-bold d-flex align-items-center justify-content-center">
-        <span class="live-dot"></span> 
-        MONITORAMENTO AO VIVO
-    </a>
+
+<!-- CARDS DE KPIS DE ALTA PERFORMANCE -->
+<div class="row g-3 mb-4">
+    <!-- Card 1: Manifestos Ativos -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-kpi kpi-blue h-100 p-3">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <span class="text-muted small fw-semibold">Manifestos em Rota</span>
+                <div class="kpi-icon-wrapper bg-primary-subtle text-primary">
+                    <i class="bi bi-truck"></i>
+                </div>
+            </div>
+            <div class="d-flex align-items-baseline gap-2">
+                <h2 class="fw-bold text-dark mb-0 counter-value" data-target="{{ mfts_ativos }}">{{ mfts_ativos }}</h2>
+                <small class="text-muted">cargas na rua</small>
+            </div>
+            <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                <span class="small text-muted"><i class="bi bi-people me-1"></i>{{ top_motoristas|length }} motoristas</span>
+                <span class="badge bg-primary-subtle text-primary rounded-pill small">Ativos Hoje</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 2: Total de Cargas / Notas do Dia -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-kpi kpi-slate h-100 p-3">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <span class="text-muted small fw-semibold">Total de Cargas do Dia</span>
+                <div class="kpi-icon-wrapper bg-secondary-subtle text-secondary">
+                    <i class="bi bi-box-seam"></i>
+                </div>
+            </div>
+            <div class="d-flex align-items-baseline gap-2">
+                <h2 class="fw-bold text-dark mb-0 counter-value" data-target="{{ total_geral_notas }}">{{ total_geral_notas }}</h2>
+                <small class="text-muted">embarques totais</small>
+            </div>
+            <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                <span class="small text-muted">📦 {{ entregas_totais }} ent. &bull; 📥 {{ coletas_totais }} col.</span>
+                <span class="badge bg-secondary-subtle text-secondary rounded-pill small">{{ notas_em_transporte }} pend.</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 3: Entregas Concluídas (Sucesso) -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-kpi kpi-green h-100 p-3">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <span class="text-muted small fw-semibold">Notas Entregues (Sucesso)</span>
+                <div class="kpi-icon-wrapper bg-success-subtle text-success">
+                    <i class="bi bi-check2-circle"></i>
+                </div>
+            </div>
+            <div class="d-flex align-items-baseline gap-2">
+                <h2 class="fw-bold text-success mb-0 counter-value" data-target="{{ total_notas }}">{{ total_notas }}</h2>
+                <small class="text-muted">finalizadas</small>
+            </div>
+            <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                <span class="small text-success fw-bold"><i class="bi bi-graph-up-arrow me-1"></i>{{ taxa_sucesso }}% SLA</span>
+                <span class="badge bg-success-subtle text-success rounded-pill small">Taxa Sucesso</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 4: Insucessos / Ocorrências -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-kpi kpi-red h-100 p-3">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <span class="text-muted small fw-semibold">Insucessos / Devoluções</span>
+                <div class="kpi-icon-wrapper bg-danger-subtle text-danger">
+                    <i class="bi bi-exclamation-octagon"></i>
+                </div>
+            </div>
+            <div class="d-flex align-items-baseline gap-2">
+                <h2 class="fw-bold text-danger mb-0 counter-value" data-target="{{ notas_ocorrencia }}">{{ notas_ocorrencia }}</h2>
+                <small class="text-muted">com ocorrência</small>
+            </div>
+            <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                <span class="small text-muted">Atenção operacional</span>
+                <span class="badge bg-danger-subtle text-danger rounded-pill small">Ocorrências</span>
+            </div>
+        </div>
+    </div>
 </div>
+
+<!-- BARRA PANORÂMICA DE CONCLUSÃO DA OPERAÇÃO -->
+<div class="card border-0 shadow-sm rounded-4 mb-4 p-3 bg-white">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-primary px-2 py-1 rounded-pill small">Progresso Geral</span>
+            <span class="fw-bold text-dark small">Conclusão de Cargas da Frota Hoje</span>
+        </div>
+        <div class="small text-muted">
+            <strong class="text-dark">{{ total_notas|add:notas_ocorrencia }}</strong> de <strong>{{ total_geral_notas|default:0 }}</strong> notas finalizadas (<span class="text-primary fw-bold">{{ progresso_geral }}%</span>)
+        </div>
+    </div>
+    <div class="progress" style="height: 8px; border-radius: 10px; background-color: #f1f5f9;">
+        <div class="progress-bar bg-success progress-bar-striped progress-bar-animated" role="progressbar" style="width: {{ progresso_geral }}%;" aria-valuenow="{{ progresso_geral }}" aria-valuemin="0" aria-valuemax="100"></div>
+    </div>
+</div>
+
+<!-- LINHA CENTRAL: GRÁFICO DE FLUXO + RANKING DE MOTORISTAS -->
+<div class="row g-4 mb-4">
+    <!-- Gráfico de Fluxo de Entregas -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4 p-4 h-100 bg-white">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <div>
+                    <h5 class="fw-bold text-dark mb-1"><i class="bi bi-activity text-primary me-2"></i>Fluxo de Entregas por Hora</h5>
+                    <small class="text-muted">Ritmo de baixas realizadas pela frota ao longo da jornada</small>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1 rounded-pill small">
+                        <i class="bi bi-fire me-1"></i>Pico: {{ pico_hora }} ({{ pico_volume }} baixas)
+                    </span>
+                    <div class="btn-group btn-group-sm p-1 bg-light rounded-pill border" role="group">
+                        <button type="button" class="btn btn-primary btn-sm rounded-pill text-white fw-bold px-3 shadow-xs" id="btn-grafico-acumulado" onclick="alternarVisualizacaoGrafico('acumulado')">
+                            Acumulado
+                        </button>
+                        <button type="button" class="btn btn-light btn-sm rounded-pill text-dark fw-bold px-3 shadow-xs" id="btn-grafico-hora" onclick="alternarVisualizacaoGrafico('hora')">
+                            Por Hora
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div style="position: relative; height: 320px; width: 100%;">
+                <canvas id="entregasChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pódio e Ranking de Motoristas -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100 bg-white overflow-hidden">
+            <div class="card-header bg-white border-0 pt-4 px-4 pb-2 d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="fw-bold text-dark mb-0"><i class="bi bi-trophy text-warning me-2"></i>Top Frota</h5>
+                    <small class="text-muted">Desempenho por motorista hoje</small>
+                </div>
+                <span class="badge bg-light text-muted border rounded-pill">{{ top_motoristas|length }} ativos</span>
+            </div>
+            <div class="card-body p-3 d-flex flex-column justify-content-between">
+                <div class="list-group list-group-flush">
+                    {% for m in top_motoristas %}
+                    <div class="list-group-item border-0 p-2 mb-2 rounded-3 feed-item">
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <div class="d-flex align-items-center gap-2">
+                                <!-- Pódio medalha -->
+                                {% if forloop.counter == 1 %}
+                                <span class="fs-5" title="1º Lugar">🥇</span>
+                                {% elif forloop.counter == 2 %}
+                                <span class="fs-5" title="2º Lugar">🥈</span>
+                                {% elif forloop.counter == 3 %}
+                                <span class="fs-5" title="3º Lugar">🥉</span>
+                                {% else %}
+                                <span class="badge bg-light text-muted border rounded-circle" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem;">{{ forloop.counter }}</span>
+                                {% endif %}
+
+                                <div>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <h6 class="mb-0 fw-bold small text-dark">{{ m.nome_completo|truncatechars:22 }}</h6>
+                                        {% if m.ativo_recente %}
+                                        <span class="pulse-green ms-1" title="Baixa recente"></span>
+                                        {% endif %}
+                                    </div>
+                                    <small class="text-muted" style="font-size: 0.73rem;">
+                                        Mft #{{ m.ultimo_mft.numero_manifesto|default:"--" }} &bull; {{ m.entregues }}/{{ m.total }} notas
+                                    </small>
+                                </div>
+                            </div>
+                            <span class="badge {% if m.percentual >= 85 %}bg-success-subtle text-success border border-success-subtle{% elif m.percentual >= 50 %}bg-primary-subtle text-primary border border-primary-subtle{% else %}bg-secondary-subtle text-secondary{% endif %} rounded-pill fw-bold">
+                                {{ m.percentual }}%
+                            </span>
+                        </div>
+                        <div class="driver-progress-bar">
+                            <div class="h-100 {% if m.percentual >= 85 %}bg-success{% elif m.percentual >= 50 %}bg-primary{% else %}bg-secondary{% endif %}" style="width: {{ m.percentual }}%; border-radius: 10px;"></div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center py-4 text-muted small">
+                        <i class="bi bi-truck fs-3 d-block text-secondary mb-2"></i>
+                        Nenhuma atividade registrada hoje ainda.
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="mt-3 pt-2">
+                    <a href="{% url 'manifesto:painel_monitoramento' %}" class="btn btn-dark w-100 rounded-pill py-2 fw-bold shadow-sm d-flex align-items-center justify-content-center">
+                        <span class="live-dot"></span> 
+                        MONITORAMENTO AO VIVO NO MAPA
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- NOVA SEÇÃO: LIVE FEED DE ATIVIDADES RECENTES EM TEMPO REAL -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h5 class="fw-bold text-dark mb-0"><i class="bi bi-broadcast text-danger me-2"></i>Feed de Atividades em Tempo Real</h5>
+                    <small class="text-muted">Últimas baixas registradas pelos motoristas no aplicativo</small>
+                </div>
+                <span class="badge bg-light text-muted border px-3 py-1 rounded-pill small">
+                    <span class="pulse-green me-1"></span> Sincronizado
+                </span>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light small">
+                        <tr>
+                            <th style="width: 100px;">Horário</th>
+                            <th>Motorista</th>
+                            <th>Nota / Carga</th>
+                            <th>Cliente / Destinatário</th>
+                            <th>Tipo</th>
+                            <th class="text-center">Resultado</th>
+                        </tr>
+                    </thead>
+                    <tbody class="small">
+                        {% for atv in ultimas_atividades %}
+                        <tr>
+                            <td class="text-muted fw-bold"><i class="bi bi-clock me-1"></i>{{ atv.hora }}</td>
+                            <td class="fw-bold text-dark">{{ atv.motorista_nome }}</td>
+                            <td><span class="badge bg-light text-dark border">NF {{ atv.numero_nota }}</span></td>
+                            <td class="text-secondary">{{ atv.destinatario }}</td>
+                            <td>
+                                {% if atv.tipo == 'COLETA' %}
+                                <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1 rounded-pill">Coleta</span>
+                                {% else %}
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 rounded-pill">Entrega</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if atv.is_sucesso %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1 rounded-pill">
+                                    <i class="bi bi-check-circle me-1"></i> Entregue
+                                </span>
+                                {% else %}
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-1 rounded-pill">
+                                    <i class="bi bi-x-circle me-1"></i> {{ atv.status_desc|truncatechars:22 }}
+                                </span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">
+                                Nenhuma baixa de nota registrada no período de hoje ainda.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -217,32 +471,25 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-
 /* ======================
    AUTO REFRESH (3 min)
 ====================== */
-let tempoRestante = 180; // Tempo em segundos (3 minutos)
-const display = document.querySelector('#refresh-timer'); // Certifique-se que o ID existe no seu HTML
+let tempoRestante = 180;
+const display = document.querySelector('#refresh-timer');
 
 function iniciarTimer() {
     const cronometro = setInterval(() => {
         let minutos = Math.floor(tempoRestante / 60);
         let segundos = tempoRestante % 60;
-
-        // Formata para 0:00
         segundos = segundos < 10 ? '0' + segundos : segundos;
         
         if (display) {
-
-            display.textContent = `Atualizando em: ${minutos}:${segundos}`;
+            display.textContent = `${minutos}:${segundos}`;
         }
 
         if (tempoRestante <= 0) {
             clearInterval(cronometro);
-            // Mostra o loading visual se você tiver um elemento de spinner
             document.querySelector('#loading-overlay')?.classList.remove('d-none');
-            
-            // FORÇA O REFRESH DA PÁGINA
             window.location.reload(true); 
         }
 
@@ -253,7 +500,25 @@ function iniciarTimer() {
 document.addEventListener('DOMContentLoaded', () => {
     iniciarTimer();
 
-    // ✅ NOVO: Popup de Aviso de Desenvolvimento (apenas uma vez por sessão)
+    // Efeito suave de contagem nos números de KPIs
+    document.querySelectorAll('.counter-value').forEach(counter => {
+        const target = +counter.getAttribute('data-target');
+        if (!target || isNaN(target)) return;
+        let count = 0;
+        const speed = Math.max(20, Math.floor(target / 25));
+        const updateCount = () => {
+            count += speed;
+            if (count < target) {
+                counter.innerText = count;
+                setTimeout(updateCount, 25);
+            } else {
+                counter.innerText = target;
+            }
+        };
+        updateCount();
+    });
+
+    // Popup de Aviso de Desenvolvimento
     if (!sessionStorage.getItem('aviso_desenvolvimento_exibido')) {
         Swal.fire({
             title: 'Plataforma em Desenvolvimento 🚀',
@@ -276,17 +541,12 @@ document.addEventListener('DOMContentLoaded', () => {
         sessionStorage.setItem('aviso_desenvolvimento_exibido', 'true');
     }
 });
-
-/* ======================
-   GRÁFICO ENTREGAS
-====================== */
 </script>
 
 <!-- MODAL DE PATCH NOTES / HISTÓRICO DE ATUALIZAÇÕES -->
 <div class="modal fade" id="modalPatchNotes" tabindex="-1" aria-labelledby="modalPatchNotesLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 20px; overflow: hidden;">
-            <!-- Header com gradiente sutil -->
             <div class="modal-header border-0 pb-0" style="background: linear-gradient(135deg, #f8fafc 0%, #fff7ed 100%);">
                 <div class="d-flex align-items-center gap-3 w-100">
                     <img src="{% static 'images/megafone_3d.png' %}" alt="Novidades" style="width: 50px; height: 50px; object-fit: contain;">
@@ -302,19 +562,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>
 
-            <!-- Body -->
             <div class="modal-body p-4" style="max-height: 60vh; overflow-y: auto;">
                 <div class="alert alert-light border shadow-sm p-3 mb-3 d-flex align-items-center gap-2" style="border-radius: 12px; background: #fafafa;">
                     <i class="bi bi-info-circle-fill text-warning fs-5"></i>
                     <div class="small text-muted fw-semibold" id="patch-modal-resumo">Resumo da atualização</div>
                 </div>
 
-                <div class="patch-conteudo-wrapper text-secondary lh-base" id="patch-modal-conteudo" style="font-size: 0.95rem;">
-                    <!-- Conteúdo renderizado via JS -->
-                </div>
+                <div class="patch-conteudo-wrapper text-secondary lh-base" id="patch-modal-conteudo" style="font-size: 0.95rem;"></div>
             </div>
 
-            <!-- Footer com Navegação Histórica (Anterior / Próximo) -->
             <div class="modal-footer bg-light border-0 d-flex justify-content-between align-items-center px-4 py-3">
                 <button type="button" class="btn btn-outline-secondary btn-sm px-3 rounded-pill" id="btn-patch-anterior" onclick="navegarPatchNotes(1)">
                     <i class="bi bi-chevron-left me-1"></i> Versão Anterior
@@ -359,20 +615,17 @@ function renderizarModalPatch() {
     document.getElementById('patch-modal-titulo').textContent = item.titulo;
     document.getElementById('patch-modal-resumo').textContent = item.resumo;
     
-    // Converte quebras de linha em parágrafos se for texto puro
     let conteudoHtml = item.conteudo;
     if (!conteudoHtml.includes('<p>') && !conteudoHtml.includes('<div>') && !conteudoHtml.includes('<ul>')) {
         conteudoHtml = conteudoHtml.split('\n\n').map(p => `<p class="mb-2">${p.replace(/\n/g, '<br>')}</p>`).join('');
     }
     document.getElementById('patch-modal-conteudo').innerHTML = conteudoHtml;
 
-    // Indicador e botões
     document.getElementById('patch-indicador-indice').textContent = `Versão ${_patchIndexAtual + 1} de ${_PATCH_NOTES_DATA.length}`;
     
     const btnAnterior = document.getElementById('btn-patch-anterior');
     const btnProximo = document.getElementById('btn-patch-proximo');
 
-    // Index 0 é a versão mais recente. +1 vai para versões mais antigas
     btnAnterior.disabled = (_patchIndexAtual >= _PATCH_NOTES_DATA.length - 1);
     btnProximo.disabled = (_patchIndexAtual <= 0);
 }
@@ -389,7 +642,8 @@ function navegarPatchNotes(delta) {
 <script id="grafico-data" type="application/json">
 {
     "labels": {{ grafico_labels|safe }},
-    "valores": {{ grafico_valores|safe }}
+    "valores": {{ grafico_valores|safe }},
+    "valores_hora": {{ grafico_valores_hora|safe }}
 }
 </script>
 <script src="{% static 'desktop/js/chart.js' %}"></script>
