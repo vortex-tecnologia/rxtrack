@@ -263,8 +263,36 @@ class Manifesto(models.Model):
         return f"Manifesto {self.numero_manifesto}"
 
     @property
+    def is_viagem(self):
+        """Retorna True se o manifesto for interestadual / viagem."""
+        if hasattr(self, '_cached_is_viagem'):
+            return self._cached_is_viagem
+        self._calcular_dados_viagem()
+        return self._cached_is_viagem
+
+    @property
+    def uf_destino_viagem(self):
+        """Retorna a UF de destino principal da viagem (ex: 'SP')."""
+        if hasattr(self, '_cached_uf_destino'):
+            return self._cached_uf_destino
+        self._calcular_dados_viagem()
+        return self._cached_uf_destino
+
+    def _calcular_dados_viagem(self):
+        try:
+            from .utils_viagem import verificar_manifesto_viagem
+            is_v, uf_d = verificar_manifesto_viagem(self)
+            self._cached_is_viagem = is_v
+            self._cached_uf_destino = uf_d
+        except Exception:
+            self._cached_is_viagem = False
+            self._cached_uf_destino = None
+
+    @property
     def is_antigo(self):
-        """Retorna True se o manifesto foi criado há mais de 24 horas."""
+        """Retorna True se o manifesto foi criado há mais de 24 horas E não for viagem."""
+        if self.is_viagem:
+            return False
         if not self.data_criacao:
             return False
         diff = timezone.now() - self.data_criacao

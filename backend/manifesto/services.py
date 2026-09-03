@@ -79,7 +79,9 @@ def enviar_painel(manifesto):
             "data_criacao_iso": manifesto.data_criacao.isoformat() if manifesto.data_criacao else None,
             "ultimo_acesso_iso": localtime(manifesto.ultimo_acesso).isoformat() if manifesto.ultimo_acesso else None,
             "is_antigo": getattr(manifesto, 'is_antigo', False),
-            "dias_criado": getattr(manifesto, 'dias_criado', 0)
+            "dias_criado": getattr(manifesto, 'dias_criado', 0),
+            "is_viagem": getattr(manifesto, 'is_viagem', False),
+            "uf_destino_viagem": getattr(manifesto, 'uf_destino_viagem', '') or ''
         }
     }
     

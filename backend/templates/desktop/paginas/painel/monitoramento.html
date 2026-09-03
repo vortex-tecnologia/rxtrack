@@ -225,6 +225,8 @@
              data-status="{{ m.status }}"
              data-motorista-id="{% if m.motorista %}{{ m.motorista.id }}{% endif %}"
              data-criacao="{{ m.data_criacao|date:'c' }}"
+             data-is-viagem="{% if m.is_viagem %}true{% else %}false{% endif %}"
+             data-uf-destino="{{ m.uf_destino_viagem|default:'' }}"
              data-filial-id="{% firstof m.filial_operacao_id m.filial_id '' %}"
              data-filial-nome="{% if m.filial_operacao %}{{ m.filial_operacao.nome }}{% elif m.filial %}{{ m.filial.nome }}{% endif %}"
              style="{% if filial_ativa_id %}{% with efetiva_id=m.filial_operacao_id|default:m.filial_id %}{% if efetiva_id != filial_ativa_id %}display: none;{% endif %}{% endwith %}{% endif %}">
@@ -290,6 +292,13 @@
                                             EMPRESA
                                         </span>
                                     {% endif %}
+                                    {% if m.is_viagem %}
+                                        <span class="badge border px-1 py-0 d-inline-flex align-items-center gap-1 text-white shadow-xs" 
+                                              style="background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); font-size: 0.6rem; font-weight: 700; border-radius: 4px; border-color: #3730a3 !important;"
+                                              title="Manifesto em Viagem / Interestadual{% if m.uf_destino_viagem %} (Destino: {{ m.uf_destino_viagem }}){% endif %}">
+                                            <i class="bi bi-compass-fill" style="font-size: 0.6rem;"></i> VIAGEM{% if m.uf_destino_viagem %} ({{ m.uf_destino_viagem }}){% endif %}
+                                        </span>
+                                    {% endif %}
                                 </div>
 
                                 <small class="text-muted d-block mt-0" style="font-size: 9px;"
@@ -299,9 +308,9 @@
                             </div>
                         </div>
 
-                        <!-- Ícone de Alerta para Manifesto Antigo (Renderizado Nativo pelo Backend e JS) -->
+                        <!-- Ícone de Alerta para Manifesto Antigo (Não aciona se for viagem) -->
                         <div id="alerta-antigo-{{ m.numero_manifesto }}" class="align-self-center px-2">
-                            {% if m.is_antigo %}
+                            {% if m.is_antigo and not m.is_viagem %}
                             <i class="bi bi-exclamation-triangle-fill text-warning fs-3"
                                 title="Manifesto criado há {{ m.dias_criado }} dia(s) e não finalizado"
                                 data-bs-toggle="tooltip" style="cursor: help; animation: pulse 2s infinite;"></i>
@@ -311,7 +320,8 @@
                         <div id="sinal-torre-{{ m.numero_manifesto }}" class="last-seen-torre"
                             data-status="{{ m.status }}"
                             data-iso="{% if m.ultimo_acesso %}{{ m.ultimo_acesso|date:'c' }}{% endif %}"
-                            data-criacao="{{ m.data_criacao|date:'c' }}">
+                            data-criacao="{{ m.data_criacao|date:'c' }}"
+                            data-is-viagem="{% if m.is_viagem %}true{% else %}false{% endif %}">
                             <!-- JS will render this -->
                         </div>
                     </div>

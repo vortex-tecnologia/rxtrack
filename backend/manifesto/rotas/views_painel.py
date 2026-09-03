@@ -49,7 +49,9 @@ def painel_monitoramento(request):
     # 4. Busca todos os manifestos ativos (AGUARDANDO e EM_TRANSPORTE) de todas as filiais
     manifestos = Manifesto.objects.filter(
         status__in=['AGUARDANDO', 'EM_TRANSPORTE']
-    ).select_related('motorista', 'filial', 'filial_operacao', 'veiculo').annotate(
+    ).select_related('motorista', 'filial', 'filial_operacao', 'veiculo').prefetch_related(
+        'notas_fiscais'
+    ).annotate(
         total_nfe=Count('notas_fiscais', distinct=True),
         baixadas=Count('notas_fiscais', filter=Q(notas_fiscais__status__in=['BAIXADA', 'OCORRENCIA']), distinct=True),
         total_ilegivel=Count('notas_fiscais__baixa_info', filter=Q(notas_fiscais__baixa_info__solicitar_nova_foto=True), distinct=True)

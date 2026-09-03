@@ -188,11 +188,11 @@ function conectarWebSocket() {
                     }
                 }
 
-                // Atualiza alerta de manifesto antigo
+                // Atualiza alerta de manifesto antigo (ignora se for viagem)
                 if (d.is_antigo !== undefined) {
                     const alertaContainer = document.getElementById(`alerta-antigo-${mID}`);
                     if (alertaContainer) {
-                        alertaContainer.innerHTML = d.is_antigo ?
+                        alertaContainer.innerHTML = (d.is_antigo && !d.is_viagem) ?
                             `<i class="fas fa-exclamation-triangle text-warning fs-3" 
                                title="Manifesto criado há ${d.dias_criado} dia(s) e não finalizado" 
                                data-bs-toggle="tooltip" 
@@ -306,6 +306,8 @@ function conectarWebSocket() {
                  data-status="${d.status || 'AGUARDANDO'}"
                  data-motorista-id="${d.motorista_id || ''}"
                  data-criacao="${d.data_criacao_iso || ''}"
+                 data-is-viagem="${d.is_viagem ? 'true' : 'false'}"
+                 data-uf-destino="${d.uf_destino_viagem || ''}"
                  data-filial-id="${d.filial_id || ''}"
                  data-filial-nome="${d.filial_nome || ''}"
                  style="${deveEsconder ? 'display: none;' : ''}">
@@ -346,6 +348,12 @@ function conectarWebSocket() {
                     `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-1 py-0" style="font-size: 0.6rem; font-weight: 700; border-radius: 4px;">DEDICADO</span>` :
                     `<span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle px-1 py-0" style="font-size: 0.6rem; font-weight: 700; border-radius: 4px;">EMPRESA</span>`
             }
+                                        ${d.is_viagem ?
+                `<span class="badge border px-1 py-0 d-inline-flex align-items-center gap-1 text-white shadow-xs" 
+                       style="background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); font-size: 0.6rem; font-weight: 700; border-radius: 4px; border-color: #3730a3 !important;"
+                       title="Manifesto em Viagem / Interestadual${d.uf_destino_viagem ? ` (Destino: ${d.uf_destino_viagem})` : ''}">
+                    <i class="bi bi-compass-fill" style="font-size: 0.6rem;"></i> VIAGEM${d.uf_destino_viagem ? ` (${d.uf_destino_viagem})` : ''}
+                </span>` : ''}
                                     </div>
                                     <small class="text-muted d-block mt-0" style="font-size: 9px;" id="data-registro-${d.manifesto_id}">
                                         <i class="bi bi-clock pe-1"></i>${d.data_registro || ''}
@@ -353,9 +361,9 @@ function conectarWebSocket() {
                                 </div>
                             </div>
                             
-                            <!-- Ícone de Alerta para Manifesto Antigo (Renderizado via JS e Servidor) -->
+                            <!-- Ícone de Alerta para Manifesto Antigo (Renderizado via JS e Servidor - Não aciona se for viagem) -->
                             <div id="alerta-antigo-${d.manifesto_id}" class="align-self-center px-2">
-                                ${d.is_antigo ?
+                                ${(d.is_antigo && !d.is_viagem) ?
                 `<i class="fas fa-exclamation-triangle text-warning fs-3" 
                                    title="Manifesto criado há ${d.dias_criado} dia(s) e não finalizado" 
                                    data-bs-toggle="tooltip" 
@@ -365,7 +373,8 @@ function conectarWebSocket() {
                             <div id="sinal-torre-${d.manifesto_id}" class="last-seen-torre" 
                                  data-status="${d.status || 'AGUARDANDO'}"
                                  data-iso="${d.ultimo_acesso_iso || ''}"
-                                 data-criacao="${d.data_criacao_iso || ''}">
+                                 data-criacao="${d.data_criacao_iso || ''}"
+                                 data-is-viagem="${d.is_viagem ? 'true' : 'false'}">
                                 <!-- JS will render this -->
                             </div>
                         </div>
@@ -529,6 +538,8 @@ function atualizarUltimoSinalTorre() {
 
         const now = new Date();
 
+        const isViagem = card.getAttribute('data-is-viagem') === 'true' || elSinal.getAttribute('data-is-viagem') === 'true';
+
         // --- LÓGICA DE ALERTA DE MANIFESTO ANTIGO ---
         let alertaContainer = document.getElementById(`alerta-antigo-${mID}`);
 
@@ -542,7 +553,11 @@ function atualizarUltimoSinalTorre() {
 
         const dataCriacaoIso = elSinal.getAttribute('data-criacao');
 
-        if (dataCriacaoIso) {
+        // Se for MANIFESTO DE VIAGEM, NÃO entra na análise de 12h/24h e NÃO pulsa alerta de atraso!
+        if (isViagem) {
+            card.classList.remove('card-danger-pulse', 'card-warning-pulse');
+            alertaContainer.innerHTML = '';
+        } else if (dataCriacaoIso) {
             try {
                 const criacaoDate = new Date(dataCriacaoIso);
                 const diffCriacaoHours = (now - criacaoDate) / (1000 * 60 * 60);
