@@ -223,7 +223,10 @@ class DashboardView(TemplateView):
             m.posicao = i + 1
             m.percentual = int((m.entregues / m.total) * 100) if m.total > 0 else 0
             m.ultimo_mft = m.manifestos.filter(data_criacao__range=(hoje_inicio, hoje_fim)).last()
-            ultima_baixa = BaixaNF.objects.filter(motorista=m, data_baixa__range=(hoje_inicio, hoje_fim)).order_by('-data_baixa').first()
+            ultima_baixa = BaixaNF.objects.filter(
+                Q(nota_fiscal__manifesto__motorista=m) | Q(autor_baixa=m),
+                data_baixa__range=(hoje_inicio, hoje_fim)
+            ).order_by('-data_baixa').first()
             if ultima_baixa:
                 m.ultima_baixa_hora = timezone.localtime(ultima_baixa.data_baixa).strftime('%H:%M')
                 minutos_atras = (agora_local - timezone.localtime(ultima_baixa.data_baixa)).total_seconds() / 60
@@ -274,16 +277,23 @@ class DashboardView(TemplateView):
 
         # --- 4. LIVE FEED DE ÚLTIMAS BAIXAS (TEMPO REAL) ---
         feed_baixas = (
-            baixas_hoje.select_related('nota_fiscal', 'motorista', 'ocorrencia')
+            baixas_hoje.select_related('nota_fiscal', 'autor_baixa', 'nota_fiscal__manifesto__motorista', 'ocorrencia')
             .order_by('-data_baixa')[:6]
         )
         ultimas_atividades = []
         for b in feed_baixas:
             tipo_op = (b.nota_fiscal.tipo_operacao if b.nota_fiscal else 'ENTREGA') or 'ENTREGA'
             is_sucesso = b.ocorrencia is None or (b.ocorrencia.codigo_tms in ['1', '01'])
+            
+            mot_nome = 'Motorista'
+            if b.autor_baixa:
+                mot_nome = b.autor_baixa.nome_completo
+            elif b.nota_fiscal and b.nota_fiscal.manifesto and b.nota_fiscal.manifesto.motorista:
+                mot_nome = b.nota_fiscal.manifesto.motorista.nome_completo
+
             ultimas_atividades.append({
                 'hora': timezone.localtime(b.data_baixa).strftime('%H:%M'),
-                'motorista_nome': b.motorista.nome_completo if b.motorista else 'Motorista',
+                'motorista_nome': mot_nome,
                 'destinatario': (b.nota_fiscal.destinatario if b.nota_fiscal else 'Cliente')[:28],
                 'numero_nota': b.nota_fiscal.numero_nota if b.nota_fiscal else '--',
                 'tipo': tipo_op,
