@@ -49,6 +49,36 @@ class ConfiguracaoFinanceiro(models.Model):
         return obj
 
 
+class ClienteBasePagadora(models.Model):
+    """
+    Mapeamento de Clientes (Pagadores/Remetentes de frete ou solicitantes de coleta)
+    para a Filial Responsável (Base Pagadora).
+    Exemplo: Cliente 'UNILEVER' -> Filial 'QUICK SAO PAULO (SP)'.
+    Se um agregado do Rio fizer entrega/coleta desse cliente, o custo é atribuído a SP.
+    """
+    nome = models.CharField(max_length=255, unique=True, verbose_name="Nome do Cliente / Pagador")
+    documento = models.CharField(max_length=50, blank=True, null=True, verbose_name="CNPJ / CPF")
+    filial_responsavel = models.ForeignKey(
+        'usuarios.Filial',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='clientes_financeiro',
+        verbose_name="Filial Pagadora Responsável"
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Cliente / Base Pagadora"
+        verbose_name_plural = "Clientes / Bases Pagadoras"
+        ordering = ['nome']
+
+    def __str__(self):
+        filial_nome = self.filial_responsavel.nome if self.filial_responsavel else "Pendente de Filial"
+        return f"{self.nome} -> {filial_nome}"
+
+
 class TarifaAgregado(models.Model):
     """
     Tabela de valores/tarifas por filial de operação.

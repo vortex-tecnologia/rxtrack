@@ -14,9 +14,10 @@ from django.core.exceptions import PermissionDenied
 
 from financeiro.models import (
     ConfiguracaoFinanceiro, TarifaAgregado, FechamentoAgregado,
-    LinhaFechamento, ResumoMotorista, DadosBancariosAgregado
+    LinhaFechamento, ResumoMotorista, DadosBancariosAgregado,
+    ClienteBasePagadora
 )
-from financeiro.services import gerar_fechamento
+from financeiro.services import gerar_fechamento, sincronizar_clientes_pagadores
 from financeiro.export_excel import exportar_fechamento_excel
 from usuarios.models import Motorista, Filial
 from manifesto.models import Ocorrencia
@@ -127,6 +128,10 @@ def fechamento_agregados_view(request):
     ocs_entrega_ids = list(config_fin.ocorrencias_pagamento_entrega.values_list('id', flat=True))
     ocs_coleta_ids = list(config_fin.ocorrencias_pagamento_coleta.values_list('id', flat=True))
 
+    # Clientes pagadores e bases
+    clientes_pagadores = ClienteBasePagadora.objects.select_related('filial_responsavel').order_by('nome')
+    clientes_sem_filial_count = ClienteBasePagadora.objects.filter(filial_responsavel__isnull=True).count()
+
     context = {
         'fechamento': fechamento,
         'todos_fechamentos': todos_fechamentos,
@@ -141,6 +146,8 @@ def fechamento_agregados_view(request):
         'ocorrencias_todas': ocorrencias_todas,
         'ocs_entrega_ids': ocs_entrega_ids,
         'ocs_coleta_ids': ocs_coleta_ids,
+        'clientes_pagadores': clientes_pagadores,
+        'clientes_sem_filial_count': clientes_sem_filial_count,
         'hoje': timezone.now().date(),
     }
     return render(request, 'desktop/paginas/fechamento_agregados.html', context)
@@ -419,3 +426,88 @@ def api_exportar_excel(request):
     )
     response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
     return response
+
+
+@login_required
+@require_POST
+def api_salvar_cliente_filial(request):
+    """Vincula um cliente pagador à filial responsável pela sua cobrança/custo."""
+    if not verificar_permissao_financeiro(request.user):
+        return JsonResponse({'sucesso': False, 'erro': 'Sem permissão.'}, status=403)
+
+    try:
+        data = json.loads(request.body)
+        cliente_id = data.get('cliente_id')
+        filial_id = data.get('filial_id')
+
+        cliente = get_object_or_404(ClienteBasePagadora, id=cliente_id)
+
+        if filial_id:
+            filial = get_object_or_404(Filial, id=filial_id)
+            cliente.filial_responsavel = filial
+        else:
+            cliente.filial_responsavel = None
+
+        cliente.save()
+
+        pendentes = ClienteBasePagadora.objects.filter(filial_responsavel__isnull=True).count()
+
+        return JsonResponse({
+            'sucesso': True,
+            'filial_nome': cliente.filial_responsavel.nome if cliente.filial_responsavel else None,
+            'filial_uf': cliente.filial_responsavel.uf if cliente.filial_responsavel else None,
+            'pendentes_count': pendentes,
+            'mensagem': f'Cliente "{cliente.nome}" vinculado com sucesso!'
+        })
+    except Exception as e:
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def api_sincronizar_clientes(request):
+    """Varre os fretes e coletas para cadastrar novos clientes automaticamente."""
+    if not verificar_permissao_financeiro(request.user):
+        return JsonResponse({'sucesso': False, 'erro': 'Sem permissão.'}, status=403)
+
+    try:
+        qtd_novos = sincronizar_clientes_pagadores()
+        total = ClienteBasePagadora.objects.count()
+        pendentes = ClienteBasePagadora.objects.filter(filial_responsavel__isnull=True).count()
+
+        return JsonResponse({
+            'sucesso': True,
+            'novos': qtd_novos,
+            'total': total,
+            'pendentes': pendentes,
+            'mensagem': f'Sincronização concluída: {qtd_novos} novos clientes adicionados. Total: {total} ({pendentes} pendentes de filial).'
+        })
+    except Exception as e:
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def api_salvar_uf_filial(request):
+    """Atualiza a UF de uma filial para garantir o rateio correto."""
+    if not verificar_permissao_financeiro(request.user):
+        return JsonResponse({'sucesso': False, 'erro': 'Sem permissão.'}, status=403)
+
+    try:
+        data = json.loads(request.body)
+        filial_id = data.get('filial_id')
+        uf = (data.get('uf') or '').strip().upper()
+
+        filial = get_object_or_404(Filial, id=filial_id)
+        filial.uf = uf
+        filial.save(update_fields=['uf'])
+
+        return JsonResponse({
+            'sucesso': True,
+            'filial_id': filial.id,
+            'uf': filial.uf,
+            'mensagem': f'UF da filial {filial.nome} atualizada para {filial.uf}!'
+        })
+    except Exception as e:
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+

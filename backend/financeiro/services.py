@@ -66,6 +66,44 @@ def _uf_da_filial(filial):
     return 'OUTROS'
 
 
+def sincronizar_clientes_pagadores():
+    """
+    Varre todos os Fretes e Coletas do sistema e cadastra os clientes pagadores
+    em ClienteBasePagadora caso ainda não existam.
+    Retorna a quantidade de novos clientes cadastrados.
+    """
+    from financeiro.models import ClienteBasePagadora
+    from manifesto.models import Frete, NotaFiscal
+
+    existentes = set(ClienteBasePagadora.objects.values_list('nome', flat=True))
+    novos = set()
+
+    # 1. Pagadores de Frete
+    for nome in Frete.objects.exclude(pagador_nome__isnull=True).exclude(pagador_nome='').values_list('pagador_nome', flat=True).distinct()[:1000]:
+        c = (nome or '').strip().upper()
+        if c and c not in existentes:
+            novos.add(c)
+
+    # 2. Remetentes de Frete
+    for nome in Frete.objects.exclude(remetente__isnull=True).exclude(remetente='').values_list('remetente', flat=True).distinct()[:1000]:
+        c = (nome or '').strip().upper()
+        if c and c not in existentes:
+            novos.add(c)
+
+    # 3. Solicitantes de Coletas
+    for nome in NotaFiscal.objects.filter(tipo_operacao='COLETA').exclude(destinatario__isnull=True).exclude(destinatario='').values_list('destinatario', flat=True).distinct()[:1000]:
+        c = (nome or '').strip().upper()
+        if c and c not in existentes:
+            novos.add(c)
+
+    # Insere em lote
+    objetos = [ClienteBasePagadora(nome=n) for n in novos]
+    ClienteBasePagadora.objects.bulk_create(objetos, ignore_conflicts=True)
+
+    logger.info(f"✅ Sincronização concluída: {len(objetos)} novos clientes adicionados ao Financeiro.")
+    return len(objetos)
+
+
 @transaction.atomic
 def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
     """
@@ -73,18 +111,25 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
     
     1. Busca todos os manifestos no período onde motorista.categoria == 'AGREGADO'
     2. Para cada manifesto: conta BaixaNF com ocorrência que está na lista de pagamento
-    3. Aplica tarifas da filial
-    4. Gera as LinhaFechamento e ResumoMotorista
+    3. Identifica o cliente pagador e a filial responsável pelo frete
+    4. Aplica tarifas da filial
+    5. Gera as LinhaFechamento e ResumoMotorista
     
     Returns: FechamentoAgregado
     """
     from financeiro.models import (
-        FechamentoAgregado, LinhaFechamento, ResumoMotorista
+        FechamentoAgregado, LinhaFechamento, ResumoMotorista, ClienteBasePagadora
     )
     from manifesto.models import Manifesto, NotaFiscal, BaixaNF
     from usuarios.models import Motorista
     
     logger.info(f"📊 Gerando fechamento: {periodo_inicio} a {periodo_fim}")
+    
+    # Mapa de clientes para filiais responsáveis em memória
+    clientes_map = {
+        c.nome.upper().strip(): c
+        for c in ClienteBasePagadora.objects.select_related('filial_responsavel').all()
+    }
     
     # Busca ou cria o fechamento para este período
     fechamento, created = FechamentoAgregado.objects.get_or_create(
@@ -159,8 +204,25 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
         breakdown = defaultdict(lambda: {'entregas': 0, 'coletas': 0})
         
         for nf in notas:
-            # Determina a UF desta nota (usa filial_operacao do manifesto)
+            # Determina o cliente pagador e a UF da filial responsável
+            cliente_nome = None
+            tipo_nf = (nf.tipo_operacao or '').upper()
+            if tipo_nf == 'COLETA':
+                cliente_nome = nf.destinatario or (nf.frete.pagador_nome if nf.frete else None) or (nf.frete.remetente if nf.frete else None)
+            else:
+                cliente_nome = (nf.frete.pagador_nome if nf.frete else None) or (nf.frete.remetente if nf.frete else None) or nf.destinatario
+
             nf_uf = uf_base
+            if cliente_nome:
+                c_clean = cliente_nome.strip().upper()
+                cli_obj = clientes_map.get(c_clean)
+                if not cli_obj:
+                    # Auto-registra o cliente no financeiro para o gestor poder atribuir
+                    cli_obj, _ = ClienteBasePagadora.objects.get_or_create(nome=c_clean)
+                    clientes_map[c_clean] = cli_obj
+
+                if cli_obj.filial_responsavel:
+                    nf_uf = _uf_da_filial(cli_obj.filial_responsavel)
             
             # CT-es: conta todos os fretes vinculados
             if nf.frete and nf.frete.numero_cte:

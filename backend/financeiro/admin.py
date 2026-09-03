@@ -4,8 +4,17 @@
 from django.contrib import admin
 from financeiro.models import (
     ConfiguracaoFinanceiro, TarifaAgregado, FechamentoAgregado,
-    LinhaFechamento, ResumoMotorista, DadosBancariosAgregado
+    LinhaFechamento, ResumoMotorista, DadosBancariosAgregado,
+    ClienteBasePagadora
 )
+
+
+@admin.register(ClienteBasePagadora)
+class ClienteBasePagadoraAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'documento', 'filial_responsavel', 'atualizado_em')
+    list_filter = ('filial_responsavel',)
+    search_fields = ('nome', 'documento')
+
 
 
 @admin.register(ConfiguracaoFinanceiro)

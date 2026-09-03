@@ -31,6 +31,27 @@
         </div>
     </div>
 
+    <!-- Alerta de Clientes Novos sem Filial Pagadora -->
+    {% if clientes_sem_filial_count > 0 %}
+    <div class="alert alert-danger border-0 shadow-sm rounded-4 d-flex flex-wrap align-items-center justify-content-between p-3 mb-4" id="banner-clientes-pendentes" role="alert" style="background-color: #fff2f2; border-left: 6px solid #dc3545 !important;">
+        <div class="d-flex align-items-center gap-3">
+            <div class="p-3 bg-danger text-white rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 45px; height: 45px;">
+                <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+            </div>
+            <div>
+                <h6 class="fw-bold mb-0 text-danger">Atenção: Há clientes novos cadastrados sem filial pagadora vinculada!</h6>
+                <small class="text-danger-emphasis">
+                    Existem <strong id="banner-qtd-pendentes">{{ clientes_sem_filial_count }}</strong> clientes que ainda não possuem filial pagadora definida (ex: SP, RJ, DF, GO). 
+                    Vincule-os para que suas entregas e coletas sejam debitadas da base correta.
+                </small>
+            </div>
+        </div>
+        <button class="btn btn-danger rounded-pill px-4 shadow-sm text-nowrap mt-2 mt-md-0" onclick="irParaAbaClientes(true)">
+            <i class="bi bi-link-45deg me-1"></i> Vincular Filial Agora
+        </button>
+    </div>
+    {% endif %}
+
     <!-- Barra de Controle e Seleção de Período -->
     <div class="card border-0 shadow-sm rounded-4 mb-4">
         <div class="card-body p-3">
@@ -86,6 +107,14 @@
         <li class="nav-item" role="presentation">
             <button class="nav-link rounded-pill fw-bold" id="tab-ocorrencias-btn" data-bs-toggle="tab" data-bs-target="#tab-ocorrencias" type="button" role="tab">
                 <i class="bi bi-sliders me-2"></i>4. Ocorrências Pagas
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link rounded-pill fw-bold position-relative" id="tab-clientes-btn" data-bs-toggle="tab" data-bs-target="#tab-clientes" type="button" role="tab">
+                <i class="bi bi-people-fill me-2"></i>5. Clientes & Bases Pagadoras
+                {% if clientes_sem_filial_count > 0 %}
+                <span class="badge rounded-pill bg-danger ms-1" id="badge-pendentes-clientes">{{ clientes_sem_filial_count }}</span>
+                {% endif %}
             </button>
         </li>
     </ul>
@@ -412,7 +441,22 @@
                             {% with tarifa=tarifas_map|dict_lookup:filial.id %}
                             <tr id="tarifa-row-{{ filial.id }}">
                                 <td class="fw-bold">{{ filial.nome }}</td>
-                                <td><span class="badge bg-secondary">{{ filial.uf|default:"-" }}</span></td>
+                                <td>
+                                    <select class="form-select form-select-sm fw-bold text-center border-secondary-subtle" style="width: 80px;" id="uf-filial-{{ filial.id }}" onchange="salvarUfFilial({{ filial.id }}, this.value)" title="Selecione o Estado (UF) desta filial para o rateio">
+                                        <option value="RJ" {% if filial.uf == 'RJ' %}selected{% endif %}>RJ</option>
+                                        <option value="SP" {% if filial.uf == 'SP' %}selected{% endif %}>SP</option>
+                                        <option value="DF" {% if filial.uf == 'DF' %}selected{% endif %}>DF</option>
+                                        <option value="GO" {% if filial.uf == 'GO' %}selected{% endif %}>GO</option>
+                                        <option value="MG" {% if filial.uf == 'MG' %}selected{% endif %}>MG</option>
+                                        <option value="PR" {% if filial.uf == 'PR' %}selected{% endif %}>PR</option>
+                                        <option value="SC" {% if filial.uf == 'SC' %}selected{% endif %}>SC</option>
+                                        <option value="RS" {% if filial.uf == 'RS' %}selected{% endif %}>RS</option>
+                                        <option value="BA" {% if filial.uf == 'BA' %}selected{% endif %}>BA</option>
+                                        {% if filial.uf and filial.uf not in 'RJ,SP,DF,GO,MG,PR,SC,RS,BA' %}
+                                        <option value="{{ filial.uf }}" selected>{{ filial.uf }}</option>
+                                        {% endif %}
+                                    </select>
+                                </td>
                                 <td>
                                     <div class="input-group input-group-sm" style="max-width: 140px;">
                                         <span class="input-group-text">R$</span>
@@ -499,6 +543,95 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- TAB 5: CLIENTES & BASES PAGADORAS (Rateio Inteligente por Pagador)        -->
+        <!-- ========================================================================= -->
+        <div class="tab-pane fade" id="tab-clientes" role="tabpanel">
+            <div class="card border-0 shadow-sm rounded-4 p-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+                    <div>
+                        <h6 class="fw-bold text-dark mb-1"><i class="bi bi-people-fill me-2 text-primary"></i>Clientes & Filiais Pagadoras</h6>
+                        <p class="text-muted small mb-0">
+                            Defina qual filial é responsável pelo frete de cada cliente. Se um motorista no Rio fizer uma entrega ou coleta de um cliente de SP, o custo será cobrado da filial de SP.
+                        </p>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-primary rounded-pill px-4 shadow-sm" id="btn-sync-clientes" onclick="dispararSincronizacaoClientes()">
+                            <i class="bi bi-arrow-repeat me-1"></i> Sincronizar Clientes dos Fretes
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filtros da Tabela de Clientes -->
+                <div class="row g-3 align-items-center mb-3">
+                    <div class="col-md-6">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                            <input type="text" class="form-control border-start-0" id="filtro-cliente-busca" placeholder="Buscar por nome do cliente ou CNPJ..." onkeyup="filtrarTabelaClientes()">
+                        </div>
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check" name="filtroStatusCliente" id="filtroCliTodos" autocomplete="off" checked onchange="filtrarTabelaClientes()">
+                            <label class="btn btn-outline-secondary btn-sm" for="filtroCliTodos">Todos (<span id="count-total-cli">{{ clientes_pagadores|length }}</span>)</label>
+
+                            <input type="radio" class="btn-check" name="filtroStatusCliente" id="filtroCliPendentes" autocomplete="off" onchange="filtrarTabelaClientes()">
+                            <label class="btn btn-outline-danger btn-sm" for="filtroCliPendentes">Pendentes de Filial (<span id="count-pendentes-cli">{{ clientes_sem_filial_count }}</span>)</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabela de Clientes -->
+                <div class="table-responsive" style="max-height: 550px; overflow-y: auto;">
+                    <table class="table table-hover align-middle mb-0" id="tabela-clientes-pagadores">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>Nome do Cliente / Pagador</th>
+                                <th>Documento (CNPJ/CPF)</th>
+                                <th>Filial Responsável (Base Pagadora)</th>
+                                <th class="text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-clientes-pagadores">
+                            {% for c in clientes_pagadores %}
+                            <tr class="linha-cliente {% if not c.filial_responsavel %}table-danger-subtle cliente-pendente{% endif %}" data-nome="{{ c.nome|upper }}" data-doc="{{ c.documento|default:'' }}" data-status="{% if c.filial_responsavel %}vinculado{% else %}pendente{% endif %}">
+                                <td class="fw-bold text-dark">{{ c.nome }}</td>
+                                <td class="text-muted small">{{ c.documento|default:"-" }}</td>
+                                <td style="width: 340px;">
+                                    <select class="form-select form-select-sm rounded-pill border-2 {% if not c.filial_responsavel %}border-danger{% else %}border-success-subtle{% endif %}" id="select-filial-cli-{{ c.id }}" onchange="salvarClienteFilial(this, {{ c.id }})">
+                                        <option value="">-- Selecione a Filial Pagadora --</option>
+                                        {% for f in filiais %}
+                                        <option value="{{ f.id }}" {% if c.filial_responsavel_id == f.id %}selected{% endif %}>
+                                            {{ f.nome }} ({{ f.uf|default:"-" }})
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td class="text-center" id="status-cli-col-{{ c.id }}">
+                                    {% if c.filial_responsavel %}
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1">
+                                        <i class="bi bi-check-circle me-1"></i> {{ c.filial_responsavel.uf|default:c.filial_responsavel.nome }}
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-danger px-3 py-1">
+                                        <i class="bi bi-exclamation-circle me-1"></i> Pendente
+                                    </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center py-5 text-muted">
+                                    Nenhum cliente cadastrado ainda. Clique em <strong>"Sincronizar Clientes dos Fretes"</strong> para importar automaticamente todos os pagadores do sistema.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -952,6 +1085,169 @@ function salvarConfigOcorrencias() {
         } else {
             alert('Erro: ' + res.erro);
         }
+    });
+}
+
+// Navegar para a Aba de Clientes
+function irParaAbaClientes(somentePendentes) {
+    const tabBtn = document.getElementById('tab-clientes-btn');
+    if (tabBtn) {
+        const tabTrigger = new bootstrap.Tab(tabBtn);
+        tabTrigger.show();
+    }
+    if (somentePendentes) {
+        const radPend = document.getElementById('filtroCliPendentes');
+        if (radPend) {
+            radPend.checked = true;
+            filtrarTabelaClientes();
+        }
+    }
+}
+
+// Filtrar tabela de clientes
+function filtrarTabelaClientes() {
+    const busca = (document.getElementById('filtro-cliente-busca')?.value || '').toLowerCase().trim();
+    const apenasPendentes = document.getElementById('filtroCliPendentes')?.checked || false;
+
+    const linhas = document.querySelectorAll('#tbody-clientes-pagadores .linha-cliente');
+    linhas.forEach(linha => {
+        const nome = (linha.getAttribute('data-nome') || '').toLowerCase();
+        const doc = (linha.getAttribute('data-doc') || '').toLowerCase();
+        const status = linha.getAttribute('data-status');
+
+        const bateBusca = !busca || nome.includes(busca) || doc.includes(busca);
+        const bateStatus = !apenasPendentes || status === 'pendente';
+
+        if (bateBusca && bateStatus) {
+            linha.style.display = '';
+        } else {
+            linha.style.display = 'none';
+        }
+    });
+}
+
+// Salvar Filial do Cliente Pagador
+function salvarClienteFilial(selectEl, clienteId) {
+    const filialId = selectEl.value;
+    const colStatus = document.getElementById(`status-cli-col-${clienteId}`);
+    const tr = selectEl.closest('tr');
+
+    selectEl.disabled = true;
+
+    fetch("{% url 'financeiro:api_salvar_cliente_filial' %}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+        body: JSON.stringify({ cliente_id: clienteId, filial_id: filialId })
+    })
+    .then(r => r.json())
+    .then(res => {
+        selectEl.disabled = false;
+        if (res.sucesso) {
+            if (filialId) {
+                selectEl.className = "form-select form-select-sm rounded-pill border-2 border-success-subtle";
+                if (colStatus) {
+                    colStatus.innerHTML = `<span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1"><i class="bi bi-check-circle me-1"></i> ${res.filial_uf || res.filial_nome}</span>`;
+                }
+                if (tr) {
+                    tr.classList.remove('table-danger-subtle', 'cliente-pendente');
+                    tr.setAttribute('data-status', 'vinculado');
+                }
+            } else {
+                selectEl.className = "form-select form-select-sm rounded-pill border-2 border-danger";
+                if (colStatus) {
+                    colStatus.innerHTML = `<span class="badge bg-danger px-3 py-1"><i class="bi bi-exclamation-circle me-1"></i> Pendente</span>`;
+                }
+                if (tr) {
+                    tr.classList.add('table-danger-subtle', 'cliente-pendente');
+                    tr.setAttribute('data-status', 'pendente');
+                }
+            }
+
+            // Atualiza contadores e banner
+            const pendentes = res.pendentes_count;
+            const elBadge = document.getElementById('badge-pendentes-clientes');
+            const elBanner = document.getElementById('banner-clientes-pendentes');
+            const elCountBanner = document.getElementById('banner-qtd-pendentes');
+            const elCountCli = document.getElementById('count-pendentes-cli');
+
+            if (elCountCli) elCountCli.innerText = pendentes;
+            if (elCountBanner) elCountBanner.innerText = pendentes;
+
+            if (pendentes === 0) {
+                if (elBadge) elBadge.style.display = 'none';
+                if (elBanner) elBanner.style.display = 'none';
+            } else {
+                if (elBadge) {
+                    elBadge.innerText = pendentes;
+                    elBadge.style.display = '';
+                }
+                if (elBanner) elBanner.style.display = '';
+            }
+        } else {
+            alert('Erro ao salvar vínculo do cliente: ' + res.erro);
+        }
+    })
+    .catch(err => {
+        selectEl.disabled = false;
+        alert('Erro de conexão: ' + err);
+    });
+}
+
+// Sincronizar Clientes de Todos os Fretes
+function dispararSincronizacaoClientes() {
+    const btn = document.getElementById('btn-sync-clientes');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Sincronizando...';
+    }
+
+    fetch("{% url 'financeiro:api_sincronizar_clientes' %}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Sincronizar Clientes dos Fretes';
+        }
+        if (res.sucesso) {
+            alert(res.mensagem);
+            window.location.reload();
+        } else {
+            alert('Erro ao sincronizar: ' + res.erro);
+        }
+    })
+    .catch(err => {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Sincronizar Clientes dos Fretes';
+        }
+        alert('Erro de conexão: ' + err);
+    });
+}
+
+// Salvar UF da Filial
+function salvarUfFilial(filialId, uf) {
+    fetch("{% url 'financeiro:api_salvar_uf_filial' %}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+        body: JSON.stringify({ filial_id: filialId, uf: uf })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.sucesso) {
+            const elSelect = document.getElementById(`uf-filial-${filialId}`);
+            if (elSelect) {
+                elSelect.classList.add('border-success');
+                setTimeout(() => elSelect.classList.remove('border-success'), 1500);
+            }
+        } else {
+            alert('Erro ao salvar UF da filial: ' + res.erro);
+        }
+    })
+    .catch(err => {
+        alert('Erro de conexão: ' + err);
     });
 }
 </script>
