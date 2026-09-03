@@ -320,6 +320,13 @@
         </a>
         {% endif %}
 
+        {% if request.user.is_superuser or request.user.motorista_perfil.tipo_usuario == 'FINANCEIRO' or request.user.motorista_perfil.cargo == 'GESTOR' or request.user.motorista_perfil.cargo == 'GERENTE' or request.user.motorista_perfil.cargo == 'ADMINISTRADOR' %}
+        <a href="{% url 'financeiro:fechamento_agregados' %}" class="nav-link {% if '/financeiro/' in request.path %}active-menu{% endif %}">
+            <i class="bi bi-cash-coin text-success"></i>
+            <span class="menu-text">Financeiro</span>
+        </a>
+        {% endif %}
+
 
         <!-- Seção de Suporte -->
         <div class="border-top border-secondary opacity-25 my-2"></div>

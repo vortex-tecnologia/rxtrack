@@ -35,6 +35,7 @@ class Motorista(models.Model):
         ('MOTORISTA', 'Motorista'),
         ('OPERACIONAL', 'Operacional'),
         ('SAC', 'Suporte / SAC'),
+        ('FINANCEIRO', 'Financeiro'),
     ]
     tipo_usuario = models.CharField(
         max_length=15, 

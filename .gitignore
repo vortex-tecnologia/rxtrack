@@ -24,3 +24,4 @@ backend/backup_dados.json
 backend/firebase-credentials.json
 backend/private_key.pem
 backend/public_key.pem
+*.xlsx

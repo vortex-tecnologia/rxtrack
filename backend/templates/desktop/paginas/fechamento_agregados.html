@@ -1,0 +1,854 @@
+{% extends "desktop/base.html" %}
+{% load static %}
+{% load financeiro_tags %}
+
+{% block title %}Fechamento de Agregados - Financeiro{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Cabeçalho Principal -->
+    <div class="row mb-4 align-items-center">
+        <div class="col-md-6">
+            <div class="d-flex align-items-center gap-3">
+                <div class="p-3 bg-success-subtle text-success rounded-4 shadow-sm">
+                    <i class="bi bi-cash-coin fs-2"></i>
+                </div>
+                <div>
+                    <h3 class="fw-bold mb-0">Fechamento de Agregados</h3>
+                    <p class="text-muted mb-0">Apuração de diárias, entregas, coletas e faturamento por base</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 text-md-end mt-3 mt-md-0">
+            {% if fechamento %}
+            <a href="{% url 'financeiro:exportar_excel' %}?fechamento_id={{ fechamento.id }}" class="btn btn-success shadow-sm rounded-pill px-4">
+                <i class="bi bi-file-earmark-excel me-2"></i>Exportar para Excel (.xlsx)
+            </a>
+            {% endif %}
+            <button class="btn btn-primary shadow-sm rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#modalNovoFechamento">
+                <i class="bi bi-plus-circle me-2"></i>Novo Fechamento
+            </button>
+        </div>
+    </div>
+
+    <!-- Barra de Controle e Seleção de Período -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-3">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-5">
+                    <form method="GET" class="d-flex align-items-center gap-2">
+                        <label class="form-label small fw-bold text-muted mb-0 text-nowrap">Fechamento Ativo:</label>
+                        <select name="fechamento_id" class="form-select form-select-sm rounded-pill" onchange="this.form.submit()">
+                            {% for f in todos_fechamentos %}
+                            <option value="{{ f.id }}" {% if fechamento and fechamento.id == f.id %}selected{% endif %}>
+                                {{ f.periodo_inicio|date:"d/m/Y" }} a {{ f.periodo_fim|date:"d/m/Y" }} — Status: {{ f.get_status_display }}
+                            </option>
+                            {% empty %}
+                            <option value="">Nenhum fechamento gerado ainda</option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                </div>
+                <div class="col-md-7 text-md-end">
+                    {% if fechamento %}
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill me-2">
+                        <i class="bi bi-calendar3 me-1"></i> {{ fechamento.periodo_inicio|date:"d/m/Y" }} a {{ fechamento.periodo_fim|date:"d/m/Y" }}
+                    </span>
+                    <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2 rounded-pill me-2">
+                        <i class="bi bi-people me-1"></i> {{ resumos|length }} Agregados
+                    </span>
+                    <button class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="recalcularFechamentoAtual()">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Recalcular com Dados Atuais do App
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs Principais -->
+    <ul class="nav nav-pills nav-fill bg-white p-2 rounded-4 shadow-sm mb-4 border" id="financeiroTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active rounded-pill fw-bold" id="tab-detalhes-btn" data-bs-toggle="tab" data-bs-target="#tab-detalhes" type="button" role="tab">
+                <i class="bi bi-person-lines-fill me-2"></i>1. Detalhamento por Motorista
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link rounded-pill fw-bold" id="tab-fatura-btn" data-bs-toggle="tab" data-bs-target="#tab-fatura" type="button" role="tab">
+                <i class="bi bi-table me-2"></i>2. Resultado Fatura (Consolidado)
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link rounded-pill fw-bold" id="tab-tarifas-btn" data-bs-toggle="tab" data-bs-target="#tab-tarifas" type="button" role="tab">
+                <i class="bi bi-cash-stack me-2"></i>3. Tarifas por Filial
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link rounded-pill fw-bold" id="tab-ocorrencias-btn" data-bs-toggle="tab" data-bs-target="#tab-ocorrencias" type="button" role="tab">
+                <i class="bi bi-sliders me-2"></i>4. Ocorrências Pagas
+            </button>
+        </li>
+    </ul>
+
+    <!-- Conteúdo das Tabs -->
+    <div class="tab-content" id="financeiroTabsContent">
+        
+        <!-- ========================================================================= -->
+        <!-- TAB 1: DETALHAMENTO POR MOTORISTA (Espelho da aba individual da planilha) -->
+        <!-- ========================================================================= -->
+        <div class="tab-pane fade show active" id="tab-detalhes" role="tabpanel">
+            {% if not fechamento %}
+            <div class="card border-0 shadow-sm rounded-4 p-5 text-center">
+                <i class="bi bi-calendar-x text-muted fs-1 mb-3"></i>
+                <h5 class="fw-bold">Nenhum fechamento ativo no momento</h5>
+                <p class="text-muted">Clique em <strong>"Novo Fechamento"</strong> para selecionar o período e puxar os dados de agregados automaticamente.</p>
+                <div>
+                    <button class="btn btn-primary rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#modalNovoFechamento">
+                        <i class="bi bi-plus-circle me-1"></i> Criar Primeiro Fechamento
+                    </button>
+                </div>
+            </div>
+            {% else %}
+            
+            <!-- Barra de Seleção de Motorista Agregado -->
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-body p-3">
+                    <div class="row align-items-center g-3">
+                        <div class="col-md-5">
+                            <label class="form-label small fw-bold text-muted mb-1">Selecione o Motorista Agregado:</label>
+                            <select id="seletorMotorista" class="form-select rounded-pill fw-bold text-primary" onchange="trocarMotoristaVisualizado(this.value)">
+                                {% for r in resumos %}
+                                <option value="{{ r.motorista_id }}">{{ r.motorista.nome_completo }} — Total: R$ {{ r.total_final|floatformat:2 }}</option>
+                                {% empty %}
+                                <option value="">Nenhum motorista agregado encontrado neste período</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-7 text-md-end">
+                            <span class="small text-muted me-3">
+                                <i class="bi bi-info-circle text-primary me-1"></i> Edite valores extras, pedágio ou descontos dando um clique no campo.
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Blocos de Cada Motorista (Alternados via JS) -->
+            {% for r in resumos %}
+            <div class="motorista-bloco" id="bloco-motorista-{{ r.motorista_id }}" style="{% if not forloop.first %}display: none;{% endif %}">
+                
+                <!-- Card de Perfil e Dados Bancários do Agregado -->
+                <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
+                    <div class="card-body p-4 bg-light-subtle">
+                        <div class="row align-items-center g-3">
+                            <div class="col-md-4">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold shadow-sm" style="width: 50px; height: 50px; font-size: 1.2rem;">
+                                        {{ r.motorista.nome_completo|slice:":2"|upper }}
+                                    </div>
+                                    <div>
+                                        <h5 class="fw-bold mb-0 text-dark">{{ r.motorista.nome_completo }}</h5>
+                                        <div class="small text-muted">
+                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle me-1">AGREGADO</span>
+                                            CPF: {{ r.motorista.cpf|default:"Não informado" }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-5 border-start-md ps-md-4">
+                                <div class="small fw-bold text-muted mb-1"><i class="bi bi-bank me-1 text-primary"></i> DADOS BANCÁRIOS / PIX</div>
+                                {% with db=dados_bancarios_map|dict_lookup:r.motorista_id %}
+                                <div class="small text-dark">
+                                    <strong>Conta:</strong> <span id="text-banco-{{ r.motorista_id }}">{{ db.dados_bancarios|default:"Não informado" }}</span><br>
+                                    <strong>PIX:</strong> <span id="text-pix-{{ r.motorista_id }}">{{ db.chave_pix|default:"Não informada" }}</span>
+                                    {% if db.titular_pagamento %}<br><strong>Titular:</strong> <span id="text-titular-{{ r.motorista_id }}">{{ db.titular_pagamento }}</span>{% endif %}
+                                </div>
+                                {% endwith %}
+                            </div>
+                            <div class="col-md-3 text-md-end">
+                                <button class="btn btn-outline-primary btn-sm rounded-pill px-3" onclick="abrirModalDadosBancarios({{ r.motorista_id }}, '{{ r.motorista.nome_completo|escapejs }}')">
+                                    <i class="bi bi-pencil-square me-1"></i> Editar Dados Bancários
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabela de Detalhamento Diário (Extrato do Motorista) -->
+                <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
+                    <div class="card-header bg-white py-3 border-0">
+                        <h6 class="fw-bold text-dark mb-0"><i class="bi bi-calendar-week me-2 text-primary"></i>Extrato Diário de Manifestos e Embarques</h6>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 text-nowrap" style="font-size: 0.85rem;">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Nº Manifesto</th>
+                                    <th>Data</th>
+                                    <th>Diária (R$)</th>
+                                    <th>Valores Extras</th>
+                                    <th>Localidade Extra</th>
+                                    <th>Nº CTe</th>
+                                    <th>CTes Realizados</th>
+                                    <th>Valor Entregas</th>
+                                    <th>Nº Coletas</th>
+                                    <th>Coletas Válidas</th>
+                                    <th>Total Embarques</th>
+                                    <th>Valor Coletas</th>
+                                    <th>Total do Dia</th>
+                                    <th>Observação</th>
+                                    {% for base in lista_bases %}
+                                    <th class="bg-primary text-center">Entregas {{ base }}</th>
+                                    <th class="bg-primary text-center">Coletas {{ base }}</th>
+                                    {% endfor %}
+                                    <th class="text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for l in linhas %}
+                                {% if l.motorista_id == r.motorista_id %}
+                                <tr id="linha-row-{{ l.id }}">
+                                    <td class="fw-bold text-primary">{{ l.manifesto.numero_manifesto }}</td>
+                                    <td>{{ l.data|date:"d/m/Y" }}</td>
+                                    <td>R$ {{ l.valor_diaria|floatformat:2 }}</td>
+                                    <td class="fw-bold text-success">R$ {{ l.valor_extra|floatformat:2 }}</td>
+                                    <td><span class="badge bg-secondary-subtle text-secondary">{{ l.localidade_extra|default:"-" }}</span></td>
+                                    <td>{{ l.qtd_ctes }}</td>
+                                    <td>{{ l.qtd_ctes_realizados }}</td>
+                                    <td>R$ {{ l.valor_entregas|floatformat:2 }}</td>
+                                    <td>{{ l.qtd_coletas }}</td>
+                                    <td class="fw-bold text-success">{{ l.qtd_coletas_validas }}</td>
+                                    <td class="fw-bold">{{ l.total_embarques }}</td>
+                                    <td>R$ {{ l.valor_coletas|floatformat:2 }}</td>
+                                    <td class="fw-bold text-dark fs-6" id="total-dia-{{ l.id }}">R$ {{ l.total_dia|floatformat:2 }}</td>
+                                    <td class="text-muted small" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis;">{{ l.observacao|default:"-" }}</td>
+                                    
+                                    <!-- Bases Dinâmicas -->
+                                    {% for base in lista_bases %}
+                                    {% with bk=l.breakdown_bases|dict_lookup:base %}
+                                    <td class="text-center">{{ bk.entregas|default:0 }}</td>
+                                    <td class="text-center">{{ bk.coletas|default:0 }}</td>
+                                    {% endwith %}
+                                    {% endfor %}
+
+                                    <td class="text-center">
+                                        <button class="btn btn-sm btn-outline-secondary rounded-pill" onclick="abrirModalEditarLinha({{ l.id }}, '{{ l.manifesto.numero_manifesto }}', {{ l.valor_extra }}, '{{ l.localidade_extra|default:'' }}', '{{ l.observacao|default:''|escapejs }}')" title="Editar Ajustes / Extras">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Rodapé de Totais e Resumo do Motorista -->
+                <div class="row g-4 mb-4">
+                    <div class="col-md-7">
+                        <div class="card border-0 shadow-sm rounded-4 p-4 h-100">
+                            <h6 class="fw-bold text-dark mb-3"><i class="bi bi-pie-chart me-2 text-primary"></i>Distribuição de Valores por Base (UF)</h6>
+                            <div class="row g-3">
+                                {% for base, dados in r.breakdown_bases.items %}
+                                <div class="col-sm-6 col-lg-3">
+                                    <div class="p-3 bg-light rounded-4 border text-center">
+                                        <div class="badge bg-primary px-3 py-1 mb-2">{{ base }}</div>
+                                        <div class="small text-muted">{{ dados.entregas }} ent. | {{ dados.coletas }} col.</div>
+                                        <div class="fw-bold fs-6 text-dark mt-1">R$ {{ dados.valor_total|floatformat:2 }}</div>
+                                    </div>
+                                </div>
+                                {% empty %}
+                                <div class="col-12 text-muted small">Nenhuma entrega registrada por base neste período.</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-5">
+                        <div class="card border-0 shadow-sm rounded-4 p-4 h-100 bg-light-subtle">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="fw-bold text-dark mb-0"><i class="bi bi-calculator me-2 text-primary"></i>Resumo do Período</h6>
+                                <button class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="abrirModalAjustesResumo({{ r.id }}, '{{ r.motorista.nome_completo|escapejs }}', {{ r.valor_pedagio }}, {{ r.valor_desconto }}, '{{ r.observacao|default:''|escapejs }}')">
+                                    <i class="bi bi-pencil me-1"></i> Ajustar Pedágio / Desconto
+                                </button>
+                            </div>
+                            
+                            <ul class="list-group list-group-flush small bg-transparent">
+                                <li class="list-group-item d-flex justify-content-between bg-transparent px-0">
+                                    <span class="text-muted">Total de Diárias:</span>
+                                    <span class="fw-bold">R$ {{ r.total_diarias|floatformat:2 }}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between bg-transparent px-0">
+                                    <span class="text-muted">Total de Serviços (Entregas + Coletas):</span>
+                                    <span class="fw-bold">{{ r.total_servicos }}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between bg-transparent px-0">
+                                    <span class="text-muted">Diária / Serviço:</span>
+                                    <span class="fw-bold">R$ {{ r.diaria_por_servico|floatformat:2 }}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between bg-transparent px-0">
+                                    <span class="text-muted">Total Pedágio (+):</span>
+                                    <span class="fw-bold text-success" id="resumo-pedagio-{{ r.id }}">R$ {{ r.valor_pedagio|floatformat:2 }}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between bg-transparent px-0">
+                                    <span class="text-muted">Total Parcial:</span>
+                                    <span class="fw-bold" id="resumo-parcial-{{ r.id }}">R$ {{ r.total_parcial|floatformat:2 }}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between bg-transparent px-0">
+                                    <span class="text-muted">Descontos (-):</span>
+                                    <span class="fw-bold text-danger" id="resumo-desconto-{{ r.id }}">R$ {{ r.valor_desconto|floatformat:2 }}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between bg-transparent px-0 pt-3 border-top border-2">
+                                    <span class="fs-6 fw-bold text-dark">TOTAL FINAL A PAGAR:</span>
+                                    <span class="fs-5 fw-bold text-success" id="resumo-final-{{ r.id }}">R$ {{ r.total_final|floatformat:2 }}</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            {% endfor %}
+
+            {% endif %}
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- TAB 2: RESULTADO FATURA (Consolidado de todos os agregados)               -->
+        <!-- ========================================================================= -->
+        <div class="tab-pane fade" id="tab-fatura" role="tabpanel">
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+                <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="fw-bold text-dark mb-0"><i class="bi bi-receipt me-2 text-primary"></i>Fatura Consolidada - Pagamento de Agregados</h6>
+                        <small class="text-muted">Relatório de fechamento com dados bancários e rateio por unidade de negócios</small>
+                    </div>
+                    {% if fechamento %}
+                    <a href="{% url 'financeiro:exportar_excel' %}?fechamento_id={{ fechamento.id }}" class="btn btn-success btn-sm rounded-pill px-3 shadow-sm">
+                        <i class="bi bi-file-earmark-excel me-1"></i> Baixar Planilha
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Nome do Motorista</th>
+                                <th>CPF</th>
+                                <th>Dados Bancários / PIX</th>
+                                {% for base in lista_bases %}
+                                <th class="text-end bg-primary">Valor {{ base }}</th>
+                                {% endfor %}
+                                <th class="text-end bg-success">VALOR TOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in resumos %}
+                            <tr>
+                                <td class="fw-bold text-dark">{{ r.motorista.nome_completo }}</td>
+                                <td class="text-muted">{{ r.motorista.cpf|default:"-" }}</td>
+                                <td class="small" style="max-width: 250px;">
+                                    {% with db=dados_bancarios_map|dict_lookup:r.motorista_id %}
+                                    {% if db %}
+                                        {{ db.dados_bancarios|default:"" }}
+                                        {% if db.chave_pix %}<br><span class="badge bg-light text-dark border">PIX: {{ db.chave_pix }}</span>{% endif %}
+                                    {% else %}
+                                        <span class="text-muted italic">Sem dados bancários</span>
+                                    {% endif %}
+                                    {% endwith %}
+                                </td>
+                                {% for base in lista_bases %}
+                                {% with b_info=r.breakdown_bases|dict_lookup:base %}
+                                <td class="text-end">R$ {{ b_info.valor_total|floatformat:2|default:"0,00" }}</td>
+                                {% endwith %}
+                                {% endfor %}
+                                <td class="text-end fw-bold text-success fs-6">R$ {{ r.total_final|floatformat:2 }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="{{ lista_bases|length|add:4 }}" class="text-center py-5 text-muted">
+                                    Nenhum dado disponível no momento.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- TAB 3: TARIFAS POR FILIAL (Configuração de preços por base)                -->
+        <!-- ========================================================================= -->
+        <div class="tab-pane fade" id="tab-tarifas" role="tabpanel">
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-header bg-white py-3 border-0">
+                    <h6 class="fw-bold text-dark mb-0"><i class="bi bi-tag me-2 text-primary"></i>Tabela de Tarifas de Remuneração por Filial</h6>
+                    <small class="text-muted">Defina quanto é pago por Diária Fixa, por Entrega e por Coleta em cada base operacional</small>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Filial / Base</th>
+                                <th>UF</th>
+                                <th>Valor da Diária (R$)</th>
+                                <th>Valor por Entrega (R$)</th>
+                                <th>Valor por Coleta (R$)</th>
+                                <th class="text-center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for filial in filiais %}
+                            {% with tarifa=filial.tarifas_agregado.first %}
+                            <tr id="tarifa-row-{{ filial.id }}">
+                                <td class="fw-bold">{{ filial.nome }}</td>
+                                <td><span class="badge bg-secondary">{{ filial.uf|default:"-" }}</span></td>
+                                <td>
+                                    <div class="input-group input-group-sm" style="max-width: 140px;">
+                                        <span class="input-group-text">R$</span>
+                                        <input type="number" step="0.01" class="form-control" id="diaria-{{ filial.id }}" value="{{ tarifa.valor_diaria|default:'0.00' }}">
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="input-group input-group-sm" style="max-width: 140px;">
+                                        <span class="input-group-text">R$</span>
+                                        <input type="number" step="0.01" class="form-control" id="entrega-{{ filial.id }}" value="{{ tarifa.valor_por_entrega|default:'5.00' }}">
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="input-group input-group-sm" style="max-width: 140px;">
+                                        <span class="input-group-text">R$</span>
+                                        <input type="number" step="0.01" class="form-control" id="coleta-{{ filial.id }}" value="{{ tarifa.valor_por_coleta|default:'10.00' }}">
+                                    </div>
+                                </td>
+                                <td class="text-center">
+                                    <button class="btn btn-primary btn-sm rounded-pill px-3" onclick="salvarTarifaFilial({{ filial.id }})">
+                                        <i class="bi bi-check2 me-1"></i> Salvar
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endwith %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- TAB 4: REGRAS DE OCORRÊNCIAS PAGAS                                       -->
+        <!-- ========================================================================= -->
+        <div class="tab-pane fade" id="tab-ocorrencias" role="tabpanel">
+            <div class="card border-0 shadow-sm rounded-4 p-4">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h6 class="fw-bold text-dark mb-0"><i class="bi bi-check2-square me-2 text-primary"></i>Quais Ocorrências Contam como Pagamento?</h6>
+                        <p class="text-muted small mb-0">
+                            Marque as ocorrências em que o motorista compareceu ao local e deve receber a remuneração pelo serviço.
+                            Ocorrências não marcadas (ex: falta de tempo, cancelamento interno) não serão contabilizadas para pagamento.
+                        </p>
+                    </div>
+                    <button class="btn btn-success rounded-pill px-4" onclick="salvarConfigOcorrencias()">
+                        <i class="bi bi-save me-1"></i> Salvar Regras de Pagamento
+                    </button>
+                </div>
+
+                <div class="row g-4">
+                    <!-- Coluna de Entregas -->
+                    <div class="col-md-6">
+                        <div class="p-3 border rounded-4 bg-light-subtle h-100">
+                            <h6 class="fw-bold text-primary mb-3"><i class="bi bi-box-seam me-2"></i>Ocorrências para Entregas Pagas</h6>
+                            <div class="list-group list-group-flush" style="max-height: 450px; overflow-y: auto;">
+                                {% for oc in ocorrencias_todas %}
+                                <label class="list-group-item d-flex align-items-center gap-3 bg-transparent border-0 py-2">
+                                    <input class="form-check-input check-oc-entrega" type="checkbox" value="{{ oc.id }}" {% if oc.id in ocs_entrega_ids %}checked{% endif %}>
+                                    <div>
+                                        <span class="badge bg-dark me-1">Código {{ oc.codigo_tms }}</span>
+                                        <span class="small fw-bold text-dark">{{ oc.descricao }}</span>
+                                    </div>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Coluna de Coletas -->
+                    <div class="col-md-6">
+                        <div class="p-3 border rounded-4 bg-light-subtle h-100">
+                            <h6 class="fw-bold text-success mb-3"><i class="bi bi-truck me-2"></i>Ocorrências para Coletas Pagas (Válidas)</h6>
+                            <div class="list-group list-group-flush" style="max-height: 450px; overflow-y: auto;">
+                                {% for oc in ocorrencias_todas %}
+                                <label class="list-group-item d-flex align-items-center gap-3 bg-transparent border-0 py-2">
+                                    <input class="form-check-input check-oc-coleta" type="checkbox" value="{{ oc.id }}" {% if oc.id in ocs_coleta_ids %}checked{% endif %}>
+                                    <div>
+                                        <span class="badge bg-dark me-1">Código {{ oc.codigo_tms }}</span>
+                                        <span class="small fw-bold text-dark">{{ oc.descricao }}</span>
+                                    </div>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- MODAIS                                                                    -->
+<!-- ========================================================================= -->
+
+<!-- Modal Novo Fechamento -->
+<div class="modal fade" id="modalNovoFechamento" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold"><i class="bi bi-calendar-plus text-primary me-2"></i>Gerar Fechamento de Agregados</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="text-muted small">Selecione o intervalo de datas. O sistema irá varrer todos os manifestos de agregados do período e calcular entregas e coletas automaticamente.</p>
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Data Início</label>
+                        <input type="date" class="form-control rounded-pill" id="novo-periodo-inicio" value="{{ hoje|date:'Y-m-01' }}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Data Fim</label>
+                        <input type="date" class="form-control rounded-pill" id="novo-periodo-fim" value="{{ hoje|date:'Y-m-d' }}">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary rounded-pill px-4" id="btnGerarFechamento" onclick="dispararGeracaoFechamento()">
+                    <i class="bi bi-gear-fill me-1"></i> Gerar Apuração
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Dados Bancários -->
+<div class="modal fade" id="modalDadosBancarios" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold" id="modalBancoTitulo">Dados Bancários</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="modal-banco-mot-id">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Dados da Conta Bancária</label>
+                    <textarea class="form-control rounded-3" id="modal-banco-dados" rows="2" placeholder="Ex: AG 1234 C/C 56789-0 BANCO ITAU"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Chave PIX</label>
+                    <input type="text" class="form-control rounded-pill" id="modal-banco-pix" placeholder="CPF, E-mail, Telefone ou Chave">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Titular da Conta (se diferente)</label>
+                    <input type="text" class="form-control rounded-pill" id="modal-banco-titular" placeholder="Nome do titular">
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success rounded-pill px-4" onclick="salvarDadosBancariosModal()">
+                    <i class="bi bi-check-lg me-1"></i> Salvar Dados
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Editar Linha (Extras/Obs) -->
+<div class="modal fade" id="modalEditarLinha" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold" id="modalLinhaTitulo">Ajustes do Manifesto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="modal-linha-id">
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Valores Extras (R$)</label>
+                        <input type="number" step="0.01" class="form-control rounded-pill" id="modal-linha-extra">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Localidade Extra (UF)</label>
+                        <input type="text" class="form-control rounded-pill text-uppercase" id="modal-linha-loc" placeholder="Ex: RJ, SP">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Observação</label>
+                    <textarea class="form-control rounded-3" id="modal-linha-obs" rows="2" placeholder="Motivo do valor extra ou observação operacional"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary rounded-pill px-4" onclick="salvarLinhaModal()">
+                    <i class="bi bi-save me-1"></i> Salvar Ajuste
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Ajustes Resumo (Pedágio/Descontos) -->
+<div class="modal fade" id="modalAjustesResumo" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold" id="modalResumoTitulo">Ajustes de Pedágio e Descontos</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="modal-resumo-id">
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold text-success">Total Pedágio (+) R$</label>
+                        <input type="number" step="0.01" class="form-control rounded-pill" id="modal-resumo-pedagio">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold text-danger">Descontos (-) R$</label>
+                        <input type="number" step="0.01" class="form-control rounded-pill" id="modal-resumo-desconto">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Observação Geral do Período</label>
+                    <textarea class="form-control rounded-3" id="modal-resumo-obs" rows="2" placeholder="Observações que constarão no cabeçalho do relatório do motorista"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary rounded-pill px-4" onclick="salvarResumoModal()">
+                    <i class="bi bi-save me-1"></i> Atualizar Totais
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Troca visualização do motorista selecionado na Tab 1
+function trocarMotoristaVisualizado(motId) {
+    document.querySelectorAll('.motorista-bloco').forEach(el => el.style.display = 'none');
+    const alvo = document.getElementById(`bloco-motorista-${motId}`);
+    if (alvo) alvo.style.display = 'block';
+}
+
+// Dispara geração ou recálculo do fechamento
+function dispararGeracaoFechamento() {
+    const inicio = document.getElementById('novo-periodo-inicio').value;
+    const fim = document.getElementById('novo-periodo-fim').value;
+    const btn = document.getElementById('btnGerarFechamento');
+
+    if (!inicio || !fim) {
+        alert('Por favor, informe as datas de início e fim.');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Processando...';
+
+    fetch("{% url 'financeiro:api_gerar_fechamento' %}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ periodo_inicio: inicio, periodo_fim: fim })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.sucesso) {
+            window.location.href = `?fechamento_id=${res.fechamento_id}`;
+        } else {
+            alert('Erro: ' + res.erro);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-gear-fill me-1"></i> Gerar Apuração';
+        }
+    })
+    .catch(err => {
+        alert('Erro de comunicação: ' + err);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-gear-fill me-1"></i> Gerar Apuração';
+    });
+}
+
+function recalcularFechamentoAtual() {
+    {% if fechamento %}
+    if (confirm("Deseja recalcular este fechamento com os dados mais recentes do aplicativo? Seus ajustes manuais de extras, pedágio e descontos serão preservados.")) {
+        fetch("{% url 'financeiro:api_gerar_fechamento' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                periodo_inicio: '{{ fechamento.periodo_inicio|date:"Y-m-d" }}',
+                periodo_fim: '{{ fechamento.periodo_fim|date:"Y-m-d" }}'
+            })
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.sucesso) {
+                window.location.reload();
+            } else {
+                alert('Erro: ' + res.erro);
+            }
+        });
+    }
+    {% endif %}
+}
+
+// Modal Dados Bancários
+function abrirModalDadosBancarios(motId, motNome) {
+    document.getElementById('modalBancoTitulo').innerText = `Dados Bancários - ${motNome}`;
+    document.getElementById('modal-banco-mot-id').value = motId;
+    
+    const txtBanco = document.getElementById(`text-banco-${motId}`);
+    const txtPix = document.getElementById(`text-pix-${motId}`);
+    const txtTitular = document.getElementById(`text-titular-${motId}`);
+
+    document.getElementById('modal-banco-dados').value = (txtBanco && txtBanco.innerText !== 'Não informado') ? txtBanco.innerText : '';
+    document.getElementById('modal-banco-pix').value = (txtPix && txtPix.innerText !== 'Não informada') ? txtPix.innerText : '';
+    document.getElementById('modal-banco-titular').value = txtTitular ? txtTitular.innerText : '';
+
+    new bootstrap.Modal(document.getElementById('modalDadosBancarios')).show();
+}
+
+function salvarDadosBancariosModal() {
+    const motId = document.getElementById('modal-banco-mot-id').value;
+    const dados = document.getElementById('modal-banco-dados').value;
+    const pix = document.getElementById('modal-banco-pix').value;
+    const titular = document.getElementById('modal-banco-titular').value;
+
+    fetch("{% url 'financeiro:api_salvar_dados_bancarios' %}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+        body: JSON.stringify({ motorista_id: motId, dados_bancarios: dados, chave_pix: pix, titular_pagamento: titular })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.sucesso) {
+            bootstrap.Modal.getInstance(document.getElementById('modalDadosBancarios')).hide();
+            window.location.reload();
+        } else {
+            alert('Erro: ' + res.erro);
+        }
+    });
+}
+
+// Modal Linha (Extras/Obs)
+function abrirModalEditarLinha(linhaId, mftNum, extra, loc, obs) {
+    document.getElementById('modalLinhaTitulo').innerText = `Ajustes - Manifesto #${mftNum}`;
+    document.getElementById('modal-linha-id').value = linhaId;
+    document.getElementById('modal-linha-extra').value = extra;
+    document.getElementById('modal-linha-loc').value = loc;
+    document.getElementById('modal-linha-obs').value = obs;
+    new bootstrap.Modal(document.getElementById('modalEditarLinha')).show();
+}
+
+function salvarLinhaModal() {
+    const linhaId = document.getElementById('modal-linha-id').value;
+    const extra = document.getElementById('modal-linha-extra').value;
+    const loc = document.getElementById('modal-linha-loc').value;
+    const obs = document.getElementById('modal-linha-obs').value;
+
+    fetch("{% url 'financeiro:api_salvar_linha' %}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+        body: JSON.stringify({ linha_id: linhaId, valor_extra: extra, localidade_extra: loc, observacao: obs })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.sucesso) {
+            bootstrap.Modal.getInstance(document.getElementById('modalEditarLinha')).hide();
+            window.location.reload();
+        } else {
+            alert('Erro: ' + res.erro);
+        }
+    });
+}
+
+// Modal Ajustes Resumo
+function abrirModalAjustesResumo(resumoId, motNome, ped, desc, obs) {
+    document.getElementById('modalResumoTitulo').innerText = `Ajustes - ${motNome}`;
+    document.getElementById('modal-resumo-id').value = resumoId;
+    document.getElementById('modal-resumo-pedagio').value = ped;
+    document.getElementById('modal-resumo-desconto').value = desc;
+    document.getElementById('modal-resumo-obs').value = obs;
+    new bootstrap.Modal(document.getElementById('modalAjustesResumo')).show();
+}
+
+function salvarResumoModal() {
+    const resumoId = document.getElementById('modal-resumo-id').value;
+    const ped = document.getElementById('modal-resumo-pedagio').value;
+    const desc = document.getElementById('modal-resumo-desconto').value;
+    const obs = document.getElementById('modal-resumo-obs').value;
+
+    fetch("{% url 'financeiro:api_salvar_resumo' %}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+        body: JSON.stringify({ resumo_id: resumoId, valor_pedagio: ped, valor_desconto: desc, observacao: obs })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.sucesso) {
+            bootstrap.Modal.getInstance(document.getElementById('modalAjustesResumo')).hide();
+            window.location.reload();
+        } else {
+            alert('Erro: ' + res.erro);
+        }
+    });
+}
+
+// Salvar Tarifa da Filial
+function salvarTarifaFilial(filialId) {
+    const diaria = document.getElementById(`diaria-${filialId}`).value;
+    const entrega = document.getElementById(`entrega-${filialId}`).value;
+    const coleta = document.getElementById(`coleta-${filialId}`).value;
+
+    fetch("{% url 'financeiro:api_salvar_tarifa' %}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+        body: JSON.stringify({ filial_id: filialId, valor_diaria: diaria, valor_por_entrega: entrega, valor_por_coleta: coleta })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.sucesso) {
+            alert(res.mensagem);
+        } else {
+            alert('Erro: ' + res.erro);
+        }
+    });
+}
+
+// Salvar Ocorrências Pagas
+function salvarConfigOcorrencias() {
+    const ocsEntrega = Array.from(document.querySelectorAll('.check-oc-entrega:checked')).map(cb => cb.value);
+    const ocsColeta = Array.from(document.querySelectorAll('.check-oc-coleta:checked')).map(cb => cb.value);
+
+    fetch("{% url 'financeiro:api_salvar_config_ocorrencias' %}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+        body: JSON.stringify({ ocorrencias_entrega: ocsEntrega, ocorrencias_coleta: ocsColeta })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.sucesso) {
+            alert(res.mensagem);
+        } else {
+            alert('Erro: ' + res.erro);
+        }
+    });
+}
+</script>
+{% endblock %}

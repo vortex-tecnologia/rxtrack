@@ -48,9 +48,12 @@ async function carregarUsuarios() {
 }
 
 function renderUserRow(u) {
-    const badgeTipo = u.tipo_usuario === 'SAC' 
-        ? '<span class="badge bg-info-subtle text-info">SAC</span>' 
-        : '<span class="badge bg-primary-subtle text-primary">Operacional</span>';
+    let badgeTipo = '<span class="badge bg-primary-subtle text-primary">Operacional</span>';
+    if (u.tipo_usuario === 'SAC') {
+        badgeTipo = '<span class="badge bg-info-subtle text-info">SAC</span>';
+    } else if (u.tipo_usuario === 'FINANCEIRO') {
+        badgeTipo = '<span class="badge bg-success-subtle text-success"><i class="bi bi-cash-coin me-1"></i>Financeiro</span>';
+    }
     
     let badgeCargo = '';
     if (u.cargo === 'GESTOR') badgeCargo = '<span class="badge bg-danger-subtle text-danger">Gestor</span>';

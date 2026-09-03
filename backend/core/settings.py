@@ -81,6 +81,7 @@ TENANT_APPS = [
     'auditoria',
     'integracoes.apps.IntegracoesConfig',
     'whatsbot.apps.WhatsbotConfig',
+    'financeiro.apps.FinanceiroConfig',
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
