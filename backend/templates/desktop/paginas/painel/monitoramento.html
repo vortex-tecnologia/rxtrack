@@ -419,24 +419,22 @@
 
 <!-- Modal Detalhes do Manifesto na Torre de Controle Live -->
 <div class="modal fade" id="modalDetalhesManifestoTorre" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content border-0 shadow" id="conteudoModalDetalhesTorre" style="border-radius: 20px; overflow: hidden; background-color: #fff;">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden" id="conteudoModalDetalhesTorre" style="background-color: #fff;">
             <!-- Carregado dinamicamente via AJAX -->
         </div>
     </div>
 </div>
 
-<!-- Modal Detalhes da NF (abre limpo sem sobrepor o modal de manifesto) -->
-<div class="modal fade" id="modalDetalhesNotaTorre" tabindex="-1" aria-hidden="true">
+<!-- Modal Detalhes da NF (abre isolado, limpo, com footer fixo e corpo rolável) -->
+<div class="modal fade" id="modalDetalhesNotaTorre" tabindex="-1" aria-hidden="true" style="z-index: 1060;">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content border-0 shadow" style="border-radius: 20px; overflow: hidden; background-color: #fff;">
-            <div class="position-relative">
-                <button type="button" class="btn-close position-absolute top-0 end-0 m-3" style="z-index: 10; filter: invert(1);" data-bs-dismiss="modal" aria-label="Close"></button>
-                <div id="conteudoModalNotaTorre">
-                    <!-- Carregado dinamicamente via AJAX -->
-                </div>
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden position-relative" style="background-color: #fff; max-height: calc(100vh - 3.5rem);">
+            <button type="button" class="btn-close position-absolute top-0 end-0 m-3" style="z-index: 1055; filter: invert(1); opacity: 0.85;" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div class="modal-body p-0" id="conteudoModalNotaTorre" style="overflow-y: auto; flex: 1 1 auto;">
+                <!-- Carregado dinamicamente via AJAX -->
             </div>
-            <div class="modal-footer bg-light border-0 d-flex justify-content-between">
+            <div class="modal-footer bg-light border-0 d-flex justify-content-between py-3 px-4">
                 <button type="button" class="btn btn-outline-primary px-3 rounded-pill d-none" id="btnVoltarManifestoTorre" onclick="fecharDetalhesNotaEVoltar()">
                     <i class="bi bi-arrow-left me-1"></i> Voltar ao Manifesto
                 </button>
@@ -840,55 +838,64 @@
         function verDetalhesNF(notaId) {
             if (!notaId) return;
 
-            // Se o modal do manifesto estiver aberto, esconde ele para não sobrepor
+            const abrirModalNota = () => {
+                const modalEl = document.getElementById('modalDetalhesNotaTorre');
+                const modalConteudo = document.getElementById('conteudoModalNotaTorre');
+                const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+                // Loading
+                modalConteudo.innerHTML = `
+                    <div class="text-center p-5">
+                        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+                        <h6 class="mt-3 text-muted fw-bold">Carregando detalhes da nota...</h6>
+                    </div>
+                `;
+
+                const btnVoltar = document.getElementById('btnVoltarManifestoTorre');
+                if (btnVoltar) {
+                    if (manifestoOrigemId) {
+                        btnVoltar.classList.remove('d-none');
+                    } else {
+                        btnVoltar.classList.add('d-none');
+                    }
+                }
+
+                modalInstance.show();
+
+                fetch(`/api/manifesto/detalhes-nota/${notaId}/`)
+                    .then(response => {
+                        if (!response.ok) throw new Error(`Erro ${response.status}`);
+                        return response.text();
+                    })
+                    .then(html => {
+                        modalConteudo.innerHTML = html;
+                    })
+                    .catch(err => {
+                        modalConteudo.innerHTML = `
+                            <div class="text-center p-5">
+                                <i class="bi bi-exclamation-octagon text-danger" style="font-size: 3rem;"></i>
+                                <p class="mt-3 fw-bold">${err.message}</p>
+                                <button class="btn btn-secondary mt-2" data-bs-dismiss="modal">Fechar</button>
+                            </div>
+                        `;
+                    });
+            };
+
             const modalManEl = document.getElementById('modalDetalhesManifestoTorre');
             if (modalManEl && modalManEl.classList.contains('show')) {
                 manifestoOrigemId = manifestoAbertoDetalhesId;
                 const modalManInst = bootstrap.Modal.getInstance(modalManEl);
                 if (modalManInst) {
+                    modalManEl.addEventListener('hidden.bs.modal', function onOcultado() {
+                        modalManEl.removeEventListener('hidden.bs.modal', onOcultado);
+                        abrirModalNota();
+                    });
                     modalManInst.hide();
+                    return;
                 }
             }
 
-            const modalEl = document.getElementById('modalDetalhesNotaTorre');
-            const modalConteudo = document.getElementById('conteudoModalNotaTorre');
-            const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
-
-            // Loading
-            modalConteudo.innerHTML = `
-                <div class="text-center p-5">
-                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
-                    <h6 class="mt-3 text-muted fw-bold">Carregando detalhes da nota...</h6>
-                </div>
-            `;
-            modalInstance.show();
-
-            const btnVoltar = document.getElementById('btnVoltarManifestoTorre');
-            if (btnVoltar) {
-                if (manifestoOrigemId) {
-                    btnVoltar.classList.remove('d-none');
-                } else {
-                    btnVoltar.classList.add('d-none');
-                }
-            }
-
-            fetch(`/api/manifesto/detalhes-nota/${notaId}/`)
-                .then(response => {
-                    if (!response.ok) throw new Error(`Erro ${response.status}`);
-                    return response.text();
-                })
-                .then(html => {
-                    modalConteudo.innerHTML = html;
-                })
-                .catch(err => {
-                    modalConteudo.innerHTML = `
-                        <div class="text-center p-5">
-                            <i class="bi bi-exclamation-octagon text-danger" style="font-size: 3rem;"></i>
-                            <p class="mt-3 fw-bold">${err.message}</p>
-                            <button class="btn btn-secondary mt-2" data-bs-dismiss="modal">Fechar</button>
-                        </div>
-                    `;
-                });
+            abrirModalNota();
         }
 
         function fecharDetalhesNotaEVoltar() {
