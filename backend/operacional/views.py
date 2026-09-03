@@ -188,6 +188,8 @@ class DashboardView(TemplateView):
 
         taxa_sucesso = round((total_notas / total_concluidas * 100), 1) if total_concluidas > 0 else 100.0
         progresso_geral = round((total_concluidas / total_geral_notas * 100), 1) if total_geral_notas > 0 else 0.0
+        pct_entregues = round((total_notas / total_geral_notas * 100), 1) if total_geral_notas > 0 else 0.0
+        pct_ocorrencias = round((notas_ocorrencia / total_geral_notas * 100), 1) if total_geral_notas > 0 else 0.0
 
         # Divisão entregas vs coletas
         coletas_totais = notas_do_dia.filter(tipo_operacao='COLETA').count()
@@ -202,6 +204,9 @@ class DashboardView(TemplateView):
         context['total_geral_notas'] = total_geral_notas
         context['taxa_sucesso'] = taxa_sucesso
         context['progresso_geral'] = progresso_geral
+        context['progresso_geral_css'] = f"{progresso_geral:.1f}"
+        context['pct_entregues_css'] = f"{pct_entregues:.1f}"
+        context['pct_ocorrencias_css'] = f"{pct_ocorrencias:.1f}"
         context['coletas_totais'] = coletas_totais
         context['coletas_concluidas'] = coletas_concluidas
         context['entregas_totais'] = entregas_totais
