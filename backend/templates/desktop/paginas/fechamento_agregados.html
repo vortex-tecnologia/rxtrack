@@ -232,9 +232,18 @@
                                     {% endfor %}
 
                                     <td class="text-center">
-                                        <button class="btn btn-sm btn-outline-secondary rounded-pill" onclick="abrirModalEditarLinha({{ l.id }}, '{{ l.manifesto.numero_manifesto }}', {{ l.valor_extra }}, '{{ l.localidade_extra|default:'' }}', '{{ l.observacao|default:''|escapejs }}')" title="Editar Ajustes / Extras">
+                                        <button class="btn btn-sm btn-outline-secondary rounded-pill" 
+                                                id="btn-edit-mft-{{ l.id }}"
+                                                data-id="{{ l.id }}"
+                                                data-mft="{{ l.manifesto.numero_manifesto }}"
+                                                data-extra="{{ l.valor_extra|format_input_decimal:'0.00' }}"
+                                                data-loc="{{ l.localidade_extra|default:'' }}"
+                                                data-obs="{{ l.observacao|default:'' }}"
+                                                onclick="abrirModalEditarLinhaElemento(this)" 
+                                                title="Editar Ajustes e Rateio por Base">
                                             <i class="bi bi-pencil"></i>
                                         </button>
+                                        <script type="application/json" id="raw-bk-{{ l.id }}">{{ l.breakdown_bases|safe }}</script>
                                     </td>
                                 </tr>
                                 {% endif %}
@@ -400,30 +409,30 @@
                         </thead>
                         <tbody>
                             {% for filial in filiais %}
-                            {% with tarifa=filial.tarifas_agregado.first %}
+                            {% with tarifa=tarifas_map|dict_lookup:filial.id %}
                             <tr id="tarifa-row-{{ filial.id }}">
                                 <td class="fw-bold">{{ filial.nome }}</td>
                                 <td><span class="badge bg-secondary">{{ filial.uf|default:"-" }}</span></td>
                                 <td>
                                     <div class="input-group input-group-sm" style="max-width: 140px;">
                                         <span class="input-group-text">R$</span>
-                                        <input type="number" step="0.01" class="form-control" id="diaria-{{ filial.id }}" value="{{ tarifa.valor_diaria|default:'0.00' }}">
+                                        <input type="text" class="form-control text-end fw-bold" id="diaria-{{ filial.id }}" value="{{ tarifa.valor_diaria|format_input_decimal:'0.00' }}" placeholder="0.00">
                                     </div>
                                 </td>
                                 <td>
                                     <div class="input-group input-group-sm" style="max-width: 140px;">
                                         <span class="input-group-text">R$</span>
-                                        <input type="number" step="0.01" class="form-control" id="entrega-{{ filial.id }}" value="{{ tarifa.valor_por_entrega|default:'5.00' }}">
+                                        <input type="text" class="form-control text-end fw-bold" id="entrega-{{ filial.id }}" value="{{ tarifa.valor_por_entrega|format_input_decimal:'5.00' }}" placeholder="5.00">
                                     </div>
                                 </td>
                                 <td>
                                     <div class="input-group input-group-sm" style="max-width: 140px;">
                                         <span class="input-group-text">R$</span>
-                                        <input type="number" step="0.01" class="form-control" id="coleta-{{ filial.id }}" value="{{ tarifa.valor_por_coleta|default:'10.00' }}">
+                                        <input type="text" class="form-control text-end fw-bold" id="coleta-{{ filial.id }}" value="{{ tarifa.valor_por_coleta|format_input_decimal:'10.00' }}" placeholder="10.00">
                                     </div>
                                 </td>
                                 <td class="text-center">
-                                    <button class="btn btn-primary btn-sm rounded-pill px-3" onclick="salvarTarifaFilial({{ filial.id }})">
+                                    <button class="btn btn-primary btn-sm rounded-pill px-4" id="btn-salvar-tarifa-{{ filial.id }}" onclick="salvarTarifaFilial({{ filial.id }})">
                                         <i class="bi bi-check2 me-1"></i> Salvar
                                     </button>
                                 </td>
@@ -578,13 +587,39 @@
                 <div class="row g-3 mb-3">
                     <div class="col-6">
                         <label class="form-label small fw-bold">Valores Extras (R$)</label>
-                        <input type="number" step="0.01" class="form-control rounded-pill" id="modal-linha-extra">
+                        <input type="text" class="form-control rounded-pill text-end fw-bold" id="modal-linha-extra" placeholder="0.00">
                     </div>
                     <div class="col-6">
                         <label class="form-label small fw-bold">Localidade Extra (UF)</label>
-                        <input type="text" class="form-control rounded-pill text-uppercase" id="modal-linha-loc" placeholder="Ex: RJ, SP">
+                        <input type="text" class="form-control rounded-pill text-uppercase" id="modal-linha-loc" placeholder="Ex: RJ, SP, DF">
                     </div>
                 </div>
+
+                <!-- Divisão / Rateio de Entregas e Coletas por Filial/Base -->
+                <div class="p-3 bg-light rounded-4 border mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="small fw-bold text-dark"><i class="bi bi-diagram-3 me-1 text-primary"></i> Rateio de Serviços por Base (Filial)</span>
+                        <small class="text-muted">Quem paga cada serviço</small>
+                    </div>
+                    <div class="row g-2">
+                        {% for base in lista_bases %}
+                        <div class="col-6 col-md-3">
+                            <div class="p-2 border rounded bg-white text-center shadow-xs">
+                                <span class="badge bg-primary mb-1">{{ base }}</span>
+                                <div class="input-group input-group-sm mb-1">
+                                    <span class="input-group-text py-0 px-1" style="font-size: 0.72rem;">Ent</span>
+                                    <input type="number" min="0" class="form-control text-center py-0 px-1 fw-bold" id="modal-ent-{{ base }}" value="0">
+                                </div>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text py-0 px-1" style="font-size: 0.72rem;">Col</span>
+                                    <input type="number" min="0" class="form-control text-center py-0 px-1 fw-bold" id="modal-col-{{ base }}" value="0">
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
                 <div class="mb-3">
                     <label class="form-label small fw-bold">Observação</label>
                     <textarea class="form-control rounded-3" id="modal-linha-obs" rows="2" placeholder="Motivo do valor extra ou observação operacional"></textarea>
@@ -746,13 +781,40 @@ function salvarDadosBancariosModal() {
     });
 }
 
-// Modal Linha (Extras/Obs)
-function abrirModalEditarLinha(linhaId, mftNum, extra, loc, obs) {
+const BASES_SISTEMA = [{% for b in lista_bases %}"{{ b }}"{% if not forloop.last %},{% endif %}{% endfor %}];
+
+// Modal Linha (Extras/Obs/Rateio de Bases)
+function abrirModalEditarLinhaElemento(btn) {
+    const linhaId = btn.getAttribute('data-id');
+    const mftNum = btn.getAttribute('data-mft');
+    const extra = btn.getAttribute('data-extra');
+    const loc = btn.getAttribute('data-loc');
+    const obs = btn.getAttribute('data-obs');
+
     document.getElementById('modalLinhaTitulo').innerText = `Ajustes - Manifesto #${mftNum}`;
     document.getElementById('modal-linha-id').value = linhaId;
-    document.getElementById('modal-linha-extra').value = extra;
-    document.getElementById('modal-linha-loc').value = loc;
-    document.getElementById('modal-linha-obs').value = obs;
+    document.getElementById('modal-linha-extra').value = extra || '0.00';
+    document.getElementById('modal-linha-loc').value = loc || '';
+    document.getElementById('modal-linha-obs').value = obs || '';
+
+    let bk = {};
+    const rawEl = document.getElementById(`raw-bk-${linhaId}`);
+    if (rawEl) {
+        try {
+            bk = JSON.parse(rawEl.textContent);
+        } catch(e) {
+            console.warn('Erro ao ler breakdown JSON:', e);
+        }
+    }
+
+    BASES_SISTEMA.forEach(base => {
+        const dadosBase = bk[base] || {};
+        const elEnt = document.getElementById(`modal-ent-${base}`);
+        const elCol = document.getElementById(`modal-col-${base}`);
+        if (elEnt) elEnt.value = dadosBase.entregas || 0;
+        if (elCol) elCol.value = dadosBase.coletas || 0;
+    });
+
     new bootstrap.Modal(document.getElementById('modalEditarLinha')).show();
 }
 
@@ -762,10 +824,25 @@ function salvarLinhaModal() {
     const loc = document.getElementById('modal-linha-loc').value;
     const obs = document.getElementById('modal-linha-obs').value;
 
+    const bk = {};
+    BASES_SISTEMA.forEach(base => {
+        const elEnt = document.getElementById(`modal-ent-${base}`);
+        const elCol = document.getElementById(`modal-col-${base}`);
+        const ent = elEnt ? (parseInt(elEnt.value) || 0) : 0;
+        const col = elCol ? (parseInt(elCol.value) || 0) : 0;
+        bk[base] = { entregas: ent, coletas: col };
+    });
+
     fetch("{% url 'financeiro:api_salvar_linha' %}", {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-        body: JSON.stringify({ linha_id: linhaId, valor_extra: extra, localidade_extra: loc, observacao: obs })
+        body: JSON.stringify({ 
+            linha_id: linhaId, 
+            valor_extra: extra, 
+            localidade_extra: loc, 
+            observacao: obs,
+            breakdown_bases: bk
+        })
     })
     .then(r => r.json())
     .then(res => {
@@ -775,6 +852,9 @@ function salvarLinhaModal() {
         } else {
             alert('Erro: ' + res.erro);
         }
+    })
+    .catch(err => {
+        alert('Erro de conexão: ' + err);
     });
 }
 
@@ -812,9 +892,19 @@ function salvarResumoModal() {
 
 // Salvar Tarifa da Filial
 function salvarTarifaFilial(filialId) {
-    const diaria = document.getElementById(`diaria-${filialId}`).value;
-    const entrega = document.getElementById(`entrega-${filialId}`).value;
-    const coleta = document.getElementById(`coleta-${filialId}`).value;
+    const elDiaria = document.getElementById(`diaria-${filialId}`);
+    const elEntrega = document.getElementById(`entrega-${filialId}`);
+    const elColeta = document.getElementById(`coleta-${filialId}`);
+    const btn = document.getElementById(`btn-salvar-tarifa-${filialId}`);
+
+    const diaria = elDiaria ? elDiaria.value : '0';
+    const entrega = elEntrega ? elEntrega.value : '5';
+    const coleta = elColeta ? elColeta.value : '10';
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Salvando...';
+    }
 
     fetch("{% url 'financeiro:api_salvar_tarifa' %}", {
         method: 'POST',
@@ -823,11 +913,25 @@ function salvarTarifaFilial(filialId) {
     })
     .then(r => r.json())
     .then(res => {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check2 me-1"></i> Salvar';
+        }
         if (res.sucesso) {
+            if (elDiaria) elDiaria.value = parseFloat(res.valor_diaria).toFixed(2);
+            if (elEntrega) elEntrega.value = parseFloat(res.valor_por_entrega).toFixed(2);
+            if (elColeta) elColeta.value = parseFloat(res.valor_por_coleta).toFixed(2);
             alert(res.mensagem);
         } else {
-            alert('Erro: ' + res.erro);
+            alert('Erro ao salvar: ' + res.erro);
         }
+    })
+    .catch(err => {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check2 me-1"></i> Salvar';
+        }
+        alert('Erro de conexão: ' + err);
     });
 }
 
