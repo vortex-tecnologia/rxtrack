@@ -502,7 +502,10 @@ from manifesto.models import NotaFiscal
 @apenas_operacional
 def detalhes_nota_fiscal_view(request, nota_id):
     # 1. Busca a nota de referência para descobrir a chave de acesso
-    nota_clicada = get_object_or_404(NotaFiscal, id=nota_id)
+    nota_clicada = get_object_or_404(
+        NotaFiscal.objects.select_related('manifesto', 'manifesto__filial', 'manifesto__motorista'),
+        id=nota_id
+    )
     
     # 2. Define o filtro para buscar o histórico de forma inteligente
     if nota_clicada.chave_acesso:
@@ -523,6 +526,7 @@ def detalhes_nota_fiscal_view(request, nota_id):
         filtros_historico
     ).select_related(
         'manifesto', 
+        'manifesto__filial',
         'manifesto__motorista'
     ).prefetch_related(
         'baixa_info',           
