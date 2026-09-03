@@ -800,10 +800,113 @@
                 </button>
             </div>
         </div>
+<!-- Modal Feedback / Notificações (Substitui todo alert) -->
+<div class="modal fade" id="modalFeedback" tabindex="-1" aria-hidden="true" style="z-index: 2000;">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden text-center p-4">
+            <div class="mb-3">
+                <div class="d-inline-flex align-items-center justify-content-center rounded-circle p-3 shadow-sm bg-primary-subtle text-primary" id="modalFeedbackIconBg" style="width: 70px; height: 70px;">
+                    <i class="bi bi-info-circle-fill fs-1" id="modalFeedbackIcon"></i>
+                </div>
+            </div>
+            <h5 class="fw-bold mb-2 text-dark" id="modalFeedbackTitulo">Notificação</h5>
+            <p class="text-muted mb-4 fs-6" id="modalFeedbackMensagem" style="white-space: pre-line; word-break: break-word;"></p>
+            <div class="d-flex justify-content-center">
+                <button type="button" class="btn btn-primary rounded-pill px-5 fw-bold shadow-sm" id="modalFeedbackBtn" data-bs-dismiss="modal">
+                    OK
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Confirmação Customizado (Substitui confirm) -->
+<div class="modal fade" id="modalConfirmacao" tabindex="-1" aria-hidden="true" style="z-index: 2000;">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+        <div class="modal-content border-0 shadow-lg rounded-4 text-center p-4">
+            <div class="mb-3">
+                <div class="d-inline-flex align-items-center justify-content-center rounded-circle p-3 shadow-sm bg-warning-subtle text-warning" style="width: 70px; height: 70px;">
+                    <i class="bi bi-question-circle-fill fs-1"></i>
+                </div>
+            </div>
+            <h5 class="fw-bold mb-2 text-dark" id="modalConfirmacaoTitulo">Confirmação</h5>
+            <p class="text-muted mb-4 fs-6" id="modalConfirmacaoMensagem"></p>
+            <div class="d-flex justify-content-center gap-3">
+                <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm" id="modalConfirmacaoBtnConfirmar">Sim, continuar</button>
+            </div>
+        </div>
     </div>
 </div>
 
 <script>
+// Sistema Global de Feedback em Modal (Substitui todo alert nativo do navegador)
+let feedbackModalCallback = null;
+
+function mostrarModalMensagem(titulo, mensagem, tipo = 'info', callback = null) {
+    feedbackModalCallback = callback;
+    const modalEl = document.getElementById('modalFeedback');
+    if (!modalEl) {
+        if (callback) callback();
+        return;
+    }
+
+    const elTitulo = document.getElementById('modalFeedbackTitulo');
+    const elMsg = document.getElementById('modalFeedbackMensagem');
+    const elIconBg = document.getElementById('modalFeedbackIconBg');
+    const elIcon = document.getElementById('modalFeedbackIcon');
+    const elBtn = document.getElementById('modalFeedbackBtn');
+
+    if (elTitulo) elTitulo.innerText = titulo || 'Notificação';
+    if (elMsg) elMsg.innerText = mensagem || '';
+
+    if (elIconBg && elIcon && elBtn) {
+        elIconBg.className = 'd-inline-flex align-items-center justify-content-center rounded-circle p-3 shadow-sm ';
+        elIcon.className = 'bi fs-1 ';
+        elBtn.className = 'btn rounded-pill px-5 fw-bold shadow-sm ';
+
+        if (tipo === 'sucesso') {
+            elIconBg.className += 'bg-success-subtle text-success';
+            elIcon.className += 'bi-check-circle-fill';
+            elBtn.className += 'btn-success';
+        } else if (tipo === 'erro') {
+            elIconBg.className += 'bg-danger-subtle text-danger';
+            elIcon.className += 'bi-x-circle-fill';
+            elBtn.className += 'btn-danger';
+        } else if (tipo === 'aviso') {
+            elIconBg.className += 'bg-warning-subtle text-warning';
+            elIcon.className += 'bi-exclamation-triangle-fill';
+            elBtn.className += 'btn-warning text-dark';
+        } else {
+            elIconBg.className += 'bg-primary-subtle text-primary';
+            elIcon.className += 'bi-info-circle-fill';
+            elBtn.className += 'btn-primary';
+        }
+    }
+
+    const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    bsModal.show();
+}
+
+// Substituição global e infalível de qualquer alert() remanescente
+window.alert = function(msg) {
+    const isErro = msg && (String(msg).toLowerCase().includes('erro') || String(msg).toLowerCase().includes('falha') || String(msg).toLowerCase().includes('invalid'));
+    mostrarModalMensagem(isErro ? 'Atenção' : 'Notificação', String(msg), isErro ? 'erro' : 'sucesso');
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    const modalEl = document.getElementById('modalFeedback');
+    if (modalEl) {
+        modalEl.addEventListener('hidden.bs.modal', function () {
+            if (typeof feedbackModalCallback === 'function') {
+                const cb = feedbackModalCallback;
+                feedbackModalCallback = null;
+                cb();
+            }
+        });
+    }
+});
+
 // Troca visualização do motorista selecionado na Tab 1
 function trocarMotoristaVisualizado(motId) {
     document.querySelectorAll('.motorista-bloco').forEach(el => el.style.display = 'none');
@@ -811,14 +914,14 @@ function trocarMotoristaVisualizado(motId) {
     if (alvo) alvo.style.display = 'block';
 }
 
-// Dispara geração ou recálculo do fechamento
+// Dispara geração do fechamento
 function dispararGeracaoFechamento() {
     const inicio = document.getElementById('novo-periodo-inicio').value;
     const fim = document.getElementById('novo-periodo-fim').value;
     const btn = document.getElementById('btnGerarFechamento');
 
     if (!inicio || !fim) {
-        alert('Por favor, informe as datas de início e fim.');
+        mostrarModalMensagem('Campos Obrigatórios', 'Por favor, informe as datas de início e fim.', 'aviso');
         return;
     }
 
@@ -838,21 +941,35 @@ function dispararGeracaoFechamento() {
         if (res.sucesso) {
             window.location.href = `?fechamento_id=${res.fechamento_id}`;
         } else {
-            alert('Erro: ' + res.erro);
+            mostrarModalMensagem('Erro ao Gerar Apuração', res.erro, 'erro');
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-gear-fill me-1"></i> Gerar Apuração';
         }
     })
     .catch(err => {
-        alert('Erro de comunicação: ' + err);
+        mostrarModalMensagem('Erro de Comunicação', String(err), 'erro');
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-gear-fill me-1"></i> Gerar Apuração';
     });
 }
 
+// Recalcular fechamento atual via Modal de Confirmação
 function recalcularFechamentoAtual() {
     {% if fechamento %}
-    if (confirm("Deseja recalcular este fechamento com os dados mais recentes do aplicativo? Seus ajustes manuais de extras, pedágio e descontos serão preservados.")) {
+    const modalEl = document.getElementById('modalConfirmacao');
+    const msgEl = document.getElementById('modalConfirmacaoMensagem');
+    const btnSim = document.getElementById('modalConfirmacaoBtnConfirmar');
+
+    if (msgEl) {
+        msgEl.innerText = "Deseja recalcular este fechamento com os dados mais recentes do aplicativo? Seus ajustes manuais de extras, pedágio e descontos serão preservados.";
+    }
+
+    const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    btnSim.onclick = function() {
+        bsModal.hide();
+        mostrarModalMensagem('Processando', 'Recalculando apuração de agregados...', 'info');
+
         fetch("{% url 'financeiro:api_gerar_fechamento' %}", {
             method: 'POST',
             headers: {
@@ -867,12 +984,17 @@ function recalcularFechamentoAtual() {
         .then(r => r.json())
         .then(res => {
             if (res.sucesso) {
-                window.location.reload();
+                mostrarModalMensagem('Sucesso', 'Fechamento recalculado com sucesso!', 'sucesso', () => window.location.reload());
             } else {
-                alert('Erro: ' + res.erro);
+                mostrarModalMensagem('Erro ao Recalcular', res.erro, 'erro');
             }
+        })
+        .catch(err => {
+            mostrarModalMensagem('Erro de Conexão', String(err), 'erro');
         });
-    }
+    };
+
+    bsModal.show();
     {% endif %}
 }
 
@@ -907,10 +1029,13 @@ function salvarDadosBancariosModal() {
     .then(res => {
         if (res.sucesso) {
             bootstrap.Modal.getInstance(document.getElementById('modalDadosBancarios')).hide();
-            window.location.reload();
+            mostrarModalMensagem('Sucesso', 'Dados bancários atualizados com sucesso!', 'sucesso', () => window.location.reload());
         } else {
-            alert('Erro: ' + res.erro);
+            mostrarModalMensagem('Erro ao Salvar', res.erro, 'erro');
         }
+    })
+    .catch(err => {
+        mostrarModalMensagem('Erro de Conexão', String(err), 'erro');
     });
 }
 
@@ -981,13 +1106,13 @@ function salvarLinhaModal() {
     .then(res => {
         if (res.sucesso) {
             bootstrap.Modal.getInstance(document.getElementById('modalEditarLinha')).hide();
-            window.location.reload();
+            mostrarModalMensagem('Sucesso', 'Ajuste do manifesto e rateio por base salvos com sucesso!', 'sucesso', () => window.location.reload());
         } else {
-            alert('Erro: ' + res.erro);
+            mostrarModalMensagem('Erro ao Salvar', res.erro, 'erro');
         }
     })
     .catch(err => {
-        alert('Erro de conexão: ' + err);
+        mostrarModalMensagem('Erro de Conexão', String(err), 'erro');
     });
 }
 
@@ -1016,10 +1141,13 @@ function salvarResumoModal() {
     .then(res => {
         if (res.sucesso) {
             bootstrap.Modal.getInstance(document.getElementById('modalAjustesResumo')).hide();
-            window.location.reload();
+            mostrarModalMensagem('Sucesso', 'Ajustes de pedágio e descontos atualizados com sucesso!', 'sucesso', () => window.location.reload());
         } else {
-            alert('Erro: ' + res.erro);
+            mostrarModalMensagem('Erro ao Salvar', res.erro, 'erro');
         }
+    })
+    .catch(err => {
+        mostrarModalMensagem('Erro de Conexão', String(err), 'erro');
     });
 }
 
@@ -1054,9 +1182,9 @@ function salvarTarifaFilial(filialId) {
             if (elDiaria) elDiaria.value = parseFloat(res.valor_diaria).toFixed(2);
             if (elEntrega) elEntrega.value = parseFloat(res.valor_por_entrega).toFixed(2);
             if (elColeta) elColeta.value = parseFloat(res.valor_por_coleta).toFixed(2);
-            alert(res.mensagem);
+            mostrarModalMensagem('Tarifas Atualizadas', res.mensagem, 'sucesso');
         } else {
-            alert('Erro ao salvar: ' + res.erro);
+            mostrarModalMensagem('Erro ao Salvar', res.erro, 'erro');
         }
     })
     .catch(err => {
@@ -1064,7 +1192,7 @@ function salvarTarifaFilial(filialId) {
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-check2 me-1"></i> Salvar';
         }
-        alert('Erro de conexão: ' + err);
+        mostrarModalMensagem('Erro de Conexão', String(err), 'erro');
     });
 }
 
@@ -1081,10 +1209,13 @@ function salvarConfigOcorrencias() {
     .then(r => r.json())
     .then(res => {
         if (res.sucesso) {
-            alert(res.mensagem);
+            mostrarModalMensagem('Regras Salvas', res.mensagem, 'sucesso');
         } else {
-            alert('Erro: ' + res.erro);
+            mostrarModalMensagem('Erro ao Salvar', res.erro, 'erro');
         }
+    })
+    .catch(err => {
+        mostrarModalMensagem('Erro de Conexão', String(err), 'erro');
     });
 }
 
@@ -1184,12 +1315,12 @@ function salvarClienteFilial(selectEl, clienteId) {
                 if (elBanner) elBanner.style.display = '';
             }
         } else {
-            alert('Erro ao salvar vínculo do cliente: ' + res.erro);
+            mostrarModalMensagem('Erro ao Vincular Cliente', res.erro, 'erro');
         }
     })
     .catch(err => {
         selectEl.disabled = false;
-        alert('Erro de conexão: ' + err);
+        mostrarModalMensagem('Erro de Conexão', String(err), 'erro');
     });
 }
 
@@ -1212,10 +1343,9 @@ function dispararSincronizacaoClientes() {
             btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Sincronizar Clientes dos Fretes';
         }
         if (res.sucesso) {
-            alert(res.mensagem);
-            window.location.reload();
+            mostrarModalMensagem('Sincronização Concluída', res.mensagem, 'sucesso', () => window.location.reload());
         } else {
-            alert('Erro ao sincronizar: ' + res.erro);
+            mostrarModalMensagem('Erro ao Sincronizar', res.erro, 'erro');
         }
     })
     .catch(err => {
@@ -1223,7 +1353,7 @@ function dispararSincronizacaoClientes() {
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Sincronizar Clientes dos Fretes';
         }
-        alert('Erro de conexão: ' + err);
+        mostrarModalMensagem('Erro de Conexão', String(err), 'erro');
     });
 }
 
@@ -1243,11 +1373,11 @@ function salvarUfFilial(filialId, uf) {
                 setTimeout(() => elSelect.classList.remove('border-success'), 1500);
             }
         } else {
-            alert('Erro ao salvar UF da filial: ' + res.erro);
+            mostrarModalMensagem('Erro ao Salvar UF', res.erro, 'erro');
         }
     })
     .catch(err => {
-        alert('Erro de conexão: ' + err);
+        mostrarModalMensagem('Erro de Conexão', String(err), 'erro');
     });
 }
 </script>
