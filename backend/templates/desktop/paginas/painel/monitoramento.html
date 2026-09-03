@@ -758,23 +758,74 @@
 
                         // Desenhar rota (se houver pontos suficientes)
                         if (pontosParaRota.length > 1) {
-                            const coordenadasString = pontosParaRota.join(';');
+                            const latLngsFallback = [];
+                            if (data.filial && data.filial.lat && data.filial.lng) {
+                                latLngsFallback.push([data.filial.lat, data.filial.lng]);
+                            }
+                            if (data.pontos && data.pontos.length > 0) {
+                                data.pontos.forEach(p => latLngsFallback.push([p.lat, p.lng]));
+                            }
+                            if (data.posicao_atual) {
+                                latLngsFallback.push([data.posicao_atual.lat, data.posicao_atual.lng]);
+                            }
+
+                            const desenharFallback = () => {
+                                if (latLngsFallback.length > 1 && !mapaEntrega._rotaDesenhada) {
+                                    mapaEntrega._rotaDesenhada = true;
+                                    const polyFallback = L.polyline(latLngsFallback, {
+                                        color: '#0d6efd',
+                                        weight: 5,
+                                        opacity: 0.85,
+                                        dashArray: '8, 8',
+                                        lineJoin: 'round'
+                                    }).addTo(mapaEntrega);
+                                    mapaEntrega.fitBounds(polyFallback.getBounds(), { padding: [40, 40] });
+                                }
+                            };
+
+                            // Otimização de waypoints para o OSRM público não rejeitar por excesso de pontos
+                            let pontosOtimizados = pontosParaRota;
+                            if (pontosParaRota.length > 12) {
+                                const passo = Math.ceil(pontosParaRota.length / 10);
+                                pontosOtimizados = [pontosParaRota[0]];
+                                for (let i = 1; i < pontosParaRota.length - 1; i += passo) {
+                                    pontosOtimizados.push(pontosParaRota[i]);
+                                }
+                                pontosOtimizados.push(pontosParaRota[pontosParaRota.length - 1]);
+                            }
+
+                            const coordenadasString = pontosOtimizados.join(';');
                             const urlOSRM = `https://router.project-osrm.org/route/v1/driving/${coordenadasString}?overview=full&geometries=geojson`;
 
-                            fetch(urlOSRM)
-                                .then(response => response.json())
+                            const controller = new AbortController();
+                            const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+                            fetch(urlOSRM, { signal: controller.signal })
+                                .then(response => {
+                                    clearTimeout(timeoutId);
+                                    if (!response.ok) throw new Error('OSRM status: ' + response.status);
+                                    return response.json();
+                                })
                                 .then(result => {
-                                    if (result.routes && result.routes.length > 0) {
+                                    if (result.routes && result.routes.length > 0 && result.routes[0].geometry) {
+                                        mapaEntrega._rotaDesenhada = true;
                                         const rotaRua = result.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
 
-                                        L.polyline(rotaRua, {
+                                        const poly = L.polyline(rotaRua, {
                                             color: '#007bff',
                                             weight: 6,
-                                            opacity: 0.8,
+                                            opacity: 0.85,
                                             lineJoin: 'round'
                                         }).addTo(mapaEntrega);
+
+                                        mapaEntrega.fitBounds(poly.getBounds(), { padding: [40, 40] });
+                                    } else {
+                                        desenharFallback();
                                     }
-                                }).catch(() => { });
+                                })
+                                .catch(() => {
+                                    desenharFallback();
+                                });
                         }
                     })
                     .catch(err => console.error('Erro ao carregar rastro:', err));
