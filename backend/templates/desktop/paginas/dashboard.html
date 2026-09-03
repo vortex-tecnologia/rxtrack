@@ -203,6 +203,36 @@
     </div>
 </div>
 
+<!-- BARRA DE AÇÕES RÁPIDAS (QUICK ACTIONS) -->
+<div class="row g-2 mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm rounded-4 p-2 bg-white">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 px-2">
+                <span class="small fw-bold text-muted d-flex align-items-center gap-1">
+                    <i class="bi bi-lightning-charge-fill text-warning"></i> Atalhos Operacionais:
+                </span>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <a href="{% url 'operacional:notas_fiscais' %}" class="btn btn-sm btn-light rounded-pill border px-3 py-1 fw-semibold text-dark d-flex align-items-center gap-1">
+                        <i class="bi bi-search text-primary"></i> Consultar Notas & Chaves
+                    </a>
+                    <a href="{% url 'operacional:manifesto_detalhes' %}" class="btn btn-sm btn-light rounded-pill border px-3 py-1 fw-semibold text-dark d-flex align-items-center gap-1">
+                        <i class="bi bi-truck text-success"></i> Gestão de Manifestos
+                    </a>
+                    <a href="{% url 'manifesto:painel_monitoramento' %}" class="btn btn-sm btn-light rounded-pill border px-3 py-1 fw-semibold text-dark d-flex align-items-center gap-1">
+                        <i class="bi bi-geo-alt-fill text-danger"></i> Mapa em Tempo Real
+                    </a>
+                    <a href="{% url 'financeiro:fechamento_agregados' %}" class="btn btn-sm btn-light rounded-pill border px-3 py-1 fw-semibold text-dark d-flex align-items-center gap-1">
+                        <i class="bi bi-cash-coin text-warning-emphasis"></i> Fechamento Agregados
+                    </a>
+                    <a href="{% url 'operacional:motoristas' %}" class="btn btn-sm btn-light rounded-pill border px-3 py-1 fw-semibold text-dark d-flex align-items-center gap-1">
+                        <i class="bi bi-people text-info"></i> Frota & Motoristas
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- CARDS DE KPIS DE ALTA PERFORMANCE -->
 <div class="row g-3 mb-4">
     <!-- Card 1: Manifestos Ativos -->
@@ -286,25 +316,58 @@
     </div>
 </div>
 
-<!-- BARRA PANORÂMICA DE CONCLUSÃO DA OPERAÇÃO -->
+<!-- BARRA PANORÂMICA DE CONCLUSÃO DA OPERAÇÃO COM TERMÔMETRO & RITMO -->
 <div class="card border-0 shadow-sm rounded-4 mb-4 p-3 bg-white">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-        <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-primary px-2 py-1 rounded-pill small">Progresso Geral</span>
-            <span class="fw-bold text-dark small">Conclusão de Cargas da Frota Hoje</span>
+    <div class="row align-items-center g-3">
+        <!-- Progresso Geral -->
+        <div class="col-lg-6 border-lg-end pe-lg-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary px-2 py-1 rounded-pill small">Progresso Geral</span>
+                    <span class="fw-bold text-dark small">Conclusão de Cargas da Frota Hoje</span>
+                </div>
+                <div class="small text-muted">
+                    <strong class="text-dark">{{ total_notas|add:notas_ocorrencia }}</strong> de <strong>{{ total_geral_notas|default:0 }}</strong> notas (<span class="text-primary fw-bold">{{ progresso_geral }}%</span>)
+                </div>
+            </div>
+            <div class="progress" style="height: 10px; border-radius: 10px; background-color: #f1f5f9; overflow: hidden;">
+                <div class="progress-bar bg-success progress-bar-striped progress-bar-animated" role="progressbar" style="width: {{ pct_entregues_css }}%;" aria-valuenow="{{ pct_entregues_css }}" aria-valuemin="0" aria-valuemax="100" title="Entregues: {{ total_notas }} ({{ pct_entregues_css }}%)"></div>
+                <div class="progress-bar bg-danger" role="progressbar" style="width: {{ pct_ocorrencias_css }}%;" aria-valuenow="{{ pct_ocorrencias_css }}" aria-valuemin="0" aria-valuemax="100" title="Ocorrências: {{ notas_ocorrencia }} ({{ pct_ocorrencias_css }}%)"></div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mt-2 text-muted" style="font-size: 0.78rem;">
+                <span><span class="text-success fw-bold">&bull;</span> {{ total_notas }} entregues ({{ pct_entregues_css }}%)</span>
+                <span><span class="text-danger fw-bold">&bull;</span> {{ notas_ocorrencia }} ocorrências ({{ pct_ocorrencias_css }}%)</span>
+                <span><span class="text-secondary fw-bold">&bull;</span> {{ notas_em_transporte }} em trânsito</span>
+            </div>
         </div>
-        <div class="small text-muted">
-            <strong class="text-dark">{{ total_notas|add:notas_ocorrencia }}</strong> de <strong>{{ total_geral_notas|default:0 }}</strong> notas finalizadas (<span class="text-primary fw-bold">{{ progresso_geral }}%</span>)
+
+        <!-- Termômetro da Frota & Velocímetro -->
+        <div class="col-lg-6 ps-lg-4">
+            <div class="row g-2">
+                <!-- Status da Frota -->
+                <div class="col-6">
+                    <div class="p-2 rounded-3 bg-light border">
+                        <div class="text-muted small fw-semibold mb-1"><i class="bi bi-truck me-1 text-primary"></i>Status dos Motoristas</div>
+                        <div class="d-flex justify-content-between align-items-center small">
+                            <span class="text-success fw-bold" title="Motoristas com 100% finalizado"><i class="bi bi-check-circle-fill me-1"></i>{{ frota_finalizada }} <span class="text-muted fw-normal">fim</span></span>
+                            <span class="text-primary fw-bold" title="Motoristas em rota ativa"><i class="bi bi-arrow-repeat me-1"></i>{{ frota_em_rota }} <span class="text-muted fw-normal">rota</span></span>
+                            <span class="text-secondary fw-bold" title="Motoristas aguardando primeira baixa"><i class="bi bi-clock me-1"></i>{{ frota_aguardando }} <span class="text-muted fw-normal">aguard.</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Velocímetro / Ritmo -->
+                <div class="col-6">
+                    <div class="p-2 rounded-3 bg-light border">
+                        <div class="text-muted small fw-semibold mb-1"><i class="bi bi-speedometer2 me-1 text-warning-emphasis"></i>Ritmo Operacional</div>
+                        <div class="d-flex justify-content-between align-items-center small">
+                            <span><strong class="text-dark">{{ ritmo_hora }}</strong> <span class="text-muted">baixas/h</span></span>
+                            <span>Previsão: <strong class="text-primary">{{ previsao_termino }}</strong></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-    </div>
-    <div class="progress" style="height: 10px; border-radius: 10px; background-color: #f1f5f9; overflow: hidden;">
-        <div class="progress-bar bg-success progress-bar-striped progress-bar-animated" role="progressbar" style="width: {{ pct_entregues_css }}%;" aria-valuenow="{{ pct_entregues_css }}" aria-valuemin="0" aria-valuemax="100" title="Entregues: {{ total_notas }} ({{ pct_entregues_css }}%)"></div>
-        <div class="progress-bar bg-danger" role="progressbar" style="width: {{ pct_ocorrencias_css }}%;" aria-valuenow="{{ pct_ocorrencias_css }}" aria-valuemin="0" aria-valuemax="100" title="Ocorrências: {{ notas_ocorrencia }} ({{ pct_ocorrencias_css }}%)"></div>
-    </div>
-    <div class="d-flex justify-content-between align-items-center mt-2 pt-1 text-muted" style="font-size: 0.78rem;">
-        <span><span class="text-success fw-bold">&bull;</span> {{ total_notas }} entregues ({{ pct_entregues_css }}%)</span>
-        <span><span class="text-danger fw-bold">&bull;</span> {{ notas_ocorrencia }} ocorrências ({{ pct_ocorrencias_css }}%)</span>
-        <span><span class="text-secondary fw-bold">&bull;</span> {{ notas_em_transporte }} em trânsito</span>
     </div>
 </div>
 
@@ -404,10 +467,11 @@
     </div>
 </div>
 
-<!-- NOVA SEÇÃO: LIVE FEED DE ATIVIDADES RECENTES EM TEMPO REAL -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+<!-- LINHA INFERIOR: LIVE FEED + DIAGNÓSTICO DE OCORRÊNCIAS -->
+<div class="row g-4 mb-4">
+    <!-- Feed de Atividades Recentes em Tempo Real -->
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
                     <h5 class="fw-bold text-dark mb-0"><i class="bi bi-broadcast text-danger me-2"></i>Feed de Atividades em Tempo Real</h5>
@@ -422,11 +486,10 @@
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light small">
                         <tr>
-                            <th style="width: 100px;">Horário</th>
+                            <th style="width: 85px;">Horário</th>
                             <th>Motorista</th>
                             <th>Nota / Carga</th>
-                            <th>Cliente / Destinatário</th>
-                            <th>Tipo</th>
+                            <th>Cliente</th>
                             <th class="text-center">Resultado</th>
                         </tr>
                     </thead>
@@ -434,37 +497,77 @@
                         {% for atv in ultimas_atividades %}
                         <tr>
                             <td class="text-muted fw-bold"><i class="bi bi-clock me-1"></i>{{ atv.hora }}</td>
-                            <td class="fw-bold text-dark">{{ atv.motorista_nome }}</td>
+                            <td class="fw-bold text-dark">{{ atv.motorista_nome|truncatechars:18 }}</td>
                             <td><span class="badge bg-light text-dark border">NF {{ atv.numero_nota }}</span></td>
-                            <td class="text-secondary">{{ atv.destinatario }}</td>
-                            <td>
-                                {% if atv.tipo == 'COLETA' %}
-                                <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1 rounded-pill">Coleta</span>
-                                {% else %}
-                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 rounded-pill">Entrega</span>
-                                {% endif %}
-                            </td>
+                            <td class="text-secondary">{{ atv.destinatario|truncatechars:20 }}</td>
                             <td class="text-center">
                                 {% if atv.is_sucesso %}
-                                <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1 rounded-pill">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill">
                                     <i class="bi bi-check-circle me-1"></i> Entregue
                                 </span>
                                 {% else %}
-                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-1 rounded-pill">
-                                    <i class="bi bi-x-circle me-1"></i> {{ atv.status_desc|truncatechars:22 }}
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 rounded-pill">
+                                    <i class="bi bi-x-circle me-1"></i> {{ atv.status_desc|truncatechars:16 }}
                                 </span>
                                 {% endif %}
                             </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="6" class="text-center py-4 text-muted">
+                            <td colspan="5" class="text-center py-4 text-muted">
                                 Nenhuma baixa de nota registrada no período de hoje ainda.
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Diagnóstico de Ocorrências (Top Motivos de Insucesso Hoje) -->
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100 d-flex flex-column justify-content-between">
+            <div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h5 class="fw-bold text-dark mb-0"><i class="bi bi-pie-chart text-danger me-2"></i>Motivos de Insucesso</h5>
+                        <small class="text-muted">Top ocorrências mais frequentes hoje</small>
+                    </div>
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill">{{ notas_ocorrencia }} total</span>
+                </div>
+
+                {% if top_motivos_ocorrencia %}
+                <div class="mt-3">
+                    {% for mot in top_motivos_ocorrencia %}
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1 small">
+                            <span class="fw-semibold text-dark text-truncate" style="max-width: 260px;" title="{{ mot.descricao }}">
+                                <i class="bi bi-exclamation-triangle text-danger me-1"></i>{{ mot.descricao }}
+                            </span>
+                            <span class="badge bg-light text-dark border fw-bold">{{ mot.total }}x ({{ mot.pct }}%)</span>
+                        </div>
+                        <div class="progress" style="height: 6px; border-radius: 8px; background-color: #f1f5f9;">
+                            <div class="progress-bar bg-danger" role="progressbar" style="width: {{ mot.pct_css }}%; border-radius: 8px;" aria-valuenow="{{ mot.pct_css }}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4 my-auto">
+                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-success-subtle text-success p-3 mb-2" style="width: 54px; height: 54px;">
+                        <i class="bi bi-shield-check fs-2"></i>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-1">Operação Fluida!</h6>
+                    <p class="text-muted small mb-0">Nenhuma ocorrência ou insucesso registrado hoje na operação.</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="pt-3 border-top mt-3">
+                <a href="{% url 'operacional:notas_fiscais' %}?status=OCORRENCIA" class="btn btn-outline-danger btn-sm w-100 rounded-pill fw-bold d-flex align-items-center justify-content-center gap-1">
+                    <i class="bi bi-funnel"></i> Filtrar Todas as Notas em Ocorrência
+                </a>
             </div>
         </div>
     </div>

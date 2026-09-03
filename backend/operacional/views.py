@@ -307,6 +307,85 @@ class DashboardView(TemplateView):
             })
         context['ultimas_atividades'] = ultimas_atividades
 
+        # --- 5. TOP MOTIVOS DE OCORRÊNCIA DE HOJE ---
+        ocorrencias_qs = BaixaNF.objects.filter(
+            data_baixa__range=(hoje_inicio, hoje_fim),
+            ocorrencia__isnull=False
+        ).exclude(ocorrencia__codigo_tms__in=['1', '01'])
+
+        if filial_param and filial_param != 'todas':
+            ocorrencias_qs = ocorrencias_qs.filter(nota_fiscal__manifesto__filial_id=filial_param)
+        elif usuario_filial and not filial_param:
+            ocorrencias_qs = ocorrencias_qs.filter(nota_fiscal__manifesto__filial=usuario_filial)
+
+        top_motivos_raw = (
+            ocorrencias_qs.values('ocorrencia__descricao')
+            .annotate(total=Count('id'))
+            .order_by('-total')[:4]
+        )
+        total_ocs_count = sum(item['total'] for item in top_motivos_raw) or 1
+        top_motivos_ocorrencia = []
+        for item in top_motivos_raw:
+            pct = round((item['total'] / total_ocs_count) * 100, 1)
+            top_motivos_ocorrencia.append({
+                'descricao': item['ocorrencia__descricao'] or 'Outros',
+                'total': item['total'],
+                'pct': pct,
+                'pct_css': f"{pct:.1f}"
+            })
+        context['top_motivos_ocorrencia'] = top_motivos_ocorrencia
+
+        # --- 6. TERMÔMETRO DA FROTA ATIVA (STATUS DOS MOTORISTAS) ---
+        motoristas_hoje = (
+            Motorista.objects.filter(manifestos__in=manifestos_do_dia)
+            .annotate(
+                total_mft_notas=Count('manifestos__notas_fiscais'),
+                concluidas_mft=Count('manifestos__notas_fiscais', filter=Q(manifestos__notas_fiscais__status__in=['BAIXADA', 'OCORRENCIA'])),
+            )
+            .filter(total_mft_notas__gt=0)
+            .distinct()
+        )
+
+        frota_finalizada = 0
+        frota_em_rota = 0
+        frota_aguardando = 0
+
+        for mot in motoristas_hoje:
+            if mot.concluidas_mft >= mot.total_mft_notas and mot.total_mft_notas > 0:
+                frota_finalizada += 1
+            elif mot.concluidas_mft > 0:
+                frota_em_rota += 1
+            else:
+                frota_aguardando += 1
+
+        context['frota_total'] = motoristas_hoje.count()
+        context['frota_finalizada'] = frota_finalizada
+        context['frota_em_rota'] = frota_em_rota
+        context['frota_aguardando'] = frota_aguardando
+
+        # --- 7. RITMO OPERACIONAL (VELOCÍMETRO & PREVISÃO DE TÉRMINO) ---
+        primeira_baixa = baixas_hoje.order_by('data_baixa').first()
+        if primeira_baixa and total_concluidas > 0:
+            segundos_decorridos = max(1, (agora_local - timezone.localtime(primeira_baixa.data_baixa)).total_seconds())
+            horas_decorridas = max(0.25, segundos_decorridos / 3600.0)
+            ritmo_hora = round(total_concluidas / horas_decorridas, 1)
+            
+            notas_restantes = max(0, total_geral_notas - total_concluidas)
+            if ritmo_hora > 0 and notas_restantes > 0:
+                horas_estimadas_restantes = notas_restantes / ritmo_hora
+                previsao_fim = agora_local + timedelta(hours=horas_estimadas_restantes)
+                previsao_termino_str = previsao_fim.strftime('%H:%M')
+            elif notas_restantes == 0:
+                previsao_termino_str = 'Concluído'
+            else:
+                previsao_termino_str = '--:--'
+        else:
+            ritmo_hora = 0.0
+            previsao_termino_str = '--:--'
+
+        context['ritmo_hora'] = ritmo_hora
+        context['previsao_termino'] = previsao_termino_str
+
         context['titulo'] = "Painel de Controle Operacional"
         context['usuario_nome'] = self.request.user.get_full_name() or self.request.user.username
 
