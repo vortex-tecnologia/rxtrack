@@ -1139,7 +1139,10 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     "já se encontra" in detalhe_lower or
                     "ja se encontra" in detalhe_lower or
                     "já finalizad" in detalhe_lower or
-                    "ja finalizad" in detalhe_lower
+                    "ja finalizad" in detalhe_lower or
+                    "não permite data e hora menor ou igual" in detalhe_lower or
+                    "nao permite data e hora menor ou igual" in detalhe_lower or
+                    "menor ou igual" in detalhe_lower
                 )
             )
             if eh_ja_existe:
@@ -1148,6 +1151,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 baixa.processado_tms = True
                 baixa.integrado_tms = True
                 baixa.data_integracao = timezone.now()
+                if isinstance(baixa.payload_enviado, dict) and 'bypass' in baixa.payload_enviado:
+                    baixa.payload_enviado.pop('bypass', None)
                 baixa.save()
                 
                 # Auto-resolução na Torre de Erros
@@ -1513,7 +1518,10 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     "já se encontra" in detalhe_lower or
                     "ja se encontra" in detalhe_lower or
                     "não permite alteração" in detalhe_lower or
-                    "nao permite alteracao" in detalhe_lower
+                    "nao permite alteracao" in detalhe_lower or
+                    "não permite data e hora menor ou igual" in detalhe_lower or
+                    "nao permite data e hora menor ou igual" in detalhe_lower or
+                    "menor ou igual" in detalhe_lower
                 )
             )
             if eh_ja_existe:

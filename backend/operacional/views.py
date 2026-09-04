@@ -2487,18 +2487,24 @@ def atualizar_foto_baixa_view(request, baixa_id):
         # Sobrescreve a foto com a nova versão enviada (apaga a anterior do registro)
         baixa.comprovante_foto_url = url_final_foto
         baixa.comprovante_original_url = url_final_foto
-        baixa.processado_tms = False
-        baixa.integrado_tms = False
-        baixa.log_erro_tms = None
-        baixa.save()
+        ja_estava_integrada = bool(baixa.integrado_tms)
+        baixa.log_erro_tms = "Atualizando foto/comprovante..."
+        baixa.save(update_fields=['comprovante_foto_url', 'comprovante_original_url', 'log_erro_tms'])
 
-        # Se YOLO estiver ativo, passa pelo agente IA primeiro
+        # Se YOLO estiver ativo, passa pelo agente IA primeiro com somente_comprovante=True
         if config.processar_yolo:
             from django.db import connection
             task_processar_canhoto_ia.delay(baixa.id, somente_comprovante=True, schema_name=connection.schema_name)
             msg_status = "Nova foto salva! IA (YOLO/OCR) e recadastro no TMS iniciados."
         else:
-            enviar_comprovante_esl_task.delay(baixa.id)
+            if ja_estava_integrada:
+                enviar_comprovante_esl_task.delay(baixa.id)
+            else:
+                from manifesto.tasks import enviar_baixa_esl_task, enviar_baixa_minuta_task
+                if nf and nf.chave_acesso:
+                    enviar_baixa_esl_task.delay(baixa.id)
+                else:
+                    enviar_baixa_minuta_task.delay(baixa.id)
             msg_status = "Nova foto salva! Recadastro no TMS iniciado."
 
         if nf and nf.manifesto:

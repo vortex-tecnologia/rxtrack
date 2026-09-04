@@ -196,6 +196,18 @@ def resolver_erros_automaticamente(manifesto_numero, nota_fiscal_numero, filial)
     elif nota_fiscal_numero:
         qs = qs.filter(nota_fiscal_numero=nota_fiscal_numero)
         
+    # 📌 Limpa também os alertas não lidos no sino de notificações de erros para esta nota/manifesto
+    try:
+        from manifesto.models import LogBaixaNfe
+        log_qs = LogBaixaNfe.objects.filter(tipo__icontains='ERRO', lido=False)
+        if nota_fiscal_numero:
+            log_qs = log_qs.filter(numero_nota=str(nota_fiscal_numero))
+        if manifesto_numero:
+            log_qs = log_qs.filter(manifesto_numero=str(manifesto_numero))
+        log_qs.update(lido=True)
+    except Exception:
+        pass
+
     erros_para_resolver = list(qs)
     if not erros_para_resolver:
         return

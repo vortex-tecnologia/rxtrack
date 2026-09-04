@@ -94,8 +94,13 @@ def registrar_log_baixa_nfe(sender, instance, created, **kwargs):
 
         elif not instance.integrado_tms and instance.log_erro_tms:
             log_msg = str(instance.log_erro_tms).strip()
-            # Ignora mensagens informativas/progresso para não disparar alerta de falso erro
-            is_falso_erro = any(log_msg.startswith(p) for p in ["Sucesso", "Iniciando", "Aviso IA", "Info"])
+            # Ignora mensagens informativas/progresso ou idempotência da ESL para não disparar alerta de falso erro
+            is_falso_erro = (
+                any(log_msg.startswith(p) for p in ["Sucesso", "Iniciando", "Aviso IA", "Info", "Atualizando"]) or
+                "menor ou igual" in log_msg.lower() or
+                "já existe" in log_msg.lower() or
+                "ja existe" in log_msg.lower()
+            )
             if not is_falso_erro:
                 def criar_log_integracao_erro():
                     from django.utils import timezone

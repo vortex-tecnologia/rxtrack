@@ -140,7 +140,7 @@ def _processar_canhoto_ia_interno(baixa_id, somente_comprovante=False):
             baixa.save(update_fields=['ia_yolo_status', 'ia_ocr_status', 'qualidade_canhoto', 'solicitar_nova_foto'])
             if os.path.exists(img_path):
                 os.remove(img_path)
-            return finalizar_fluxo_tms(baixa)
+            return finalizar_fluxo_tms(baixa, somente_comprovante=somente_comprovante)
         
         script_path = os.path.join(settings.BASE_DIR, 'AgenteIa', 'run_ia.py')
         skip_ocr = "skip_ocr" if not config.processar_ocr else "with_ocr"
@@ -361,18 +361,24 @@ def finalizar_fluxo_tms(baixa, somente_comprovante=False):
         print(f"TMS: Envio DESLIGADO nas configurações. Baixa {baixa.id} salva apenas localmente.")
         return
 
+    # Se a ocorrência já foi integrada ao TMS previamente, o único envio permitido é a foto/comprovante
+    if baixa.integrado_tms:
+        somente_comprovante = True
+
     if somente_comprovante:
         enviar_comprovante_esl_task.apply_async(args=[baixa.id], countdown=2)
         print(f"TMS: Recadastro exclusivo de comprovante para Baixa #{baixa.id} despachado.")
         return
     
     nf = baixa.nota_fiscal
-    if nf and nf.tipo_operacao and str(nf.tipo_operacao).upper() == 'DESPACHO':
-        enviar_baixa_minuta_task.apply_async(args=[baixa.id], countdown=2)
-        print(f"TMS: Despacho {nf.numero_nota} despachado para Frete Endpoint.")
-    elif nf and nf.chave_acesso:
+    # REGRA: Se tem chave_acesso de 44 dígitos, vai DIRETO para endpoint de NF-e
+    if nf and nf.chave_acesso:
         enviar_baixa_esl_task.apply_async(args=[baixa.id], countdown=2)
         print(f"TMS: Fluxo de baixa de NF-e {nf.chave_acesso} despachado.")
+    elif nf and nf.tipo_operacao and str(nf.tipo_operacao).upper() == 'COLETA':
+        from manifesto.tasks import enviar_coleta_esl_task
+        enviar_coleta_esl_task.apply_async(args=[baixa.id], countdown=2)
+        print(f"TMS: Fluxo de Coleta {nf.numero_nota} despachado.")
     elif nf:
         enviar_baixa_minuta_task.apply_async(args=[baixa.id], countdown=2)
         print(f"TMS: Fluxo de baixa de Minuta {nf.numero_nota} despachado.")
