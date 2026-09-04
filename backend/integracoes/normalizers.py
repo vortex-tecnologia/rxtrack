@@ -226,8 +226,11 @@ def _normalizar_parada(parada: dict) -> dict | None:
         }
         tipo = tipo_map.get(tipo_raw, 'ENTREGA')
 
-        # ID da parada no TMS
-        id_tms = str(parada.get('@numero', '')).strip() or None
+        # No formato TMS Comprovei/SSW, @numero é apenas o índice/ordem da parada na rota (1, 2, 3...)
+        # e NÃO é o ID interno do Frete no banco de dados da ESL Cloud.
+        # Para entregas/minutas, não definimos id_tms falso para evitar poluir freight_id_tms.
+        id_parada_seq = str(parada.get('@numero', '')).strip() or None
+        id_tms = id_parada_seq if tipo == 'COLETA' else None
 
         # ─── DOCUMENTO (NF-e / CT-e) ───
         doc = parada.get('Documento', {})

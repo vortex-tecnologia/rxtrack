@@ -446,11 +446,13 @@ def processar_webhook_manifesto_task(self, event_id):
                         nota_obj = NotaFiscal.objects.filter(manifesto=manifesto_obj, chave_acesso=chave_nfe).first()
                     if not nota_obj and numero_item:
                         nota_obj = NotaFiscal.objects.filter(manifesto=manifesto_obj, numero_nota=numero_item).first()
-                    if not nota_obj and id_tms:
+                    if not nota_obj and id_tms and not (str(id_tms).isdigit() and int(id_tms) < 100):
                         nota_obj = NotaFiscal.objects.filter(manifesto=manifesto_obj, freight_id_tms=str(id_tms)).first()
 
+                is_id_frete_valido = bool(id_tms and not (str(id_tms).isdigit() and int(id_tms) < 100))
+
                 frete_obj = None
-                if id_tms:
+                if is_id_frete_valido:
                     from manifesto.models import Frete
                     def extrair_decimal(valor):
                         try: return float(valor) if valor else None
@@ -483,9 +485,12 @@ def processar_webhook_manifesto_task(self, event_id):
                     campos_update = []
                     cep_mudou = False
 
+                    # Validação de id_tms: ignora números sequenciais de parada (1, 2, 3...)
+                    is_id_frete_valido = bool(id_tms and not (str(id_tms).isdigit() and int(id_tms) < 100))
+
                     if nota_obj.status in ['BAIXADA', 'OCORRENCIA']:
                         # 🔒 Nota já finalizada — apenas atualiza freight_id se faltava
-                        if id_tms and nota_obj.freight_id_tms != str(id_tms):
+                        if is_id_frete_valido and nota_obj.freight_id_tms != str(id_tms):
                             nota_obj.freight_id_tms = str(id_tms)
                             campos_update.append('freight_id_tms')
                     else:
@@ -500,8 +505,8 @@ def processar_webhook_manifesto_task(self, event_id):
                         if tipo_item and not nota_obj.tipo_operacao_confirmado_webhook:
                             nota_obj.tipo_operacao_confirmado_webhook = True
                             campos_update.append('tipo_operacao_confirmado_webhook')
-                        # freight_id_tms
-                        if id_tms and nota_obj.freight_id_tms != str(id_tms):
+                        # freight_id_tms (apenas IDs válidos do TMS, não sequenciais de parada)
+                        if is_id_frete_valido and nota_obj.freight_id_tms != str(id_tms):
                             nota_obj.freight_id_tms = str(id_tms)
                             campos_update.append('freight_id_tms')
                         # chave_acesso (sempre atualiza se diferente, webhook é confiável)
@@ -570,7 +575,7 @@ def processar_webhook_manifesto_task(self, event_id):
                         destinatario=str(dest.get('nome', 'NÃO INFORMADO')).upper(),
                         endereco_entrega=endereco,
                         cep=cep_dest,
-                        freight_id_tms=str(id_tms) if id_tms else None,
+                        freight_id_tms=str(id_tms) if is_id_frete_valido else None,
                         numero_coleta=num_coleta,
                         numero_cte=normalizar_valor(item.get('numero_cte')),
                         chave_cte=chave_cte,

@@ -1311,29 +1311,35 @@ class ESLCloudAdapter(BaseTMSAdapter):
             baixa.integrado_tms = False
             baixa.save()
 
-            try:
-                from operacional.services import registrar_erro_torre
-                registrar_erro_torre(
-                    filial=manifesto.filial,
-                    categoria='INTEGRACAO_BAIXA',
-                    severidade_padrao='CRITICO',
-                    titulo=f"Falha integração NF {nf.numero_nota}",
-                    descricao=f"Manifesto #{manifesto.numero_manifesto} - {msg_erro[:300]}",
-                    erro_raw=msg_erro,
-                    manifesto_numero=manifesto.numero_manifesto,
-                    nota_fiscal_numero=nf.numero_nota,
-                    motorista_nome=motorista,
-                )
-            except Exception as tr_exc:
-                logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+            is_4xx_fatal = bool(status and 400 <= status < 500)
+            is_ultima_tentativa = (not task) or (task.request.retries >= task.max_retries) or is_4xx_fatal
 
-            if status and 400 <= status < 500:
+            if is_ultima_tentativa:
+                try:
+                    from operacional.services import registrar_erro_torre
+                    registrar_erro_torre(
+                        filial=manifesto.filial,
+                        categoria='INTEGRACAO_BAIXA',
+                        severidade_padrao='CRITICO',
+                        titulo=f"Falha integração NF {nf.numero_nota}",
+                        descricao=f"Manifesto #{manifesto.numero_manifesto} - {msg_erro[:300]}",
+                        erro_raw=msg_erro,
+                        manifesto_numero=manifesto.numero_manifesto,
+                        nota_fiscal_numero=nf.numero_nota,
+                        motorista_nome=motorista,
+                    )
+                except Exception as tr_exc:
+                    logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+
+            if is_4xx_fatal:
                 notificar_falha_tms(baixa_id, msg_erro, "enviar_baixa_esl_task")
                 return f"Erro de validação ESL: {msg_erro}"
 
             if task and task.request.retries < task.max_retries:
+                logger.info(f"⏳ [RETRY] Baixa NF {nf.numero_nota}: Tentativa {task.request.retries + 1}/{task.max_retries + 1} falhou. Retentando sem alertar o painel...")
                 raise task.retry(exc=exc, countdown=60)
 
+            notificar_falha_tms(baixa_id, msg_erro, "enviar_baixa_esl_task")
             return f"Falha definitiva ESL: {msg_erro}"
 
         except Exception as e:
@@ -1341,54 +1347,143 @@ class ESLCloudAdapter(BaseTMSAdapter):
             baixa.log_erro_tms = msg[:500]
             baixa.save()
             
-            try:
-                from operacional.services import registrar_erro_torre
-                registrar_erro_torre(
-                    filial=manifesto.filial,
-                    categoria='INTEGRACAO_BAIXA',
-                    severidade_padrao='CRITICO',
-                    titulo=f"Erro inesperado NF {nf.numero_nota}",
-                    descricao=f"Manifesto #{manifesto.numero_manifesto} - {msg[:300]}",
-                    erro_raw=msg,
-                    manifesto_numero=manifesto.numero_manifesto,
-                    nota_fiscal_numero=nf.numero_nota,
-                    motorista_nome=motorista,
-                )
-            except Exception as tr_exc:
-                logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+            is_ultima_tentativa = (not task) or (task.request.retries >= task.max_retries)
+            if is_ultima_tentativa:
+                try:
+                    from operacional.services import registrar_erro_torre
+                    registrar_erro_torre(
+                        filial=manifesto.filial,
+                        categoria='INTEGRACAO_BAIXA',
+                        severidade_padrao='CRITICO',
+                        titulo=f"Erro inesperado NF {nf.numero_nota}",
+                        descricao=f"Manifesto #{manifesto.numero_manifesto} - {msg[:300]}",
+                        erro_raw=msg,
+                        manifesto_numero=manifesto.numero_manifesto,
+                        nota_fiscal_numero=nf.numero_nota,
+                        motorista_nome=motorista,
+                    )
+                except Exception as tr_exc:
+                    logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+                notificar_falha_tms(baixa_id, msg, "enviar_baixa_esl_task")
+            else:
+                logger.info(f"⏳ [RETRY] Baixa NF {nf.numero_nota}: Tentativa {task.request.retries + 1}/{task.max_retries + 1} falhou. Retentando sem alertar o painel...")
+
             if task:
                 raise task.retry(exc=e, countdown=60)
             raise
 
+    def _buscar_freight_id_minuta(self, nf, ignorar_ids=None):
+        """
+        Busca o freight_id correto de uma Minuta na ESL Cloud usando múltiplos fallbacks:
+        1. invoice_occurrences pelo manifesto (tentando numero_manifesto e manifesto_id_tms com paginação)
+        2. Relatório de Fretes (Report 7693) buscando pelo número da nota/minuta
+        3. Objeto Frete vinculado no banco se tiver ID válido
+        """
+        ignorar = set(str(x).strip() for x in (ignorar_ids or []) if x)
+        TOKEN = self.config.token_invoices
+        manifesto = nf.manifesto
+        numero_local = str(nf.numero_nota or '').strip()
+        numero_local_limpo = numero_local.lstrip('0')
+
+        # 1. Busca no endpoint de invoice_occurrences do manifesto
+        ids_manifesto_para_tentar = []
+        if manifesto:
+            if manifesto.numero_manifesto:
+                ids_manifesto_para_tentar.append(str(manifesto.numero_manifesto).strip())
+            if manifesto.manifesto_id_tms and str(manifesto.manifesto_id_tms).strip() not in ids_manifesto_para_tentar:
+                ids_manifesto_para_tentar.append(str(manifesto.manifesto_id_tms).strip())
+
+        url_oc = f"https://{self.config.dominio_esl}/api/invoice_occurrences"
+        headers = {"Authorization": f"Bearer {TOKEN}"}
+
+        for m_id in ids_manifesto_para_tentar:
+            try:
+                next_id = None
+                for _ in range(5):  # até 5 páginas (250 registros)
+                    params = {"manifest_id": str(m_id), "per": 50}
+                    if next_id:
+                        params["after_id"] = next_id
+
+                    resp = requests.get(url_oc, headers=headers, params=params, timeout=30)
+                    if resp.status_code != 200:
+                        break
+
+                    data = resp.json()
+                    itens = data.get("data", [])
+                    if not itens:
+                        break
+
+                    for item in itens:
+                        invoice = item.get("invoice") or {}
+                        freight = item.get("freight") or {}
+
+                        num_inv = str(invoice.get("number") or "").strip()
+                        seq_freight = str(freight.get("sequence_code") or "").strip()
+                        cte_freight = str(freight.get("cte_number") or "").strip()
+
+                        bate_numero = (
+                            (num_inv and (num_inv == numero_local or num_inv.lstrip('0') == numero_local_limpo)) or
+                            (seq_freight and (seq_freight == numero_local or seq_freight.lstrip('0') == numero_local_limpo)) or
+                            (cte_freight and (cte_freight == numero_local or cte_freight.lstrip('0') == numero_local_limpo))
+                        )
+
+                        if bate_numero:
+                            fid = freight.get("id") or freight.get("sequence_code")
+                            if fid and str(fid) not in ignorar:
+                                logger.info(f"🎯 [ESL MINUTA] Freight ID encontrado via invoice_occurrences (Manifesto {m_id}): {fid} para Minuta #{nf.numero_nota}")
+                                return str(fid)
+
+                    paging = data.get("paging") or {}
+                    next_id = paging.get("next_id")
+                    if not next_id or next_id >= paging.get("last_id", 0):
+                        break
+            except Exception as e_oc:
+                logger.warning(f"Erro ao buscar invoice_occurrences para manifesto {m_id}: {e_oc}")
+
+        # 2. Fallback: Busca no Relatório de Fretes (Report 7693)
+        try:
+            token_geral = self.config.token_analytics or TOKEN
+            dados_frete = self.buscar_dados_frete_report_7693(
+                chave=None, 
+                numero=numero_local, 
+                token=token_geral
+            )
+            if dados_frete:
+                fid = dados_frete.get("id") or dados_frete.get("sequence_code")
+                if fid and str(fid) not in ignorar:
+                    logger.info(f"🎯 [ESL MINUTA] Freight ID encontrado via Report 7693: {fid} para Minuta #{nf.numero_nota}")
+                    return str(fid)
+        except Exception as e_rep:
+            logger.warning(f"Erro ao buscar minuta no Report 7693: {e_rep}")
+
+        # 3. Fallback: Se nf.frete tiver freight_id_tms válido
+        if nf.frete and nf.frete.freight_id_tms:
+            fid = str(nf.frete.freight_id_tms).strip()
+            if fid and fid not in ignorar and (not fid.isdigit() or int(fid) >= 100):
+                return fid
+
+        return None
+
     def _buscar_freight_id_por_numero(self, numero_nota, manifesto_id_tms, token):
-        """
-        Busca o freight_id na ESL pesquisando invoice_occurrences do manifesto
-        e encontrando o item cujo invoice.number bate com numero_nota.
-        """
+        """Wrapper de retrocompatibilidade"""
         url = f"https://{self.config.dominio_esl}/api/invoice_occurrences"
         headers = {"Authorization": f"Bearer {token}"}
         params = {"manifest_id": str(manifesto_id_tms), "per": 50}
-        
         try:
             response = requests.get(url, headers=headers, params=params, timeout=30)
-            if response.status_code != 200:
-                return None
-            
-            data = response.json()
-            for item in data.get("data", []):
-                invoice = item.get("invoice", {})
-                # Compara numero removendo zeros à esquerda de ambos
-                numero_esl = str(invoice.get("number", "")).strip()
+            if response.status_code == 200:
+                data = response.json()
                 numero_local = str(numero_nota).strip()
-                
-                # Comparação direta e sem zeros à esquerda
-                if numero_esl == numero_local or numero_esl.lstrip('0') == numero_local.lstrip('0'):
-                    freight = item.get("freight")
-                    if freight and freight.get("id"):
-                        return str(freight["id"])
+                numero_local_limpo = numero_local.lstrip('0')
+                for item in data.get("data", []):
+                    invoice = item.get("invoice", {})
+                    numero_esl = str(invoice.get("number", "")).strip()
+                    if numero_esl == numero_local or numero_esl.lstrip('0') == numero_local_limpo:
+                        freight = item.get("freight")
+                        if freight and freight.get("id"):
+                            return str(freight["id"])
         except Exception as e:
             logger.warning(f"Erro ao buscar freight_id por número {numero_nota}: {e}")
-        
         return None
 
     def enviar_baixa_minuta(self, baixa_id, task=None):
@@ -1399,23 +1494,27 @@ class ESLCloudAdapter(BaseTMSAdapter):
         """
         TOKEN = self.config.token_invoices
         payload = None
+        baixa = None
+        nf = None
+        is_ultima_tentativa = (not task) or (task.request.retries >= task.max_retries)
+
         try:
             baixa = BaixaNF.objects.select_related(
                 'nota_fiscal',
                 'ocorrencia',
                 'nota_fiscal__manifesto',
-                'nota_fiscal__manifesto__motorista'
+                'nota_fiscal__manifesto__motorista',
+                'nota_fiscal__manifesto__filial',
+                'nota_fiscal__frete'
             ).get(id=baixa_id)
             nf = baixa.nota_fiscal
+            manifesto = nf.manifesto
             
             # --- PROTEÇÃO DE IDEMPOTÊNCIA: Se já foi integrada com sucesso, não envia de novo ---
             if baixa.integrado_tms:
                 logger.info(f"⏭️ Baixa de Minuta #{baixa_id} (NF {nf.numero_nota}) já integrada ao TMS. Pulando reenvio.")
                 return f"Baixa de Minuta {baixa_id} já integrada previamente."
 
-            freight_id = nf.freight_id_tms
-            manifesto = nf.manifesto
-            
             codigo_tms_val = (baixa.ocorrencia.codigo_tms or baixa.ocorrencia.codigo_referencia) if baixa.ocorrencia else None
             tipo_op_nf = str(nf.tipo_operacao or '').strip().upper()
             codigo_ocorrencia, trace_ocorrencia = obter_codigo_ocorrencia_seguro(codigo_tms_val, tipo_operacao=nf.tipo_operacao, nota_fiscal=nf)
@@ -1424,34 +1523,9 @@ class ESLCloudAdapter(BaseTMSAdapter):
             
             fuso_br = pytz.timezone('America/Sao_Paulo')
             data_ocorrencia_str = baixa.data_baixa.astimezone(fuso_br).strftime('%Y-%m-%dT%H:%M:%S.000-03:00')
-            
-            # Se não temos freight_id salvo, busca na ESL pelo número da nota no manifesto
-            if not freight_id and manifesto and manifesto.manifesto_id_tms:
-                logger.info(f"Minuta {nf.numero_nota}: freight_id não salvo. Buscando na ESL...")
-                freight_id = self._buscar_freight_id_por_numero(
-                    nf.numero_nota, 
-                    manifesto.numero_manifesto, 
-                    TOKEN
-                )
-                # Salva o freight_id encontrado para futuras tentativas
-                if freight_id:
-                    nf.freight_id_tms = freight_id
-                    nf.save(update_fields=['freight_id_tms'])
-                    logger.info(f"Minuta {nf.numero_nota}: freight_id encontrado = {freight_id}")
-            
-            if not freight_id:
-                raise Exception(
-                    f"Minuta {nf.numero_nota} sem freight_id. "
-                    f"Não é possível enviar baixa sem freight_id (endpoint geral exige chave NF-e)."
-                )
-
-
-
-            # Envia via endpoint V1 de freight (único que funciona para minutas)
-            URL_ESL_FRETE = f"https://{self.config.dominio_esl}/api/v1/freights/{freight_id}/invoice_occurrences"
-            
             motorista = manifesto.motorista.nome_completo if (manifesto and manifesto.motorista) else "Motorista não identificado"
-            
+
+            # 📦 MONTA O PAYLOAD ANTECIPADAMENTE (Garante que baixa.payload_enviado NUNCA seja null!)
             payload = {
                 "invoice_occurrence": {
                     "receiver": baixa.recebedor or "Nao identificado",
@@ -1465,10 +1539,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     }
                 }
             }
-            
-            # ESL Cloud não aceita 'delivery_receipt_url' no endpoint de Frete.
-            # Lógica de enviar foto comentada/removida para evitar Erro 400.
-            
+
             baixa.payload_enviado = {
                 **payload,
                 "_debug_trace": {
@@ -1478,25 +1549,54 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     "ocorrencia_db_id": getattr(baixa.ocorrencia, 'id', None),
                     "ocorrencia_db_tms": getattr(baixa.ocorrencia, 'codigo_tms', None),
                     "ocorrencia_db_ref": getattr(baixa.ocorrencia, 'codigo_referencia', None),
-                    "trace": trace_ocorrencia
+                    "trace": trace_ocorrencia,
+                    "freight_id_tms_salvo": nf.freight_id_tms,
                 }
             }
+            baixa.save(update_fields=['payload_enviado'])
 
-            logger.info(f"🚀 [ESL TRANSMISSÃO MINUTA/FRETE V1] Minuta NF: {nf.numero_nota} | Freight ID: {freight_id}")
-            logger.info(f"   -> NF.tipo_operacao: '{nf.tipo_operacao}'")
-            logger.info(f"   -> Baixa Ocorrência DB: ID={getattr(baixa.ocorrencia, 'id', 'None')}, TMS='{getattr(baixa.ocorrencia, 'codigo_tms', 'None')}', Ref='{getattr(baixa.ocorrencia, 'codigo_referencia', 'None')}', Desc='{getattr(baixa.ocorrencia, 'descricao', 'None')}'")
-            logger.info(f"   -> Código Final Enviado: {codigo_ocorrencia}")
-            logger.info(f"   -> PAYLOAD INTEGRAL ENVIADO PARA ESL:\n{json.dumps(payload, indent=2)}")
+            freight_id = nf.freight_id_tms
+            # Se freight_id for ausente ou suspeito (ex: número sequencial de parada 1, 2, 3...)
+            id_suspeito = not freight_id or (str(freight_id).isdigit() and int(freight_id) < 100)
+            if id_suspeito:
+                logger.info(f"Minuta {nf.numero_nota}: freight_id '{freight_id}' ausente/suspeito. Buscando ID real na ESL...")
+                novo_fid = self._buscar_freight_id_minuta(nf, ignorar_ids=[freight_id] if freight_id else [])
+                if novo_fid:
+                    freight_id = novo_fid
+                    nf.freight_id_tms = novo_fid
+                    nf.save(update_fields=['freight_id_tms'])
+                    logger.info(f"Minuta {nf.numero_nota}: freight_id real encontrado = {freight_id}")
+
+            if not freight_id:
+                msg_falta_id = (
+                    f"Minuta #{nf.numero_nota} sem freight_id: não foi possível localizar o ID do Frete "
+                    f"correspondente na ESL Cloud (Manifesto #{manifesto.numero_manifesto if manifesto else 'N/A'})."
+                )
+                raise Exception(msg_falta_id)
 
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {TOKEN}"
             }
-            
-            logger.info(f"Enviando Minuta {nf.numero_nota} via Freight V1 (ID: {freight_id})")
+
+            URL_ESL_FRETE = f"https://{self.config.dominio_esl}/api/v1/freights/{freight_id}/invoice_occurrences"
+            logger.info(f"🚀 [ESL TRANSMISSÃO MINUTA V1] Minuta NF: {nf.numero_nota} | Freight ID: {freight_id} -> {URL_ESL_FRETE}")
             logger.info(f"Payload: {json.dumps(payload)}")
+
             response = requests.post(URL_ESL_FRETE, json=payload, headers=headers, timeout=30)
-            
+
+            # 🔄 RECUPERAÇÃO AUTOMÁTICA DE 404: Se o freight_id atual deu 404, ele é inválido na ESL!
+            if response.status_code == 404:
+                logger.warning(f"⚠️ Freight ID {freight_id} retornou 404 na ESL para Minuta {nf.numero_nota}. Buscando ID correto na ESL...")
+                novo_fid = self._buscar_freight_id_minuta(nf, ignorar_ids=[freight_id])
+                if novo_fid and novo_fid != freight_id:
+                    logger.info(f"🔄 Novo freight_id encontrado para Minuta {nf.numero_nota}: {novo_fid}. Reenviando com ID correto...")
+                    freight_id = novo_fid
+                    nf.freight_id_tms = novo_fid
+                    nf.save(update_fields=['freight_id_tms'])
+                    URL_ESL_FRETE_NOVO = f"https://{self.config.dominio_esl}/api/v1/freights/{freight_id}/invoice_occurrences"
+                    response = requests.post(URL_ESL_FRETE_NOVO, json=payload, headers=headers, timeout=30)
+
             response.raise_for_status()
 
             baixa.processado_tms = True
@@ -1507,7 +1607,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
             
             try:
                 from operacional.services import resolver_erros_automaticamente
-                resolver_erros_automaticamente(nf.manifesto.numero_manifesto, nf.numero_nota, nf.manifesto.filial)
+                if manifesto:
+                    resolver_erros_automaticamente(manifesto.numero_manifesto, nf.numero_nota, manifesto.filial)
             except Exception as auto_e:
                 logger.error(f"Erro auto-resolucao minuta: {auto_e}")
             
@@ -1532,45 +1633,55 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 )
             )
             if eh_ja_existe:
-                logger.info(f"✅ Minuta {nf.numero_nota}: Ocorrência já registrada previamente no TMS (ESL). Marcando como sucesso (Idempotência).")
-                baixa.processado_tms = True
-                baixa.integrado_tms = True
-                baixa.data_integracao = timezone.now()
-                baixa.log_erro_tms = "Sucesso: Baixa de Minuta já registrada previamente no TMS (ESL Cloud)."
-                baixa.save()
+                logger.info(f"✅ Minuta {nf.numero_nota if nf else baixa_id}: Ocorrência já registrada previamente no TMS (ESL). Marcando como sucesso (Idempotência).")
+                if baixa:
+                    baixa.processado_tms = True
+                    baixa.integrado_tms = True
+                    baixa.data_integracao = timezone.now()
+                    baixa.log_erro_tms = "Sucesso: Baixa de Minuta já registrada previamente no TMS (ESL Cloud)."
+                    baixa.save()
+                    
+                    if nf and nf.manifesto:
+                        try:
+                            from operacional.services import resolver_erros_automaticamente
+                            resolver_erros_automaticamente(nf.manifesto.numero_manifesto, nf.numero_nota, nf.manifesto.filial)
+                        except Exception as auto_e:
+                            logger.error(f"Erro auto-resolucao minuta ja_existe: {auto_e}")
                 
-                try:
-                    from operacional.services import resolver_erros_automaticamente
-                    resolver_erros_automaticamente(nf.manifesto.numero_manifesto, nf.numero_nota, nf.manifesto.filial)
-                except Exception as auto_e:
-                    logger.error(f"Erro auto-resolucao minuta ja_existe: {auto_e}")
-                
-                return f"Baixa de Minuta {nf.numero_nota} integrada (Já existia no TMS)."
+                return f"Baixa de Minuta {nf.numero_nota if nf else baixa_id} integrada (Já existia no TMS)."
 
             msg_falha = f"Erro na integração da Minuta: {str(e)}{payload_str}"
             if status_code:
                 msg_falha = f"Erro na integração da Minuta ({status_code}): {response_text}{payload_str}"
-            baixa.log_erro_tms = msg_falha[:500]
-            baixa.integrado_tms = False
-            baixa.save()
             
-            try:
-                from operacional.services import registrar_erro_torre
-                registrar_erro_torre(
-                    filial=nf.manifesto.filial,
-                    categoria='INTEGRACAO_MINUTA',
-                    severidade_padrao='CRITICO',
-                    titulo=f"Falha na Minuta {nf.numero_nota}",
-                    descricao=f"Manifesto #{nf.manifesto.numero_manifesto} - {msg_falha[:300]}",
-                    erro_raw=msg_falha,
-                    manifesto_numero=nf.manifesto.numero_manifesto,
-                    nota_fiscal_numero=nf.numero_nota,
-                    motorista_nome=nf.manifesto.motorista.nome_completo if nf.manifesto.motorista else "Desconhecido",
-                )
-            except Exception as tr_exc:
-                logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+            if baixa:
+                baixa.log_erro_tms = msg_falha[:500]
+                baixa.integrado_tms = False
+                baixa.save()
             
-            notificar_falha_tms(baixa_id, msg_falha, "enviar_baixa_minuta_task")
+            # 🚨 ALERTA NA TORRE E NOTIFICAÇÃO: SOMENTE NA ÚLTIMA TENTATIVA!
+            if is_ultima_tentativa:
+                logger.info(f"🚨 [ÚLTIMA TENTATIVA ESGOTADA] Disparando alerta na Torre e notificação para Baixa Minuta #{baixa_id}")
+                if nf and nf.manifesto:
+                    try:
+                        from operacional.services import registrar_erro_torre
+                        registrar_erro_torre(
+                            filial=nf.manifesto.filial,
+                            categoria='INTEGRACAO_MINUTA',
+                            severidade_padrao='CRITICO',
+                            titulo=f"Falha na Minuta {nf.numero_nota}",
+                            descricao=f"Manifesto #{nf.manifesto.numero_manifesto} - {msg_falha[:300]}",
+                            erro_raw=msg_falha,
+                            manifesto_numero=nf.manifesto.numero_manifesto,
+                            nota_fiscal_numero=nf.numero_nota,
+                            motorista_nome=nf.manifesto.motorista.nome_completo if nf.manifesto.motorista else "Desconhecido",
+                        )
+                    except Exception as tr_exc:
+                        logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+                
+                notificar_falha_tms(baixa_id, msg_falha, "enviar_baixa_minuta_task")
+            else:
+                logger.info(f"⏳ [RETRY] Minuta NF {nf.numero_nota if nf else baixa_id}: Tentativa {task.request.retries + 1}/{task.max_retries + 1} falhou. Retentando em 60s sem alertar o painel...")
             
             if task:
                 raise task.retry(exc=e, countdown=60)
@@ -1671,23 +1782,28 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 baixa.payload_enviado = payload
                 baixa.save()
                 
-                try:
-                    from operacional.services import registrar_erro_torre
-                    registrar_erro_torre(
-                        filial=manifesto.filial,
-                        categoria='INTEGRACAO_COLETA',
-                        severidade_padrao='CRITICO',
-                        titulo=f"Falha na Coleta {identificador}",
-                        descricao=f"Manifesto #{manifesto.numero_manifesto} - {msg_erro[:300]}",
-                        erro_raw=msg_erro,
-                        manifesto_numero=manifesto.numero_manifesto,
-                        nota_fiscal_numero=identificador,
-                        motorista_nome=manifesto.motorista.nome_completo if manifesto.motorista else "Desconhecido",
-                    )
-                except Exception as tr_exc:
-                    logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
-                
-                notificar_falha_tms(baixa_id, msg_erro, "enviar_coleta_esl_task")
+                is_ultima_tentativa = (not task) or (task.request.retries >= task.max_retries)
+
+                if is_ultima_tentativa:
+                    try:
+                        from operacional.services import registrar_erro_torre
+                        registrar_erro_torre(
+                            filial=manifesto.filial,
+                            categoria='INTEGRACAO_COLETA',
+                            severidade_padrao='CRITICO',
+                            titulo=f"Falha na Coleta {identificador}",
+                            descricao=f"Manifesto #{manifesto.numero_manifesto} - {msg_erro[:300]}",
+                            erro_raw=msg_erro,
+                            manifesto_numero=manifesto.numero_manifesto,
+                            nota_fiscal_numero=identificador,
+                            motorista_nome=manifesto.motorista.nome_completo if manifesto.motorista else "Desconhecido",
+                        )
+                    except Exception as tr_exc:
+                        logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+                    
+                    notificar_falha_tms(baixa_id, msg_erro, "enviar_coleta_esl_task")
+                else:
+                    logger.info(f"⏳ [RETRY] Coleta {identificador}: Tentativa {task.request.retries + 1}/{task.max_retries + 1} falhou. Retentando sem alertar o painel...")
                 
                 if response.status_code == 404 and is_numeric:
                      logger.warning(f"ID numérico {identificador} deu 404 na V1. Tentando V2 em breve via retry.")
@@ -1697,19 +1813,24 @@ class ESLCloudAdapter(BaseTMSAdapter):
         except Exception as e:
             logger.error(f"Erro enviar_coleta_esl_task ({baixa_id}): {str(e)}")
             
-            try:
-                from operacional.services import registrar_erro_torre
-                registrar_erro_torre(
-                    filial=manifesto.filial,
-                    categoria='INTEGRACAO_COLETA',
-                    severidade_padrao='CRITICO',
-                    titulo=f"Erro inesperado na Coleta {baixa_id}",
-                    descricao=str(e)[:300],
-                    erro_raw=str(e),
-                    manifesto_numero=manifesto.numero_manifesto,
-                )
-            except Exception as tr_exc:
-                logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+            is_ultima_tentativa = (not task) or (task.request.retries >= task.max_retries)
+            if is_ultima_tentativa:
+                try:
+                    from operacional.services import registrar_erro_torre
+                    registrar_erro_torre(
+                        filial=manifesto.filial,
+                        categoria='INTEGRACAO_COLETA',
+                        severidade_padrao='CRITICO',
+                        titulo=f"Erro inesperado na Coleta {baixa_id}",
+                        descricao=str(e)[:300],
+                        erro_raw=str(e),
+                        manifesto_numero=manifesto.numero_manifesto,
+                    )
+                except Exception as tr_exc:
+                    logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+            else:
+                logger.info(f"⏳ [RETRY] Coleta {baixa_id}: Tentativa {task.request.retries + 1}/{task.max_retries + 1} falhou. Retentando sem alertar o painel...")
+
             if task:
                 raise task.retry(exc=e, countdown=60)
             raise
@@ -1957,21 +2078,25 @@ class ESLCloudAdapter(BaseTMSAdapter):
             baixa.integrado_tms = False
             baixa.save(update_fields=['log_erro_tms', 'integrado_tms'])
 
-            try:
-                from operacional.services import registrar_erro_torre
-                registrar_erro_torre(
-                    filial=nf.manifesto.filial if (nf and nf.manifesto) else None,
-                    categoria='INTEGRACAO_COMPROVANTE',
-                    severidade_padrao='CRITICO',
-                    titulo=f"Falha envio comprovante NF {nf.numero_nota if nf else baixa_id}",
-                    descricao=msg_falha[:300],
-                    erro_raw=msg_falha,
-                    manifesto_numero=nf.manifesto.numero_manifesto if (nf and nf.manifesto) else None,
-                    nota_fiscal_numero=nf.numero_nota if nf else None,
-                    motorista_nome=nf.manifesto.motorista.nome_completo if (nf and nf.manifesto and nf.manifesto.motorista) else "Operacional",
-                )
-            except Exception as tr_exc:
-                logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+            is_ultima_tentativa = (not task) or (task.request.retries >= task.max_retries)
+            if is_ultima_tentativa:
+                try:
+                    from operacional.services import registrar_erro_torre
+                    registrar_erro_torre(
+                        filial=nf.manifesto.filial if (nf and nf.manifesto) else None,
+                        categoria='INTEGRACAO_COMPROVANTE',
+                        severidade_padrao='CRITICO',
+                        titulo=f"Falha envio comprovante NF {nf.numero_nota if nf else baixa_id}",
+                        descricao=msg_falha[:300],
+                        erro_raw=msg_falha,
+                        manifesto_numero=nf.manifesto.numero_manifesto if (nf and nf.manifesto) else None,
+                        nota_fiscal_numero=nf.numero_nota if nf else None,
+                        motorista_nome=nf.manifesto.motorista.nome_completo if (nf and nf.manifesto and nf.manifesto.motorista) else "Operacional",
+                    )
+                except Exception as tr_exc:
+                    logger.error(f"Erro ao registrar torre de controle: {tr_exc}")
+            else:
+                logger.info(f"⏳ [RETRY] Comprovante NF {nf.numero_nota if nf else baixa_id}: Tentativa {task.request.retries + 1}/{task.max_retries + 1} falhou. Retentando sem alertar o painel...")
 
             if task:
                 raise task.retry(exc=e, countdown=60)
