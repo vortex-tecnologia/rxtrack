@@ -541,6 +541,9 @@ async function atualizarListaViva(numeroManifesto) {
             setTimeout(() => {
                 atualizarVisualContadores(contador, notas, totalFinalizadas);
             }, 800);
+            if (window.Roteirizacao) {
+                window.Roteirizacao.renderizarBanner(numeroManifesto);
+            }
             return;
         }
 
@@ -549,6 +552,7 @@ async function atualizarListaViva(numeroManifesto) {
             // INJEÇÃO DA BUSCA (MANTIDO ORIGINAL)
             if (!document.getElementById('input-busca-nfe')) {
                 areaDinamica.innerHTML = `
+                    <div id="container-roteirizacao-principal"></div>
                     <div id="container-alertas-canhotos"></div>
                     <div class="search-box mb-4">
                         <div class="input-group shadow-sm position-relative" style="border-radius: 15px; overflow: hidden;">
@@ -734,6 +738,9 @@ async function atualizarListaViva(numeroManifesto) {
             // FINALIZAÇÃO: ATUALIZA CONTADORES E CACHE
             atualizarVisualContadores(contador, notas, totalFinalizadas);
             filtrarNotasOffline();
+            if (window.Roteirizacao) {
+                window.Roteirizacao.renderizarBanner(numeroManifesto);
+            }
 
             // Cache de dados puros (leve) — o cache de HTML foi removido para economizar memória
             localStorage.setItem(`cache_dados_puros_${numeroManifesto}`, novosDadosJSON);
@@ -1311,6 +1318,9 @@ async function salvarRegistro() {
 }
 // Função auxiliar para não repetir código de remover nota
 function processarSumiçoNota(numeroNF) {
+    if (window.Roteirizacao) {
+        window.Roteirizacao.avancarProximaEntregaAposBaixa(numeroNF);
+    }
     const cardParaRemover = document.getElementById(`card-nf-${numeroNF}`);
     if (cardParaRemover) {
         cardParaRemover.classList.add('animate__fadeOutRight');
@@ -2829,6 +2839,9 @@ async function salvarRegistroColeta(pickId, codigoOcorrencia, observacao) {
 
         if (response && response.ok) {
             atualizarStatusUI('success', '✅ Coleta Registrada', 'Informações enviadas com sucesso.');
+            if (window.Roteirizacao) {
+                window.Roteirizacao.avancarProximaEntregaAposBaixa(pickId);
+            }
             setTimeout(() => {
                 statusModal.hide();
                 atualizarListaViva(manifestoAtual);
@@ -2865,6 +2878,9 @@ async function salvarRegistroColeta(pickId, codigoOcorrencia, observacao) {
             await atualizarIconeNuvem();
 
             atualizarStatusUI('warning', '📡 Modo Offline', 'Sinal fraco. A coleta será sincronizada depois.');
+            if (window.Roteirizacao) {
+                window.Roteirizacao.avancarProximaEntregaAposBaixa(pickId);
+            }
             setTimeout(() => {
                 statusModal.hide();
                 atualizarListaViva(manifestoAtual);

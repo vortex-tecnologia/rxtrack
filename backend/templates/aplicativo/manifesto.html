@@ -38,11 +38,89 @@
 
     <link rel="stylesheet" href="{% static 'css/bootstrap-icons.css' %}">
 
+    <!-- Leaflet & SortableJS para Roteirização Manual -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+
     <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
     <style>
         /* Estilos Customizados para Mobile */
         body {
             background-color: #f4f4f9;
+        }
+
+        /* Marcadores e Roteirização Manual */
+        .marker-driver-pulse {
+            width: 32px;
+            height: 32px;
+            background-color: #2563eb;
+            color: white;
+            border: 3px solid #ffffff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.35);
+            animation: driverPulse 1.8s infinite;
+        }
+        @keyframes driverPulse {
+            0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); }
+            70% { box-shadow: 0 0 0 12px rgba(37, 99, 235, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+        }
+        .marker-stop-badge {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 2px solid #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 13px;
+            color: #ffffff;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+            transition: transform 0.2s ease;
+        }
+        .marker-stop-badge.marker-status-pendente { background-color: #2563eb; }
+        .marker-stop-badge.marker-status-atual { background-color: #f97316; transform: scale(1.15); }
+        .marker-stop-badge.marker-status-concluida { background-color: #10b981; }
+
+        .card-item-roteiro {
+            border-radius: 12px !important;
+            background: #ffffff;
+            transition: all 0.2s ease;
+        }
+        .card-item-roteiro.item-concluido { background: #f8fafc; opacity: 0.75; }
+        .card-item-roteiro.item-desmarcado { opacity: 0.45; }
+        .cursor-grab { cursor: grab; }
+        .cursor-grab:active { cursor: grabbing; }
+
+        .badge-sequencia {
+            width: 28px;
+            height: 28px;
+            min-width: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 12px;
+        }
+        .badge-sequencia.badge-ativa { background-color: #2563eb; color: #ffffff; }
+        .badge-sequencia.badge-inativa { background-color: #cbd5e1; color: #475569; }
+        .badge-sequencia.badge-concluida { background-color: #10b981; color: #ffffff; }
+
+        .roteiro-sortable-ghost {
+            opacity: 0.3;
+            background-color: #dbeafe !important;
+            border: 2px dashed #3b82f6 !important;
+        }
+        .roteiro-sortable-chosen {
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15) !important;
+            transform: scale(1.02);
         }
 
         .card-manifesto {
@@ -1902,10 +1980,104 @@
     </div>
 
 
-    <script src="{% static 'js/serviceworker.js' %}?v=1.45"></script>
+    <!-- MODAL DE ROTEIRIZAÇÃO MANUAL -->
+    <div class="modal fade" id="modalRoteirizacao" tabindex="-1" aria-labelledby="modalRoteirizacaoLabel" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-fullscreen-sm-down modal-lg modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 20px; overflow: hidden;">
+                <!-- TOPO -->
+                <div class="modal-header bg-white border-bottom py-3 px-4 d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-compass-fill text-primary fs-4"></i>
+                            <h5 class="modal-title fw-bold text-dark mb-0" id="modalRoteirizacaoLabel">Roteirização</h5>
+                        </div>
+                        <small class="text-muted">Organize a sequência das paradas no manifesto</small>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+
+                <div class="modal-body p-0" style="background-color: #f8fafc;">
+                    <!-- MEIO: MINI-MAPA -->
+                    <div class="position-relative">
+                        <div id="mapaRoteirizacao" style="height: 250px; width: 100%; background: #e2e8f0;"></div>
+                        <div class="position-absolute bottom-0 start-0 m-2" style="z-index: 500;">
+                            <span class="badge bg-white text-dark shadow-xs border px-2 py-1 small">
+                                <i class="bi bi-layers me-1 text-primary"></i> Trajeto Numérico
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- ESTIMATIVAS / RESUMO COMPACTO -->
+                    <div class="p-3 pb-2">
+                        <div id="resumo-estimativa-roteiro"></div>
+                    </div>
+
+                    <!-- DICA DE REORDENAÇÃO -->
+                    <div class="px-3 pb-2 d-flex align-items-center justify-content-between text-muted" style="font-size: 0.75rem;">
+                        <span><i class="bi bi-arrows-vertical me-1"></i> Arraste pelos pontos <i class="bi bi-grip-vertical"></i> para reordenar</span>
+                        <span>Ordem manual preservada</span>
+                    </div>
+
+                    <!-- LISTA DE PARADAS REORDENÁVEIS -->
+                    <div class="px-3 pb-4">
+                        <div id="lista-roteirizacao"></div>
+                    </div>
+                </div>
+
+                <!-- RODAPÉ FIXO -->
+                <div class="modal-footer bg-white border-top p-3 d-flex gap-2">
+                    <button type="button" class="btn btn-light rounded-pill px-4 fw-semibold text-secondary" data-bs-dismiss="modal">
+                        Voltar
+                    </button>
+                    <button type="button" class="btn btn-primary flex-grow-1 rounded-pill py-2 fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2" onclick="Roteirizacao.solicitarGerarRota()">
+                        <i class="bi bi-rocket-takeoff-fill"></i>
+                        <span>GERAR ROTA</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE ESCOLHA DO NAVEGADOR -->
+    <div class="modal fade" id="modalEscolhaNavegador" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
+                <div class="modal-header border-0 pb-0 text-center flex-column">
+                    <div class="bg-primary bg-opacity-10 p-3 rounded-circle d-inline-flex mb-2">
+                        <i class="bi bi-cursor-fill text-primary fs-3"></i>
+                    </div>
+                    <h5 class="modal-title fw-bold text-dark w-100">Escolha o Navegador</h5>
+                    <p class="small text-muted mb-0">Qual aplicativo deseja usar?</p>
+                </div>
+                <div class="modal-body p-3">
+                    <div id="opcoes-navegadores-container" class="d-flex flex-column gap-2">
+                        <button type="button" class="btn btn-outline-info py-3 rounded-4 fw-bold d-flex align-items-center justify-content-start gap-3 shadow-xs border-2 text-dark" onclick="Roteirizacao.abrirWaze()">
+                            <i class="bi bi-cursor-fill text-info fs-3 ms-2"></i>
+                            <div class="text-start">
+                                <div class="fw-bold fs-6">Waze</div>
+                                <small class="text-muted" style="font-size: 0.72rem;">Navegação parada a parada guiada</small>
+                            </div>
+                        </button>
+                        <button type="button" class="btn btn-outline-primary py-3 rounded-4 fw-bold d-flex align-items-center justify-content-start gap-3 shadow-xs border-2 text-dark" onclick="Roteirizacao.abrirGoogleMaps()">
+                            <i class="bi bi-geo-alt-fill text-danger fs-3 ms-2"></i>
+                            <div class="text-start">
+                                <div class="fw-bold fs-6">Google Maps</div>
+                                <small class="text-muted" style="font-size: 0.72rem;">Rota com múltiplos waypoints</small>
+                            </div>
+                        </button>
+                        <button type="button" class="btn btn-light rounded-pill py-2 text-muted fw-semibold mt-2" data-bs-dismiss="modal">
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'js/serviceworker.js' %}?v=1.46"></script>
     <script src="/static/js/login_motorista/authFetch.js"></script>
     <script src="{% static 'js/image_quality_v1.js' %}?v=1.0"></script>
-    <script src="{% static 'js/manifesto_v19.js' %}?v=1.46"></script>
+    <script src="{% static 'js/manifesto_v19.js' %}?v=1.47"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pulltorefreshjs/0.1.22/index.umd.min.js"></script>
     <script>
         PullToRefresh.init({
@@ -1924,6 +2096,7 @@
     <script src="{% static 'js/offiline.js' %}"></script>
     <script src="{% static 'js/historico_v1.js' %}"></script>
     <script src="{% static 'js/suporte_app.js' %}"></script>
+    <script src="{% static 'js/roteirizacao_v1.js' %}?v=1.0"></script>
 
 </body>
 
