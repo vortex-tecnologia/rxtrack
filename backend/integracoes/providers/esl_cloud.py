@@ -1207,7 +1207,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 try:
                     from operacional.services import registrar_erro_torre
                     registrar_erro_torre(
-                        filial=manifesto.filial,
+                        filial=(manifesto.filial_operacao or manifesto.filial),
                         categoria='INTEGRACAO_BAIXA',
                         severidade_padrao='CRITICO',
                         titulo=f"Falha integração NF {nf.numero_nota}",
@@ -1241,7 +1241,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 try:
                     from operacional.services import registrar_erro_torre
                     registrar_erro_torre(
-                        filial=manifesto.filial,
+                        filial=(manifesto.filial_operacao or manifesto.filial),
                         categoria='INTEGRACAO_BAIXA',
                         severidade_padrao='CRITICO',
                         titulo=f"Erro inesperado NF {nf.numero_nota}",
@@ -1558,7 +1558,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     try:
                         from operacional.services import registrar_erro_torre
                         registrar_erro_torre(
-                            filial=nf.manifesto.filial,
+                            filial=(nf.manifesto.filial_operacao or nf.manifesto.filial),
                             categoria='INTEGRACAO_MINUTA',
                             severidade_padrao='CRITICO',
                             titulo=f"Falha na Minuta {nf.numero_nota}",
@@ -1680,7 +1680,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     try:
                         from operacional.services import registrar_erro_torre
                         registrar_erro_torre(
-                            filial=manifesto.filial,
+                            filial=(manifesto.filial_operacao or manifesto.filial),
                             categoria='INTEGRACAO_COLETA',
                             severidade_padrao='CRITICO',
                             titulo=f"Falha na Coleta {identificador}",
@@ -1710,7 +1710,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 try:
                     from operacional.services import registrar_erro_torre
                     registrar_erro_torre(
-                        filial=manifesto.filial,
+                        filial=(manifesto.filial_operacao or manifesto.filial),
                         categoria='INTEGRACAO_COLETA',
                         severidade_padrao='CRITICO',
                         titulo=f"Erro inesperado na Coleta {baixa_id}",
@@ -1848,7 +1848,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             try:
                 from operacional.services import registrar_erro_torre
                 registrar_erro_torre(
-                    filial=manifesto.filial,
+                    filial=(manifesto.filial_operacao or manifesto.filial),
                     categoria='FINALIZACAO_MANIFESTO',
                     severidade_padrao='CRITICO',
                     titulo=f"Falha finalização Manifesto #{manifesto.numero_manifesto}",
@@ -1975,7 +1975,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 try:
                     from operacional.services import registrar_erro_torre
                     registrar_erro_torre(
-                        filial=nf.manifesto.filial if (nf and nf.manifesto) else None,
+                        filial=(nf.manifesto.filial_operacao or nf.manifesto.filial) if (nf and nf.manifesto) else None,
                         categoria='INTEGRACAO_COMPROVANTE',
                         severidade_padrao='CRITICO',
                         titulo=f"Falha envio comprovante NF {nf.numero_nota if nf else baixa_id}",

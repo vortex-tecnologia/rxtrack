@@ -156,18 +156,23 @@ class DashboardView(TemplateView):
         # 1. Busca os manifestos do dia
         manifestos_do_dia = Manifesto.objects.filter(data_criacao__range=(hoje_inicio, hoje_fim)).exclude(numero_manifesto__startswith='SAC-')
         
-        # 2. Aplica filtro de Filial (Prioridade: URL param -> Perfil do Usuário -> Vazio)
+        # 2. Aplica filtro de Filial por EMISSOR (filial_operacao) com fallback para filial fiscal
+        #    Mesma lógica da Torre de Controle Live: quem emitiu o manifesto é quem vê no painel
         sem_filial = not bool(usuario_filial)
         
         if filial_param == 'todas':
             # Se filtrou explicitamente por 'todas', mostra tudo
             pass
         elif filial_param:
-            # Se filtrou por uma filial específica, mostra ela
-            manifestos_do_dia = manifestos_do_dia.filter(filial_id=filial_param)
+            # Se filtrou por uma filial específica, mostra pela filial_operacao (emissor) com fallback
+            manifestos_do_dia = manifestos_do_dia.filter(
+                Q(filial_operacao_id=filial_param) | (Q(filial_operacao__isnull=True) & Q(filial_id=filial_param))
+            )
         elif usuario_filial:
-            # Padrão: mostra a do usuário
-            manifestos_do_dia = manifestos_do_dia.filter(filial=usuario_filial)
+            # Padrão: mostra manifestos emitidos pela filial do usuário
+            manifestos_do_dia = manifestos_do_dia.filter(
+                Q(filial_operacao=usuario_filial) | (Q(filial_operacao__isnull=True) & Q(filial=usuario_filial))
+            )
         else:
             # Se não filtrou nada e não tem filial, não mostra nada
             manifestos_do_dia = manifestos_do_dia.none()
@@ -247,11 +252,22 @@ class DashboardView(TemplateView):
 
         baixas_hoje = BaixaNF.objects.filter(
             data_baixa__range=(hoje_inicio, hoje_fim)
-        )
-        if filial_param and filial_param != 'todas':
-            baixas_hoje = baixas_hoje.filter(nota_fiscal__manifesto__filial_id=filial_param)
-        elif usuario_filial and not filial_param:
-            baixas_hoje = baixas_hoje.filter(nota_fiscal__manifesto__filial=usuario_filial)
+        ).exclude(nota_fiscal__manifesto__numero_manifesto__startswith='SAC-')
+        
+        if filial_param == 'todas':
+            pass
+        elif filial_param:
+            baixas_hoje = baixas_hoje.filter(
+                Q(nota_fiscal__manifesto__filial_operacao_id=filial_param) |
+                (Q(nota_fiscal__manifesto__filial_operacao__isnull=True) & Q(nota_fiscal__manifesto__filial_id=filial_param))
+            )
+        elif usuario_filial:
+            baixas_hoje = baixas_hoje.filter(
+                Q(nota_fiscal__manifesto__filial_operacao=usuario_filial) |
+                (Q(nota_fiscal__manifesto__filial_operacao__isnull=True) & Q(nota_fiscal__manifesto__filial=usuario_filial))
+            )
+        else:
+            baixas_hoje = baixas_hoje.none()
 
         contador_por_hora = defaultdict(int)
         for baixa in baixas_hoje:
@@ -311,12 +327,22 @@ class DashboardView(TemplateView):
         ocorrencias_qs = BaixaNF.objects.filter(
             data_baixa__range=(hoje_inicio, hoje_fim),
             ocorrencia__isnull=False
-        ).exclude(ocorrencia__codigo_tms__in=['1', '01'])
+        ).exclude(ocorrencia__codigo_tms__in=['1', '01']).exclude(nota_fiscal__manifesto__numero_manifesto__startswith='SAC-')
 
-        if filial_param and filial_param != 'todas':
-            ocorrencias_qs = ocorrencias_qs.filter(nota_fiscal__manifesto__filial_id=filial_param)
-        elif usuario_filial and not filial_param:
-            ocorrencias_qs = ocorrencias_qs.filter(nota_fiscal__manifesto__filial=usuario_filial)
+        if filial_param == 'todas':
+            pass
+        elif filial_param:
+            ocorrencias_qs = ocorrencias_qs.filter(
+                Q(nota_fiscal__manifesto__filial_operacao_id=filial_param) |
+                (Q(nota_fiscal__manifesto__filial_operacao__isnull=True) & Q(nota_fiscal__manifesto__filial_id=filial_param))
+            )
+        elif usuario_filial:
+            ocorrencias_qs = ocorrencias_qs.filter(
+                Q(nota_fiscal__manifesto__filial_operacao=usuario_filial) |
+                (Q(nota_fiscal__manifesto__filial_operacao__isnull=True) & Q(nota_fiscal__manifesto__filial=usuario_filial))
+            )
+        else:
+            ocorrencias_qs = ocorrencias_qs.none()
 
         top_motivos_raw = (
             ocorrencias_qs.values('ocorrencia__descricao')
@@ -437,9 +463,15 @@ class NotasFiscaisListView(ListView):
         if filial_param == 'todas':
             pass
         elif filial_param:
-            queryset = queryset.filter(manifesto__filial_id=filial_param)
+            queryset = queryset.filter(
+                Q(manifesto__filial_operacao_id=filial_param) |
+                (Q(manifesto__filial_operacao__isnull=True) & Q(manifesto__filial_id=filial_param))
+            )
         elif usuario_filial:
-            queryset = queryset.filter(manifesto__filial=usuario_filial)
+            queryset = queryset.filter(
+                Q(manifesto__filial_operacao=usuario_filial) |
+                (Q(manifesto__filial_operacao__isnull=True) & Q(manifesto__filial=usuario_filial))
+            )
         else:
             queryset = queryset.none()
 
@@ -562,7 +594,7 @@ class ManifestosMonitoramentoView(ListView):
                 pass
 
         # Otimização: traz motorista e conta as notas em uma única query
-        queryset = Manifesto.objects.select_related('motorista', 'filial').exclude(numero_manifesto__startswith='SAC-').annotate(
+        queryset = Manifesto.objects.select_related('motorista', 'filial', 'filial_operacao').exclude(numero_manifesto__startswith='SAC-').annotate(
             total_notas=Count('notas_fiscais'),
             notas_concluidas=Count(
                 'notas_fiscais', 
@@ -579,9 +611,13 @@ class ManifestosMonitoramentoView(ListView):
         if filial_id == 'todas':
             pass
         elif filial_id:
-            queryset = queryset.filter(filial_id=filial_id)
+            queryset = queryset.filter(
+                Q(filial_operacao_id=filial_id) | (Q(filial_operacao__isnull=True) & Q(filial_id=filial_id))
+            )
         elif usuario_filial:
-            queryset = queryset.filter(filial=usuario_filial)
+            queryset = queryset.filter(
+                Q(filial_operacao=usuario_filial) | (Q(filial_operacao__isnull=True) & Q(filial=usuario_filial))
+            )
         else:
             queryset = queryset.none()
         
@@ -652,11 +688,11 @@ def detalhes_manifesto_modal_view(request, manifesto_id):
     if manifesto_id_str.isdigit():
         manifesto = Manifesto.objects.filter(
             Q(id=int(manifesto_id_str)) | Q(numero_manifesto=manifesto_id_str)
-        ).select_related('motorista', 'filial').first()
+        ).select_related('motorista', 'filial', 'filial_operacao').first()
     else:
         manifesto = Manifesto.objects.filter(
             numero_manifesto=manifesto_id_str
-        ).select_related('motorista', 'filial').first()
+        ).select_related('motorista', 'filial', 'filial_operacao').first()
 
     if not manifesto:
         return HttpResponse("<div class='modal-body text-center p-4 text-danger fw-bold'>Manifesto não encontrado.</div>", status=404)
@@ -2251,9 +2287,15 @@ def api_cargas_fretes_resumo(request):
     ).filter(manifesto_id__in=manifestos_sac_ids)
 
     if filial_param and filial_param != 'todas':
-        notas_qs = notas_qs.filter(manifesto__filial_id=filial_param)
+        notas_qs = notas_qs.filter(
+            Q(manifesto__filial_operacao_id=filial_param) |
+            (Q(manifesto__filial_operacao__isnull=True) & Q(manifesto__filial_id=filial_param))
+        )
     elif usuario_filial:
-        notas_qs = notas_qs.filter(manifesto__filial=usuario_filial)
+        notas_qs = notas_qs.filter(
+            Q(manifesto__filial_operacao=usuario_filial) |
+            (Q(manifesto__filial_operacao__isnull=True) & Q(manifesto__filial=usuario_filial))
+        )
 
     if q:
         notas_qs = notas_qs.filter(
@@ -2371,9 +2413,15 @@ def api_cargas_fretes_detalhes(request):
     ).filter(manifesto_id__in=manifestos_sac_ids)
 
     if filial_param and filial_param != 'todas':
-        notas_qs = notas_qs.filter(manifesto__filial_id=filial_param)
+        notas_qs = notas_qs.filter(
+            Q(manifesto__filial_operacao_id=filial_param) |
+            (Q(manifesto__filial_operacao__isnull=True) & Q(manifesto__filial_id=filial_param))
+        )
     elif usuario_filial:
-        notas_qs = notas_qs.filter(manifesto__filial=usuario_filial)
+        notas_qs = notas_qs.filter(
+            Q(manifesto__filial_operacao=usuario_filial) |
+            (Q(manifesto__filial_operacao__isnull=True) & Q(manifesto__filial=usuario_filial))
+        )
 
     if q:
         notas_qs = notas_qs.filter(

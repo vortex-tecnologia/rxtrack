@@ -128,13 +128,17 @@ from manifesto.models import Manifesto
 
 def listar_manifestos_select(request):
     # 1. Filtro de Segurança por Filial do Operador
-    usuario_filial = getattr(request.user.userprofile, 'filial', None) if hasattr(request.user, 'userprofile') else None
+    from usuarios.models import Motorista
+    perfil = getattr(request.user, 'motorista_perfil', None) or Motorista.objects.select_related('filial').filter(user=request.user).first()
+    usuario_filial = perfil.filial if perfil else None
     
     # Buscamos os últimos 50 manifestos para não sobrecarregar o select
     qs = Manifesto.objects.exclude(status='CANCELADO').exclude(numero_manifesto__startswith='SAC-').order_by('-data_criacao')
     
     if usuario_filial:
-        qs = qs.filter(filial=usuario_filial)
+        qs = qs.filter(
+            Q(filial_operacao=usuario_filial) | (Q(filial_operacao__isnull=True) & Q(filial=usuario_filial))
+        )
 
     manifestos = qs[:50]
     

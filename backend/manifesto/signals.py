@@ -56,7 +56,7 @@ def registrar_log_baixa_nfe(sender, instance, created, **kwargs):
 
     nf = instance.nota_fiscal
     manifesto = nf.manifesto
-    filial = manifesto.filial if manifesto else None
+    filial = (getattr(manifesto, 'filial_operacao', None) or manifesto.filial) if manifesto else None
 
     if created:
         # Log de Baixa Registrada com Sucesso
