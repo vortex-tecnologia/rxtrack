@@ -987,6 +987,18 @@ class ESLCloudAdapter(BaseTMSAdapter):
         TOKEN = self.config.token_invoices
         URL_ESL = f"https://{self.config.dominio_esl}/api/invoice_occurrences"
 
+        # Trava de concorrência por baixa (Ajuste 1: Prevenção contra workers simultâneos ou retries de Celery)
+        from django.core.cache import cache
+        lock_key = f"lock_celery_esl_baixa_{baixa_id}"
+        lock_adquirido = False
+        try:
+            lock_adquirido = cache.add(lock_key, "running", timeout=180)
+            if not lock_adquirido:
+                logger.warning(f"⚠️ Task Celery ignorada para Baixa #{baixa_id}: envio já em andamento por outro worker.")
+                return f"Baixa {baixa_id} já em processamento concorrente."
+        except Exception:
+            pass
+
         try:
             baixa = BaixaNF.objects.select_related(
                 'nota_fiscal',
@@ -1260,6 +1272,12 @@ class ESLCloudAdapter(BaseTMSAdapter):
             if task:
                 raise task.retry(exc=e, countdown=60)
             raise
+        finally:
+            if lock_adquirido:
+                try:
+                    cache.delete(lock_key)
+                except Exception:
+                    pass
 
     def _buscar_freight_id_minuta(self, nf, ignorar_ids=None):
         """
@@ -1386,6 +1404,18 @@ class ESLCloudAdapter(BaseTMSAdapter):
         baixa = None
         nf = None
         is_ultima_tentativa = (not task) or (task.request.retries >= task.max_retries)
+
+        # Trava de concorrência por baixa de minuta
+        from django.core.cache import cache
+        lock_key = f"lock_celery_esl_baixa_minuta_{baixa_id}"
+        lock_adquirido = False
+        try:
+            lock_adquirido = cache.add(lock_key, "running", timeout=180)
+            if not lock_adquirido:
+                logger.warning(f"⚠️ Task Celery ignorada para Baixa Minuta #{baixa_id}: envio já em andamento por outro worker.")
+                return f"Baixa de Minuta {baixa_id} já em processamento concorrente."
+        except Exception:
+            pass
 
         try:
             baixa = BaixaNF.objects.select_related(
@@ -1578,10 +1608,28 @@ class ESLCloudAdapter(BaseTMSAdapter):
             if task:
                 raise task.retry(exc=e, countdown=60)
             raise
+        finally:
+            if lock_adquirido:
+                try:
+                    cache.delete(lock_key)
+                except Exception:
+                    pass
 
     def enviar_coleta(self, baixa_id, task=None):
         TOKEN = self.config.token_invoices
         
+        # Trava de concorrência por coleta
+        from django.core.cache import cache
+        lock_key = f"lock_celery_esl_coleta_{baixa_id}"
+        lock_adquirido = False
+        try:
+            lock_adquirido = cache.add(lock_key, "running", timeout=180)
+            if not lock_adquirido:
+                logger.warning(f"⚠️ Task Celery ignorada para Coleta #{baixa_id}: envio já em andamento por outro worker.")
+                return f"Coleta {baixa_id} já em processamento concorrente."
+        except Exception:
+            pass
+
         try:
             baixa = BaixaNF.objects.select_related('nota_fiscal', 'ocorrencia', 'nota_fiscal__manifesto').get(id=baixa_id)
             nf = baixa.nota_fiscal
@@ -1726,6 +1774,12 @@ class ESLCloudAdapter(BaseTMSAdapter):
             if task:
                 raise task.retry(exc=e, countdown=60)
             raise
+        finally:
+            if lock_adquirido:
+                try:
+                    cache.delete(lock_key)
+                except Exception:
+                    pass
 
     def finalizar_manifesto(self, manifesto_id, task=None):
         try:

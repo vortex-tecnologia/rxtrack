@@ -10,7 +10,7 @@ class ListarNotasManifestoView(APIView):
         notas = NotaFiscal.objects.filter(
             manifesto__numero_manifesto=numero
         ).select_related(
-            'manifesto', 'manifesto__motorista'
+            'manifesto', 'manifesto__motorista', 'frete'
         ).prefetch_related(
             'baixa_info', 'baixa_info__ocorrencia', 'baixa_info__autor_baixa'
         )
@@ -134,6 +134,9 @@ class ListarNotasManifestoView(APIView):
                     'motivo_rejeicao_ia': getattr(baixa, 'motivo_rejeicao_ia', None),
                 }
 
+            cte_num = nf.numero_cte or (nf.frete.numero_cte if nf.frete else None)
+            freight_id_val = nf.freight_id_tms or (nf.frete.freight_id_tms if nf.frete else None)
+
             data.append({
                 'id': nf.id,
                 'numero_nota': nf.numero_nota,
@@ -142,7 +145,8 @@ class ListarNotasManifestoView(APIView):
                 'endereco_entrega': nf.endereco_entrega,
                 'status': nf.status,
                 'tipo_operacao': nf.tipo_operacao,
-                'id_tms': nf.freight_id_tms,
+                'numero_cte': cte_num,
+                'id_tms': freight_id_val,
                 'numero_coleta': nf.numero_coleta,
                 'ja_baixada': baixa is not None,
                 'solicitar_nova_foto': getattr(baixa, 'solicitar_nova_foto', False) if baixa else False,

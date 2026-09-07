@@ -1151,6 +1151,37 @@
                 <div class="modal-body p-3 py-2">
                     <input type="hidden" id="hidden-chave-nf">
                     <input type="hidden" id="hidden-numero-nf">
+                    <input type="hidden" id="hidden-numero-cte">
+                    <input type="hidden" id="hidden-tem-irmas-cte" value="false">
+
+                    <!-- CONTAINER DE ENTREGA AGRUPADA POR CT-E (Regra 13 & Ajuste 3) -->
+                    <div id="container-aviso-cte-agrupado" class="alert alert-primary border-0 shadow-sm p-3 mb-2" style="display: none; border-radius: 12px; background: #e8f0fe;">
+                        <div class="d-flex align-items-center mb-2">
+                            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; min-width: 32px;">
+                                <i class="bi bi-stack fs-6"></i>
+                            </div>
+                            <div>
+                                <h6 class="fw-bold mb-0 text-primary" id="titulo-cte-agrupado">Entrega agrupada — 3 notas</h6>
+                                <small class="text-muted" id="subtitulo-cte-agrupado">CT-e: 12345</small>
+                            </div>
+                        </div>
+                        <div class="p-2 mb-2 rounded bg-white border border-primary border-opacity-25 text-dark small fw-bold">
+                            <i class="bi bi-camera-fill text-primary me-1"></i> Uma única foto será utilizada para as <span id="qtd-notas-agrupadas-texto">3</span> notas.
+                        </div>
+                        <div class="small text-muted mb-2">
+                            <strong>Notas vinculadas que serão baixadas:</strong>
+                            <div id="badges-notas-agrupadas" class="d-flex flex-wrap gap-1 mt-1">
+                                <!-- Preenchido dinamicamente via JS -->
+                            </div>
+                        </div>
+                        <!-- Exceção: Baixar apenas esta nota (Ajuste 3) -->
+                        <div class="form-check pt-1 border-top border-secondary border-opacity-25">
+                            <input class="form-check-input" type="checkbox" id="check-excecao-apenas-esta-nota" style="cursor: pointer;">
+                            <label class="form-check-label text-muted small" for="check-excecao-apenas-esta-nota" style="cursor: pointer; font-size: 0.8rem;">
+                                Exceção: Baixar somente esta nota avulsa (não recomendado)
+                            </label>
+                        </div>
+                    </div>
 
                     <div class="mb-2">
                         <label class="form-label fw-bold small mb-1"><i class="bi bi-list-check"></i> Selecione a Ocorrência:</label>

@@ -766,6 +766,36 @@ function atualizarVisualContadores(contador, notas, totalFinalizadas) {
     }
 }
 // =====================================================
+// FUNÇÃO AUXILIAR PARA VALIDAR DESTINATÁRIO COMPATÍVEL
+// =====================================================
+function _mesmoDestinatarioFrontend(nf1, nf2) {
+    if (!nf1 || !nf2) return false;
+    if (nf1.tipo_operacao !== 'ENTREGA' || nf2.tipo_operacao !== 'ENTREGA') return false;
+    
+    // Comparação de CEP (se ambos tiverem CEP válido de 8 dígitos)
+    const cep1 = String(nf1.cep || '').replace(/\D/g, '');
+    const cep2 = String(nf2.cep || '').replace(/\D/g, '');
+    if (cep1.length === 8 && cep2.length === 8 && cep1 !== cep2) return false;
+
+    // Comparação de Destinatário (quando preenchido e não genérico)
+    const placeholders = ['', 'NÃO INFORMADO', 'NAO INFORMADO', 'DADOS NÃO REPASSADOS PELA ESL', 'CONSULTE O DOCUMENTO FÍSICO'];
+    const d1 = String(nf1.destinatario || '').trim().toUpperCase();
+    const d2 = String(nf2.destinatario || '').trim().toUpperCase();
+    if (!placeholders.includes(d1) && !placeholders.includes(d2)) {
+        const norm1 = d1.replace(/[^A-Z0-9]/g, '');
+        const norm2 = d2.replace(/[^A-Z0-9]/g, '');
+        if (norm1 && norm2 && norm1 !== norm2) {
+            const minLen = Math.min(norm1.length, norm2.length);
+            const prefixLen = Math.min(12, minLen);
+            if (norm1.substring(0, prefixLen) !== norm2.substring(0, prefixLen)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// =====================================================
 // FUNÇÃO AUXILIAR PARA GERAR O CARD (EVITA DUPLICAR CÓDIGO)
 // =====================================================
 function gerarCardHTML(nf, config, baixada, sincronizando = false) {
@@ -781,6 +811,29 @@ function gerarCardHTML(nf, config, baixada, sincronizando = false) {
     const classeSincronizando = sincronizando ? 'opacity-75 shadow-none border-dashed' : '';
 
     const isEntrega = tipo === 'ENTREGA';
+
+    // Identificação de CT-e compartilhado com outras notas pendentes de entrega
+    const cteNumero = nf.numero_cte || '';
+    let badgeCteHTML = '';
+    if (isEntrega && !baixada && cteNumero && Array.isArray(window.notasGerais)) {
+        const irmas = window.notasGerais.filter(n => 
+            n.id !== nf.id && 
+            n.tipo_operacao === 'ENTREGA' && 
+            n.status === 'PENDENTE' && 
+            String(n.numero_cte) === String(cteNumero) &&
+            _mesmoDestinatarioFrontend(nf, n)
+        );
+        if (irmas.length > 0) {
+            const totalCte = irmas.length + 1;
+            badgeCteHTML = `
+                <div class="mb-2">
+                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2 py-1 rounded-pill" style="font-size: 0.72rem;">
+                        <i class="bi bi-stack me-1"></i> CT-e ${cteNumero} • ${totalCte} notas agrupadas
+                    </span>
+                </div>
+            `;
+        }
+    }
     
     return `
         <div class="card card-nf mb-3 shadow-sm border-start border-${cor} border-4 animate__animated ${baixada || sincronizando ? '' : 'animate__fadeInUp selecionavel'} ${classeSincronizando} ${isEntrega && !baixada ? 'tipo-entrega' : ''}" 
@@ -812,6 +865,7 @@ function gerarCardHTML(nf, config, baixada, sincronizando = false) {
                 </div>
                 <p class="small text-muted mb-1">👤 ${nf.destinatario}</p>
                 <p class="small text-muted mb-2" style="font-size: 0.75rem;"><i class="bi bi-geo-alt"></i> ${nf.endereco_entrega}</p>
+                ${badgeCteHTML}
                 
                 ${sincronizando ? `
                     <div class="alert alert-warning py-1 px-2 mb-0 d-flex align-items-center justify-content-center" style="font-size: 0.8rem;">
@@ -1138,6 +1192,20 @@ const statusModal = new bootstrap.Modal(document.getElementById('statusModal'));
 
 async function salvarRegistro() {
     // 1. Coleta de elementos do DOM
+    const btnConfirmar = document.getElementById('btn-confirmar-registro');
+    function _restaurarBotaoConfirmar() {
+        if (btnConfirmar) {
+            btnConfirmar.disabled = false;
+            btnConfirmar.innerHTML = `Confirmar Registro <i class="bi bi-check-lg ms-1"></i>`;
+        }
+    }
+
+    // Trava de UI imediata (Ajuste 1: Prevenção de Duplo Clique)
+    if (btnConfirmar) {
+        btnConfirmar.disabled = true;
+        btnConfirmar.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Salvando...`;
+    }
+
     const selectOcorrencia = document.getElementById('select-ocorrencia');
     const inputRecebedor = document.getElementById('input-recebedor');
     const inputChave = document.getElementById('hidden-chave-nf');
@@ -1158,6 +1226,7 @@ async function salvarRegistro() {
     const tipoOpCheck = inputTipoCheck ? inputTipoCheck.value.toUpperCase() : '';
     if (tipoOpCheck.includes('DESPACHO') && ['1', '01', '001', '2', '02', '002'].includes(cod)) {
         alert("⚠️ ERRO: Código de Entrega (01/02) não é permitido para notas de DESPACHO. Selecione a ocorrência correta de despacho.");
+        _restaurarBotaoConfirmar();
         return;
     }
 
@@ -1165,21 +1234,25 @@ async function salvarRegistro() {
     if (isRetida) {
         if (!inputObs || inputObs.trim().length < 3) {
             alert("Selecione o motivo da retenção.");
+            _restaurarBotaoConfirmar();
             return;
         }
     } else {
         if ((cod === "1" || cod === "2") && !temFoto) {
             alert("A foto é obrigatória para este código de ocorrência!");
+            _restaurarBotaoConfirmar();
             return;
         }
         // V1: Proteção extra em salvarRegistro para ocorrência 01
         if (typeof _deveExecutarAnaliseV1 === 'function' && _deveExecutarAnaliseV1()) {
             if (_qualityAnaliseAtiva) {
                 alert("Aguarde a conclusão da análise de qualidade da foto.");
+                _restaurarBotaoConfirmar();
                 return;
             }
             if (_qualityResultado && !_qualityResultado.approved) {
                 alert("A foto não foi aprovada na análise de qualidade. Por favor, tire uma nova foto mais nítida.");
+                _restaurarBotaoConfirmar();
                 return;
             }
         }
@@ -1193,10 +1266,29 @@ async function salvarRegistro() {
     atualizarStatusUI('loading', 'Enviando Registro...', 'Aguarde, estamos salvando os dados.');
     statusModal.show();
 
-    // 4. Preparação dos Dados (FormData)
+    // 4. Preparação dos Dados (FormData) com Idempotência e Agrupamento de CT-e
     const formData = new FormData();
     const inputTipo = document.getElementById('hidden-tipo-operacao');
     const tipoOp = inputTipo ? inputTipo.value : '';
+
+    // Ajuste 1: Chave de idempotência do cliente
+    const idempotencyKey = `${mID}_${numeroNF}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    formData.append('idempotency_key', idempotencyKey);
+
+    // Ajuste 3: Opção padrão é baixar TODAS as notas do CT-e
+    const inputTemIrmas = document.getElementById('hidden-tem-irmas-cte');
+    const inputCte = document.getElementById('hidden-numero-cte');
+    const checkExcecao = document.getElementById('check-excecao-apenas-esta-nota');
+
+    const temIrmas = (inputTemIrmas && inputTemIrmas.value === 'true');
+    const cteNum = inputCte ? inputCte.value : '';
+    const excecaoMarcada = Boolean(checkExcecao && checkExcecao.checked);
+    const aplicarTodasCte = temIrmas && !excecaoMarcada;
+
+    formData.append('aplicar_todas_cte', aplicarTodasCte ? 'true' : 'false');
+    if (cteNum) {
+        formData.append('numero_cte', cteNum);
+    }
 
     formData.append('ocorrencia_codigo', cod);
     formData.append('chave_acesso', chaveNF);
@@ -1209,7 +1301,6 @@ async function salvarRegistro() {
         formData.append('tipo_operacao', tipoOp);
     }
 
-
     // 5. Captura de Coordenadas GPS
     try {
         const coords = await getCoords();
@@ -1217,7 +1308,6 @@ async function salvarRegistro() {
             formData.append('latitude', coords.lat);
             formData.append('longitude', coords.lon);
         } else {
-            // Se o GPS falhar, enviamos 0 para não dar erro de "null" no Django
             formData.append('latitude', "0.000000");
             formData.append('longitude', "0.000000");
         }
@@ -1227,12 +1317,11 @@ async function salvarRegistro() {
         formData.append('longitude', "0.000000");
     }
 
-    // 6. Conversão do Canvas para Imagem (Blob)
+    // 6. Conversão do Canvas para Imagem (Blob) - Upload Único (Regra 3)
     let fotoBlob = null;
     if (!isRetida && temFoto) {
         fotoBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.70));
-        formData.append('foto', fotoBlob, `mft_${mID}_${chaveNF}.jpg`);
-        // Libera memória do canvas imediatamente após extrair o blob
+        formData.append('foto', fotoBlob, `mft_${mID}_${chaveNF || numeroNF}.jpg`);
         canvas.width = 1;
         canvas.height = 1;
         canvas.getContext('2d').clearRect(0, 0, 1, 1);
@@ -1245,10 +1334,6 @@ async function salvarRegistro() {
             body: formData
         });
 
-        // =====================================================
-        // AJUSTE PARA ERRO 500: Se o servidor falhar (ex: banco fora),
-        // nós "jogamos" o erro para o CATCH para salvar offline.
-        // =====================================================
         if (!response.ok && response.status >= 500) {
             throw new Error("Erro Crítico no Servidor");
         }
@@ -1256,9 +1341,16 @@ async function salvarRegistro() {
         const data = await response.json();
 
         if (response.ok) {
-            atualizarStatusUI('success', '✅ Registro Cadastrado!', 'A baixa foi realizada com sucesso.');
-            processarSumiçoNota(numeroNF);
-            atualizarListaViva(manifestoAtual); // Atualiza a lista para refletir a baixa (opcional, pois o polling já cuida disso)
+            const notasAfetadas = Array.isArray(data.notas_afetadas) && data.notas_afetadas.length > 0
+                ? data.notas_afetadas
+                : [numeroNF];
+
+            const msgSucesso = data.mensagem || 'A baixa foi realizada com sucesso.';
+            atualizarStatusUI('success', '✅ Registro Cadastrado!', msgSucesso);
+
+            // Processa o sumiço / avanço de cada nota do agrupamento
+            notasAfetadas.forEach(num => processarSumiçoNota(num));
+            atualizarListaViva(manifestoAtual);
 
         } else {
             if (response.status === 409 && data.erro === 'manifesto_pendente_tms') {
@@ -1268,7 +1360,6 @@ async function salvarRegistro() {
                 mostrarModalPendenteTms();
                 return;
             }
-            // Se o servidor retornar erro controlado (ex: 400 - Validação)
             if (data.status_integracao === 'erro_tms') {
                 atualizarStatusUI('warning', '⚠️ Salvo com Alerta', `O canhoto foi salvo no App, mas houve um erro na ESL: ${data.erro}`);
             } else {
@@ -1285,35 +1376,54 @@ async function salvarRegistro() {
             const transaction = db.transaction('baixas_pendentes', 'readwrite');
             const store = transaction.objectStore('baixas_pendentes');
 
-            const objOffline = {
-                id: Date.now().toString(),
-                numeroNF: numeroNF,
-                chaveNF: chaveNF,
-                mID: mID,
-                campos: {
-                    ocorrencia_codigo: cod,
-                    recebedor: inputRecebedor.value || '',
-                    nota_retida: isRetida,
-                    observacao_retida: inputObs,
-                    latitude: formData.get('latitude'),
-                    longitude: formData.get('longitude')
-                },
-                foto: fotoBlob
-            };
+            // Determina todas as notas afetadas em modo offline
+            let notasAfetadasOffline = [numeroNF];
+            if (aplicarTodasCte && cteNum && Array.isArray(window.notasGerais)) {
+                const nfPrincipalObj = window.notasGerais.find(x => String(x.numero_nota) === String(numeroNF));
+                const irmasOff = window.notasGerais.filter(n =>
+                    n.status === 'PENDENTE' &&
+                    n.tipo_operacao === 'ENTREGA' &&
+                    String(n.numero_cte) === String(cteNum) &&
+                    _mesmoDestinatarioFrontend(nfPrincipalObj, n)
+                ).map(n => String(n.numero_nota));
+                notasAfetadasOffline = Array.from(new Set([String(numeroNF), ...irmasOff]));
+            }
 
-            store.add(objOffline);
+            for (const numAlvo of notasAfetadasOffline) {
+                const nfAlvoObj = (window.notasGerais || []).find(n => String(n.numero_nota) === String(numAlvo));
+                const chaveAlvo = nfAlvoObj ? (nfAlvoObj.chave_acesso || '') : (numAlvo === numeroNF ? chaveNF : '');
 
-            // Atualiza a nuvem para Amarelo na hora
+                const objOffline = {
+                    id: `${Date.now()}_${numAlvo}`,
+                    numeroNF: numAlvo,
+                    chaveNF: chaveAlvo,
+                    mID: mID,
+                    campos: {
+                        ocorrencia_codigo: cod,
+                        recebedor: inputRecebedor.value || '',
+                        nota_retida: isRetida,
+                        observacao_retida: inputObs,
+                        latitude: formData.get('latitude'),
+                        longitude: formData.get('longitude'),
+                        idempotency_key: idempotencyKey,
+                        numero_cte: cteNum
+                    },
+                    foto: fotoBlob
+                };
+
+                store.add(objOffline);
+                processarSumiçoNota(numAlvo);
+            }
+
             await atualizarIconeNuvem();
-
-            atualizarStatusUI('warning', '📡 Modo Offline Ativado', 'O sinal oscilou. Sua baixa foi guardada no celular e será enviada assim que o sinal voltar.');
-
-            processarSumiçoNota(numeroNF);
+            atualizarStatusUI('warning', '📡 Modo Offline Ativado', 'O sinal oscilou. As baixas foram guardadas no celular e serão enviadas assim que o sinal voltar.');
             atualizarListaViva(manifestoAtual);
         } catch (dbErr) {
             console.error("Erro crítico ao salvar no DB interno:", dbErr);
             atualizarStatusUI('error', '❌ Erro de Sistema', 'Não foi possível salvar offline.');
         }
+    } finally {
+        _restaurarBotaoConfirmar();
     }
 }
 // Função auxiliar para não repetir código de remover nota
@@ -1988,6 +2098,62 @@ function abrirModalBaixa(numeroNota, chaveAcesso, tipo) {
     }
     const tipoUpper = (tipo || '').toUpperCase();
     inputTipo.value = tipoUpper;
+
+    // =====================================================
+    // DETECÇÃO DE ENTREGA AGRUPADA POR CT-E (Regras 1, 2, 12, 13 & Ajuste 3)
+    // =====================================================
+    const containerCte = document.getElementById('container-aviso-cte-agrupado');
+    const inputCte = document.getElementById('hidden-numero-cte');
+    const inputTemIrmas = document.getElementById('hidden-tem-irmas-cte');
+    const checkExcecao = document.getElementById('check-excecao-apenas-esta-nota');
+    const badgesNotasContainer = document.getElementById('badges-notas-agrupadas');
+    const tituloCteEl = document.getElementById('titulo-cte-agrupado');
+    const subtituloCteEl = document.getElementById('subtitulo-cte-agrupado');
+    const qtdNotasTextoEl = document.getElementById('qtd-notas-agrupadas-texto');
+
+    // Reseta estado (Padrão: sem exceção, baixa TODAS - Ajuste 3)
+    if (checkExcecao) checkExcecao.checked = false;
+    if (inputTemIrmas) inputTemIrmas.value = 'false';
+    if (inputCte) inputCte.value = '';
+
+    const nfAtual = (window.notasGerais || []).find(n => 
+        String(n.numero_nota) === String(numeroNota) || (chaveAcesso && n.chave_acesso === chaveAcesso)
+    );
+    const cteAtual = nfAtual ? (nfAtual.numero_cte || '') : '';
+    if (inputCte) inputCte.value = cteAtual;
+
+    let irmasValidas = [];
+    if (tipoUpper === 'ENTREGA' && cteAtual && Array.isArray(window.notasGerais)) {
+        irmasValidas = window.notasGerais.filter(n =>
+            n.id !== (nfAtual ? nfAtual.id : null) &&
+            String(n.numero_nota) !== String(numeroNota) &&
+            n.tipo_operacao === 'ENTREGA' &&
+            n.status === 'PENDENTE' &&
+            String(n.numero_cte) === String(cteAtual) &&
+            _mesmoDestinatarioFrontend(nfAtual, n)
+        );
+    }
+
+    if (irmasValidas.length > 0) {
+        const totalNotasGrupo = irmasValidas.length + 1;
+        if (inputTemIrmas) inputTemIrmas.value = 'true';
+        if (tituloCteEl) tituloCteEl.innerText = `Entrega agrupada — ${totalNotasGrupo} notas`;
+        if (subtituloCteEl) subtituloCteEl.innerText = `CT-e: ${cteAtual}`;
+        if (qtdNotasTextoEl) qtdNotasTextoEl.innerText = totalNotasGrupo;
+
+        if (badgesNotasContainer) {
+            const todasDoGrupo = [nfAtual, ...irmasValidas].filter(Boolean);
+            badgesNotasContainer.innerHTML = todasDoGrupo.map(n => `
+                <span class="badge ${String(n.numero_nota) === String(numeroNota) ? 'bg-primary' : 'bg-secondary'} px-2 py-1">
+                    NF ${n.numero_nota}
+                </span>
+            `).join('');
+        }
+
+        if (containerCte) containerCte.style.display = 'block';
+    } else {
+        if (containerCte) containerCte.style.display = 'none';
+    }
 
     // --- FILTRO INTELIGENTE DE OCORRÊNCIAS (DESPACHO vs ENTREGA) ---
     const isDespachoType = tipoUpper.includes('DESPACHO');

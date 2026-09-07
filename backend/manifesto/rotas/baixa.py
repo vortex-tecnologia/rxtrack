@@ -12,8 +12,42 @@ from manifesto.tasks import enviar_baixa_esl_task, enviar_baixa_minuta_task
 from ftplib import FTP
 from io import BytesIO
 from django.conf import settings # Importe para usar as chaves do settings
+import re
 
 logger = logging.getLogger(__name__)
+
+def representam_mesma_entrega(nf1, nf2):
+    """
+    Regra 2: Valida se as notas representam a mesma entrega/destinatário.
+    Não agrupa automaticamente notas do mesmo CT-e se houver evidência de que são entregas diferentes.
+    """
+    # 1. Ambas devem ser do tipo ENTREGA
+    tipo1 = str(nf1.tipo_operacao or '').strip().upper()
+    tipo2 = str(nf2.tipo_operacao or '').strip().upper()
+    if tipo1 != 'ENTREGA' or tipo2 != 'ENTREGA':
+        return False
+
+    # 2. Comparação de CEP (se ambos tiverem CEP válido de 8 dígitos)
+    cep1 = re.sub(r'[^0-9]', '', str(nf1.cep or ''))
+    cep2 = re.sub(r'[^0-9]', '', str(nf2.cep or ''))
+    if len(cep1) == 8 and len(cep2) == 8 and cep1 != cep2:
+        return False
+
+    # 3. Comparação de Destinatário (quando preenchido e não genérico)
+    d1 = str(nf1.destinatario or '').strip().upper()
+    d2 = str(nf2.destinatario or '').strip().upper()
+    placeholders = {'', 'NÃO INFORMADO', 'NAO INFORMADO', 'DADOS NÃO REPASSADOS PELA ESL', 'CONSULTE O DOCUMENTO FÍSICO'}
+
+    if d1 not in placeholders and d2 not in placeholders:
+        norm1 = re.sub(r'[^A-Z0-9]', '', d1)
+        norm2 = re.sub(r'[^A-Z0-9]', '', d2)
+        if norm1 and norm2 and norm1 != norm2:
+            min_len = min(len(norm1), len(norm2))
+            prefix_len = min(12, min_len)
+            if norm1[:prefix_len] != norm2[:prefix_len]:
+                return False
+
+    return True
 
 def upload_via_ftp(imagem_bytes, nome_arquivo):
     try:
@@ -76,9 +110,13 @@ class RegistrarBaixaView(APIView):
         print(f"--- REGISTRAR BAIXA ---")
         print(f"Tipo: {tipo_operacao}, Chave: {chave_acesso}, Nota/Coleta: {numero_nota or nota_id_tms}, Mft: {numero_mft}")
         
-        # --- DADOS PADRÃO ---
+        # --- DADOS PADRÃO E IDEMPOTÊNCIA ---
         is_retida = request.data.get('nota_retida') == 'true'
         observacao_app = request.data.get('observacao_retida', '')
+        idempotency_key = request.data.get('idempotency_key')
+        aplicar_todas_cte_raw = request.data.get('aplicar_todas_cte')
+        # Padrão: True para ENTREGA, exceto se explicitamente enviado 'false' (Regra 13 / Ajuste 3)
+        aplicar_todas_cte = (str(aplicar_todas_cte_raw).strip().lower() != 'false') if aplicar_todas_cte_raw is not None else True
 
         try:
             with transaction.atomic():
@@ -109,10 +147,7 @@ class RegistrarBaixaView(APIView):
 
                 # Tenta encontrar a nota ou minuta
                 if tipo_operacao == 'COLETA':
-                    # Busca específica para coleta: prioriza ID do TMS e filtra por tipo
                     id_coleta = nota_id_tms if nota_id_tms else numero_nota
-                    print(f"Buscando Coleta: {id_coleta} no manifesto {numero_mft}")
-                    
                     query_coleta = (Q(numero_coleta=id_coleta) | Q(numero_nota=id_coleta) | Q(freight_id_tms=id_coleta))
                     if numero_mft:
                         nf = NotaFiscal.objects.filter(
@@ -155,13 +190,35 @@ class RegistrarBaixaView(APIView):
                         id_err = nota_id or chave_acesso or numero_nota or nota_id_tms
                         raise NotaFiscal.DoesNotExist(f"Documento {id_err} não localizado.")
 
+                # Trava pessimista no registro da nota para concorrência
+                nf = NotaFiscal.objects.select_for_update().select_related('manifesto', 'frete').filter(id=nf.id).first()
+                if not nf:
+                    raise NotaFiscal.DoesNotExist("Nota fiscal não localizada após lock.")
+
+                # ======= AJUSTE 1: IDEMPOTÊNCIA REAL MULTI-CAMADAS =======
+                baixa_existente = BaixaNF.objects.filter(nota_fiscal=nf).first()
+                if nf.status in ['BAIXADA', 'OCORRENCIA'] and baixa_existente:
+                    ja_mesmo_idempotency = False
+                    if idempotency_key and isinstance(baixa_existente.payload_enviado, dict):
+                        if baixa_existente.payload_enviado.get('idempotency_key') == idempotency_key:
+                            ja_mesmo_idempotency = True
+                    
+                    tempo_passado = (timezone.now() - baixa_existente.data_baixa).total_seconds() if baixa_existente.data_baixa else 9999
+                    if ja_mesmo_idempotency or tempo_passado < 120:
+                        logger.info(f"⏭️ [IDEMPOTENCIA] NF #{nf.numero_nota} já finalizada (idempotency={idempotency_key}, tempo={tempo_passado:.1f}s). Retornando sucesso sem duplicar.")
+                        return Response({
+                            'status': 'sucesso',
+                            'mensagem': 'Baixa já registrada anteriormente (requisição idempotente).',
+                            'idempotente': True,
+                            'notas_afetadas': [nf.numero_nota]
+                        })
+
                 # ======= BLOQUEIO POR STATUS TMS (PENDENTE/FINALIZADO) =======
                 manifesto = nf.manifesto
                 manifesto_da_nota = manifesto
                 if manifesto_da_nota:
                     status_tms_atual = getattr(manifesto_da_nota, 'status_tms', 'in_transit')
                     if status_tms_atual == 'pending':
-                        # Busca dados da filial para o botão WhatsApp
                         whatsapp_op = None
                         nome_filial = None
                         if manifesto_da_nota.filial:
@@ -180,36 +237,24 @@ class RegistrarBaixaView(APIView):
                         return Response({
                             'erro': 'manifesto_finalizado_tms',
                             'mensagem': 'Este manifesto já foi finalizado no TMS. Não é possível registrar baixas.',
+                            'whatsapp_operacional': None,
+                            'nome_filial': None,
+                            'numero_manifesto': manifesto_da_nota.numero_manifesto,
                         }, status=409)
 
                 # ======= TRACE LOG: PIPELINE DE BAIXA =======
-                import logging
                 _trace_logger = logging.getLogger('baixa_trace')
                 _trace = []
                 _trace.append(f"[VIEW_INICIO] NF={nf.numero_nota}, MFT={numero_mft}, tipo_operacao_front='{tipo_operacao}', ocorrencia_codigo_front='{codigo_tms}'")
                 _trace.append(f"[NF_ANTES] tipo_operacao='{nf.tipo_operacao}', chave_acesso='{nf.chave_acesso}', freight_id_tms='{nf.freight_id_tms}'")
                 
-                # Atualiza tipo_operacao na nota se informado pelo App ou pelo contexto de Despacho/Aéreo
-                is_mft_despacho = (nf.manifesto and (getattr(nf.manifesto, 'tipo_manifesto', '') == 'DESPACHO' or (getattr(nf.manifesto, 'qtd_despacho', 0) and nf.manifesto.qtd_despacho > 0)))
-                is_frt_despacho = (nf.frete and (getattr(nf.frete, 'tipo_manifesto', '') == 'DESPACHO' or (nf.frete.modal and str(nf.frete.modal).lower() in ['air', 'aereo', 'aéreo', 'aérea', 'aerea'])))
-                
-                _mft_info = f"tipo_manifesto='{getattr(nf.manifesto, 'tipo_manifesto', 'N/A')}', qtd_despacho={getattr(nf.manifesto, 'qtd_despacho', 'N/A')}" if nf.manifesto else "SEM_MANIFESTO"
-                _frt_info = f"tipo_manifesto='{getattr(nf.frete, 'tipo_manifesto', 'N/A')}', modal='{getattr(nf.frete, 'modal', 'N/A')}'" if nf.frete else "SEM_FRETE"
-                _trace.append(f"[CONTEXTO] Manifesto: {_mft_info} → is_mft_despacho={is_mft_despacho}")
-                _trace.append(f"[CONTEXTO] Frete: {_frt_info} → is_frt_despacho={is_frt_despacho}")
-                
-                tipo_op_original = nf.tipo_operacao
+                # Atualiza tipo_operacao na nota se informado pelo App
                 if tipo_operacao and str(tipo_operacao).strip().upper() in ['DESPACHO', 'TRANSFERENCIA', 'COLETA', 'ENTREGA']:
                     tipo_upper = str(tipo_operacao).strip().upper()
                     if nf.tipo_operacao != tipo_upper:
                         _trace.append(f"[TIPO_OP_CHANGE] Front mandou '{tipo_upper}', NF tinha '{nf.tipo_operacao}' → ATUALIZANDO para '{tipo_upper}'")
                         nf.tipo_operacao = tipo_upper
                         nf.save(update_fields=['tipo_operacao'])
-                else:
-                    _trace.append(f"[TIPO_OP] Sem mudança. Front tipo_operacao='{tipo_operacao}', NF tipo_operacao='{nf.tipo_operacao}'")
-
-
-
 
                 # 1. Tenta buscar primeiro pelo mapeamento de referência do App
                 ocorrencia = Ocorrencia.objects.filter(codigo_referencia=codigo_tms).first()
@@ -219,7 +264,6 @@ class RegistrarBaixaView(APIView):
                     try:
                         ocorrencia = Ocorrencia.objects.get(codigo_tms=codigo_tms)
                     except Ocorrencia.DoesNotExist:
-                        # Tenta o inverso para códigos numéricos (ex: se mandou '01' busca '1', se mandou '1' busca '01')
                         if codigo_tms.isdigit():
                             cod_int = int(codigo_tms)
                             ocorrencia = Ocorrencia.objects.filter(
@@ -232,9 +276,6 @@ class RegistrarBaixaView(APIView):
                         else:
                             raise
 
-                _trace.append(f"[OCORRENCIA_RESOLVIDA] Front mandou='{codigo_tms}' → Resolvido: ID={ocorrencia.id}, TMS='{ocorrencia.codigo_tms}', Ref='{ocorrencia.codigo_referencia}', Tipo='{ocorrencia.tipo}', Desc='{ocorrencia.descricao}'")
-                print(f"📌 [BAIXA API] Ocorrência App Recebida: '{codigo_tms}' | Ocorrência Resolvida no DB: ID={ocorrencia.id}, TMS='{ocorrencia.codigo_tms}', Ref='{ocorrencia.codigo_referencia}', Desc='{ocorrencia.descricao}' | NF Tipo: '{nf.tipo_operacao}'")
-
                 # --- PROTEÇÃO CRÍTICA: DESPACHO NUNCA PODE TER CÓDIGO 01 ou 02 ---
                 tipo_op_atual = str(nf.tipo_operacao or '').strip().upper()
                 if 'DESPACHO' in tipo_op_atual:
@@ -246,44 +287,10 @@ class RegistrarBaixaView(APIView):
                         pass
                     
                     if cod_int in [1, 2]:
-                        _trace.append(f"[BLOQUEADO] 🚨 tipo_op_atual='{tipo_op_atual}', cod_int={cod_int} → BLOQUEADO NA VIEW (400)")
-                        _trace_str = " | ".join(_trace)
-                        _trace_logger.warning(f"🔍 [TRACE BAIXA VIEW] {_trace_str}")
-                        print(f"🚨 BLOQUEADO: Tentativa de registrar código {cod_ref} (Entrega) em nota DESPACHO {nf.numero_nota}")
                         return Response({
                             'erro': f'Código de ocorrência {cod_ref} (Entrega/Coleta) não é permitido para notas do tipo DESPACHO. '
                                     f'Selecione uma ocorrência válida para despacho (ex: 050, 055).'
                         }, status=400)
-
-                # --- LÓGICA DE UPLOAD (SÓ SE NÃO FOR NOTA RETIDA) ---
-                url_final_foto = None
-                if not is_retida and foto_arquivo:
-                    # Nome único para evitar sobreposição (ID da nota + identificador visual)
-                    id_foto = chave_acesso if nf.chave_acesso else f"minuta_{nf.numero_nota}"
-                    nome_arquivo = f"{nf.id}_{id_foto}.jpg"
-                    url_final_foto = upload_via_ftp(foto_arquivo.read(), nome_arquivo)
-
-                # --- REGISTRO DA BAIXA ---
-                data_manual = request.data.get('data_baixa')
-                lat = request.data.get('latitude')
-                lng = request.data.get('longitude')
-                
-                # Saneamento para campos decimais (Django não aceita "" em DecimalField)
-                lat = lat if lat and lat != "null" and lat != "undefined" else None
-                lng = lng if lng and lng != "null" and lng != "undefined" else None
-
-                # Buscamos a baixa existente ANTES de criar para saber a data_baixa
-                baixa_existente = BaixaNF.objects.filter(nota_fiscal=nf).first()
-                
-                # Flag de backup: verifica se deve armazenar a foto original
-                from configuracao.utils import get_config
-                config_backup = get_config()
-                
-                # Guarda a URL original do backup ANTES de qualquer update (proteção)
-                backup_original_existente = baixa_existente.comprovante_original_url if baixa_existente else None
-
-                # Lógica: se tem data manual, usa ela. Se não, se já existe baixa, mantém a data dela. Se é nova, usa agora.
-                data_final_baixa = data_manual if data_manual else (baixa_existente.data_baixa if baixa_existente else timezone.now())
 
                 # Determina se a ocorrência representa SUCESSO (Entrega/Coleta Realizada)
                 cod_ref_str = str(ocorrencia.codigo_referencia or '').strip()
@@ -298,7 +305,48 @@ class RegistrarBaixaView(APIView):
                     'ENTREGUE' in desc_upper
                 )
 
-                nova_tentativa = (baixa_existente.tentativa_foto + 1) if (baixa_existente and baixa_existente.tentativa_foto) else 1
+                # ======= AGRUPAMENTO POR CT-E (REGRAS 1, 2, 3, 4, 12, 13) =======
+                notas_irmas_elegiveis = []
+                cte_alvo = nf.numero_cte or (nf.frete.numero_cte if getattr(nf, 'frete', None) else None)
+                
+                # Agrupamento estrito: apenas tipo ENTREGA, apenas com CT-e preenchido, apenas se aplicar_todas_cte ativo
+                if is_sucesso and tipo_op_atual == 'ENTREGA' and aplicar_todas_cte and cte_alvo and nf.manifesto:
+                    candidatas = list(
+                        NotaFiscal.objects.select_for_update().filter(
+                            manifesto=nf.manifesto,
+                            status='PENDENTE',
+                            tipo_operacao='ENTREGA'
+                        ).exclude(id=nf.id).filter(
+                            Q(numero_cte=cte_alvo) | Q(frete__numero_cte=cte_alvo)
+                        ).select_related('frete')
+                    )
+
+                    for cand in candidatas:
+                        if representam_mesma_entrega(nf, cand):
+                            notas_irmas_elegiveis.append(cand)
+                        else:
+                            logger.info(f"ℹ️ [AGRUPAMENTO CT-E] NF #{cand.numero_nota} do CT-e {cte_alvo} NÃO agrupada: destinatário ou CEP divergente da NF #{nf.numero_nota}.")
+
+                # --- LÓGICA DE UPLOAD (SÓ SE NÃO FOR NOTA RETIDA) ---
+                url_final_foto = None
+                if not is_retida and foto_arquivo:
+                    # Nome único para evitar sobreposição (ID da nota + identificador visual)
+                    id_foto = chave_acesso if nf.chave_acesso else f"minuta_{nf.numero_nota}"
+                    nome_arquivo = f"{nf.id}_{id_foto}.jpg"
+                    url_final_foto = upload_via_ftp(foto_arquivo.read(), nome_arquivo)
+
+                # --- REGISTRO DA BAIXA (COM REPLICAÇÃO CONTROLADA POR CT-E) ---
+                data_manual = request.data.get('data_baixa')
+                lat = request.data.get('latitude')
+                lng = request.data.get('longitude')
+                
+                lat = lat if lat and lat != "null" and lat != "undefined" else None
+                lng = lng if lng and lng != "null" and lng != "undefined" else None
+
+                from configuracao.utils import get_config
+                config_backup = get_config()
+                
+                data_final_baixa = data_manual if data_manual else (baixa_existente.data_baixa if baixa_existente else timezone.now())
 
                 is_coleta = (tipo_operacao == 'COLETA' or getattr(nf, 'tipo_operacao', '') == 'COLETA')
                 cod_tms_check = str(ocorrencia.codigo_tms or ocorrencia.codigo_referencia or '').strip()
@@ -311,116 +359,127 @@ class RegistrarBaixaView(APIView):
                     is_ocorrencia_01
                 )
 
-                baixa, created = BaixaNF.objects.update_or_create(
-                    nota_fiscal=nf,
-                    defaults={
-                        'tipo': 'COLETA' if is_coleta else ('ENTREGA' if is_sucesso else 'OCORRENCIA'),
-                        'ocorrencia': ocorrencia,
-                        'comprovante_foto_url': url_final_foto, 
-                        'comprovante_original_url': url_final_foto if config_backup.armazenar_foto_backup else '', # 👈 Controlado pela flag
-                        'recebedor': request.data.get('recebedor') if not is_retida else "NÃO INFORMADO",
-                        'latitude': lat,
-                        'longitude': lng,
-                        'observacao': observacao_app if is_retida else request.data.get('observacao', ''),
-                        'data_baixa': data_final_baixa,
-                        'tentativa_foto': nova_tentativa,
-                        'solicitar_nova_foto': False,
-                        'qualidade_canhoto': 'PENDENTE_ANALISE' if is_analise_ia_necessaria else 'APROVADO'
+                todas_as_notas = [nf] + notas_irmas_elegiveis
+                tasks_para_disparar = []
+
+                from django.db import connection
+                schema_atual = getattr(connection, 'schema_name', None)
+
+                for item_nf in todas_as_notas:
+                    baixa_item_existente = BaixaNF.objects.filter(nota_fiscal=item_nf).first()
+                    backup_item_existente = baixa_item_existente.comprovante_original_url if baixa_item_existente else None
+                    nova_tentativa_item = (baixa_item_existente.tentativa_foto + 1) if (baixa_item_existente and baixa_item_existente.tentativa_foto) else 1
+
+                    dados_payload = {
+                        'idempotency_key': idempotency_key,
+                        'cte_agrupado': bool(len(notas_irmas_elegiveis) > 0),
+                        'numero_cte': cte_alvo
                     }
-                )
-                
-                _trace.append(f"[BAIXA_SALVA] ID={baixa.id}, created={created}, tentativa={baixa.tentativa_foto}, tipo='{baixa.tipo}', ocorrencia_tms='{ocorrencia.codigo_tms}', is_sucesso={is_sucesso}")
-                
-                # Se foi UPDATE (motorista refez a baixa), restaura o backup original 
-                # para não perder a foto verdadeiramente original 
-                if not created and backup_original_existente and config_backup.armazenar_foto_backup:
-                    baixa.comprovante_original_url = backup_original_existente
-                    baixa.save(update_fields=['comprovante_original_url'])
 
+                    baixa_item, created_item = BaixaNF.objects.update_or_create(
+                        nota_fiscal=item_nf,
+                        defaults={
+                            'tipo': 'COLETA' if is_coleta else ('ENTREGA' if is_sucesso else 'OCORRENCIA'),
+                            'ocorrencia': ocorrencia,
+                            'comprovante_foto_url': url_final_foto, 
+                            'comprovante_original_url': url_final_foto if config_backup.armazenar_foto_backup else '',
+                            'recebedor': request.data.get('recebedor') if not is_retida else "NÃO INFORMADO",
+                            'latitude': lat,
+                            'longitude': lng,
+                            'observacao': observacao_app if is_retida else request.data.get('observacao', ''),
+                            'data_baixa': data_final_baixa,
+                            'tentativa_foto': nova_tentativa_item,
+                            'solicitar_nova_foto': False,
+                            'qualidade_canhoto': 'PENDENTE_ANALISE' if is_analise_ia_necessaria else 'APROVADO',
+                            'payload_enviado': dados_payload
+                        }
+                    )
 
-                nf.status = 'BAIXADA' if is_sucesso else 'OCORRENCIA'
-                nf.save()
+                    if not created_item and backup_item_existente and config_backup.armazenar_foto_backup:
+                        baixa_item.comprovante_original_url = backup_item_existente
+                        baixa_item.save(update_fields=['comprovante_original_url'])
 
-                try:
-                    from manifesto.services import notificar_atualizacao_cargas_fretes
-                    notificar_atualizacao_cargas_fretes(manifesto.filial if manifesto else None)
-                except Exception as ws_err:
-                    logger.error(f"Erro ao notificar WS cargas/fretes: {ws_err}")
-                
-                # --- DISPARO DA TASK CORRETA (O CÉREBRO) ---
-                from configuracao.utils import get_config
-                config = get_config()
-                
-                if is_coleta:
-                    from manifesto.tasks import enviar_coleta_esl_task
-                    if config.enviar_tms:
-                        enviar_coleta_esl_task.delay(baixa.id)
-                    msg_log = "Coleta agendada para TMS (Picks Endpoint)." if config.enviar_tms else "Coleta salva (TMS desligado)."
-                elif is_analise_ia_necessaria:
-                    # SOMENTE Ocorrência 01 COM FOTO vai para o fluxo do Agente IA (YOLO)
-                    from AgenteIa.tasks import task_processar_canhoto_ia
-                    from django.db import connection
-                    task_processar_canhoto_ia.delay(baixa.id, schema_name=connection.schema_name)
-                    msg_log = "Enviada para processamento no Agente IA (YOLO) (Ocorrência 01 - Com Foto)."
-                else:
-                    # Demais ocorrências (02, devoluções, ressalvas, etc): Fluxo direto para o TMS (se ativo)
-                    if config.enviar_tms:
-                        # REGRA: Se tem chave_acesso → endpoint NF-e, senão → endpoint Frete/Minuta
-                        # DESPACHO com chave vai pelo endpoint NF-e normal (cada nota individualmente)
-                        if nf.chave_acesso:
-                            enviar_baixa_esl_task.delay(baixa.id)
-                            msg_log = "NF-e agendada para TMS."
-                        else:
-                            enviar_baixa_minuta_task.delay(baixa.id)
-                            msg_log = "Minuta agendada para TMS (Frete Endpoint)."
+                    item_nf.status = 'BAIXADA' if is_sucesso else 'OCORRENCIA'
+                    item_nf.save()
+
+                    # Agenda tarefas individuais para cada nota
+                    if is_coleta:
+                        from manifesto.tasks import enviar_coleta_esl_task
+                        if config_backup.enviar_tms:
+                            tasks_para_disparar.append((enviar_coleta_esl_task, [baixa_item.id], {}))
+                    elif is_analise_ia_necessaria:
+                        from AgenteIa.tasks import task_processar_canhoto_ia
+                        tasks_para_disparar.append((task_processar_canhoto_ia, [baixa_item.id], {'schema_name': schema_atual}))
                     else:
-                        msg_log = "Baixa salva localmente (TMS desligado nas configurações)."
+                        if config_backup.enviar_tms:
+                            if item_nf.chave_acesso:
+                                tasks_para_disparar.append((enviar_baixa_esl_task, [baixa_item.id], {}))
+                            else:
+                                tasks_para_disparar.append((enviar_baixa_minuta_task, [baixa_item.id], {}))
 
-                # 🏁 Auto-finalização resiliente no Backend (independente de versão do app/PWA do motorista):
-                # Se o manifesto atingiu 100% de notas concluídas, o backend finaliza automaticamente!
+                # ======= AJUSTE 2: CELERY E NOTIFICAÇÕES LIBERADOS RIGOROSAMENTE VIA TRANSACTION.ON_COMMIT() =======
+                filial_ws = manifesto.filial if manifesto else None
+                def _disparar_pos_commit():
+                    # 1. Notificação WebSocket
+                    try:
+                        from manifesto.services import notificar_atualizacao_cargas_fretes
+                        notificar_atualizacao_cargas_fretes(filial_ws)
+                    except Exception as ws_err:
+                        logger.error(f"Erro ao notificar WS cargas/fretes: {ws_err}")
+
+                    # 2. Disparo das tasks do Celery
+                    for t_func, t_args, t_kwargs in tasks_para_disparar:
+                        try:
+                            if t_kwargs:
+                                t_func.apply_async(args=t_args, kwargs=t_kwargs)
+                            else:
+                                t_func.delay(*t_args)
+                        except Exception as t_err:
+                            logger.error(f"Erro ao disparar task Celery {t_func.__name__} para baixa: {t_err}")
+
+                transaction.on_commit(_disparar_pos_commit)
+
+                # 🏁 Auto-finalização resiliente no Backend via transaction.on_commit
                 try:
                     manifesto_alvo = manifesto or (nf.manifesto if nf else None)
                     if manifesto_alvo:
-                        total_mft = manifesto_alvo.notas_fiscais.count()
-                        pendentes_mft = manifesto_alvo.notas_fiscais.filter(status='PENDENTE').exclude(id=nf.id).count()
+                        ids_baixadas = [n.id for n in todas_as_notas]
+                        pendentes_restantes = manifesto_alvo.notas_fiscais.filter(status='PENDENTE').exclude(id__in=ids_baixadas).count()
                         
-                        from manifesto.tasks import verificar_autofinalizacao_manifesto_task
-                        from django.db import connection
-                        schema_atual = getattr(connection, 'schema_name', None)
-
-                        if total_mft > 0 and pendentes_mft == 0:
-                            # 100% das notas concluídas!
+                        if pendentes_restantes == 0:
                             if not is_analise_ia_necessaria:
                                 from manifesto.services import tentar_autofinalizar_manifesto
-                                tentar_autofinalizar_manifesto(manifesto_alvo)
+                                transaction.on_commit(lambda m=manifesto_alvo: tentar_autofinalizar_manifesto(m))
                             else:
-                                # Se precisa de IA na foto da última nota, agenda verificações resilientes
-                                verificar_autofinalizacao_manifesto_task.apply_async(
-                                    args=[manifesto_alvo.id],
-                                    kwargs={'schema_name': schema_atual},
-                                    countdown=4
-                                )
-                                verificar_autofinalizacao_manifesto_task.apply_async(
-                                    args=[manifesto_alvo.id],
-                                    kwargs={'schema_name': schema_atual},
-                                    countdown=25
-                                )
+                                from manifesto.tasks import verificar_autofinalizacao_manifesto_task
+                                transaction.on_commit(lambda mid=manifesto_alvo.id, s=schema_atual: (
+                                    verificar_autofinalizacao_manifesto_task.apply_async(args=[mid], kwargs={'schema_name': s}, countdown=4),
+                                    verificar_autofinalizacao_manifesto_task.apply_async(args=[mid], kwargs={'schema_name': s}, countdown=25)
+                                ))
                         elif not is_analise_ia_necessaria:
-                            verificar_autofinalizacao_manifesto_task.apply_async(
-                                args=[manifesto_alvo.id],
-                                kwargs={'schema_name': schema_atual},
-                                countdown=5
-                            )
+                            from manifesto.tasks import verificar_autofinalizacao_manifesto_task
+                            transaction.on_commit(lambda mid=manifesto_alvo.id, s=schema_atual: (
+                                verificar_autofinalizacao_manifesto_task.apply_async(args=[mid], kwargs={'schema_name': s}, countdown=5)
+                            ))
                 except Exception as auto_err:
-                    print(f"Aviso: Erro ao agendar auto-finalizacao na baixa: {auto_err}")
-                
-                _trace.append(f"[DISPATCH] {msg_log} | NF status='{nf.status}', chave_acesso={'SIM' if nf.chave_acesso else 'NAO'}")
+                    print(f"Aviso: Erro ao agendar auto-finalizacao na baixa agrupada: {auto_err}")
+
+                _trace.append(f"[DISPATCH] Total notas processadas={len(todas_as_notas)}, tasks agendadas={len(tasks_para_disparar)}")
                 _trace_str = " | ".join(_trace)
                 _trace_logger.info(f"🔍 [TRACE BAIXA VIEW] {_trace_str}")
-                print(f"🔍 [TRACE COMPLETO] {_trace_str}")
-                print(f"BAIXA REGISTRADA: {msg_log} (Retida: {is_retida})")
 
-            return Response({'status': 'sucesso', 'mensagem': 'Baixa registrada e integração iniciada!'})
+            notas_afetadas_nums = [n.numero_nota for n in todas_as_notas]
+            msg_sucesso = f"Baixa registrada com sucesso para {len(todas_as_notas)} nota(s)!"
+            if len(notas_irmas_elegiveis) > 0:
+                msg_sucesso = f"Entrega agrupada realizada com sucesso! {len(todas_as_notas)} notas do CT-e {cte_alvo} baixadas com a mesma foto."
+
+            return Response({
+                'status': 'sucesso',
+                'mensagem': msg_sucesso,
+                'notas_afetadas': notas_afetadas_nums,
+                'cte_agrupado': bool(len(notas_irmas_elegiveis) > 0),
+                'numero_cte': cte_alvo
+            })
 
         except NotaFiscal.DoesNotExist:
             id_err = nota_id if nota_id else (chave_acesso if chave_acesso else numero_nota)
