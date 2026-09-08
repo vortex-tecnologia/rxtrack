@@ -22,9 +22,9 @@ def disparar_push_selecionados(modeladmin, request, queryset):
 
 @admin.register(Motorista)
 class MotoristaAdmin(admin.ModelAdmin):
-    list_display = ('nome_completo', 'cpf', 'tipo_usuario', 'cargo', 'filial', 'tem_fcm_token', 'permitir_upload_galeria')
-    list_filter = ('tipo_usuario', 'cargo', 'filial', 'permitir_upload_galeria')
-    list_editable = ('cargo', 'permitir_upload_galeria')
+    list_display = ('nome_completo', 'cpf', 'tipo_usuario', 'cargo', 'filial', 'tem_fcm_token', 'modo_camera')
+    list_filter = ('tipo_usuario', 'cargo', 'filial', 'modo_camera')
+    list_editable = ('cargo', 'modo_camera')
     search_fields = ('nome_completo', 'cpf')
     readonly_fields = ('modelo_aparelho', 'memoria_ram', 'fcm_token_atualizado_em')
     actions = [disparar_push_selecionados]

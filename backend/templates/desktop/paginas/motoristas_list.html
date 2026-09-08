@@ -261,7 +261,7 @@
                                 <i class="bi bi-envelope"></i>
                             </button>
                             <button class="btn btn-outline-primary btn-sm" title="Editar" 
-                                onclick="abrirDetalhes('{{ m.id }}', '{{ m.nome_completo|escapejs }}', '{{ m.cpf }}', '{% if m.foto_perfil %}{{ m.foto_perfil.url }}{% endif %}', '{{ m.telefone|default:'' }}', '{{ m.filial_id|default:'' }}', '{{ m.email|default:'' }}', '{{ m.modelo_aparelho|default:'' }}', '{{ m.memoria_ram|default:'' }}', '{{ m.permitir_upload_galeria|lower }}', '{{ m.categoria }}')">
+                                onclick="abrirDetalhes('{{ m.id }}', '{{ m.nome_completo|escapejs }}', '{{ m.cpf }}', '{% if m.foto_perfil %}{{ m.foto_perfil.url }}{% endif %}', '{{ m.telefone|default:'' }}', '{{ m.filial_id|default:'' }}', '{{ m.email|default:'' }}', '{{ m.modelo_aparelho|default:'' }}', '{{ m.memoria_ram|default:'' }}', '{{ m.modo_camera|default:'camera_padrao' }}', '{{ m.categoria }}')">
                                 <i class="bi bi-pencil-square"></i> Editar
                             </button>
 
@@ -425,13 +425,17 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="mb-3 form-check form-switch mt-3 p-3 bg-light rounded border">
-                        <input class="form-check-input ms-0 me-2" type="checkbox" name="permitir_upload_galeria" id="edit_permitir_galeria">
-                        <label class="form-check-label fw-bold" for="edit_permitir_galeria">
-                            Permitir Upload da Galeria (Celular Fraco)
+                    <div class="mb-3 mt-3 p-3 bg-light rounded border">
+                        <label class="form-label small fw-bold" for="edit_modo_camera">
+                            <i class="bi bi-camera-fill me-1"></i> Modo de Captura do Canhoto
                         </label>
-                        <div class="form-text small text-muted">
-                            Habilita a escolha de fotos da galeria no app (contorna recarregamento de página em celulares com pouca memória).
+                        <select name="modo_camera" id="edit_modo_camera" class="form-select">
+                            <option value="camera_padrao">📷 Câmera Padrão — Abre a câmera nativa do Android</option>
+                            <option value="camera_interna">📱 Câmera Interna do Track — Preview dentro do app (celulares fracos)</option>
+                            <option value="galeria">🖼️ Galeria — Seleciona uma foto já existente</option>
+                        </select>
+                        <div class="form-text small text-muted mt-1">
+                            Câmera Interna é recomendada para aparelhos com pouca memória que travam ao abrir a câmera nativa.
                         </div>
                     </div>
                     <div class="mb-3">
@@ -581,7 +585,7 @@ document.getElementById('formEdicao').addEventListener('submit', e => {
     enviarFormulario('formEdicao', "{% url 'operacional:motorista_editar' %}", 'btnSalvarEdicao', 'loaderBtnEdicao', 'msgFeedbackEdicao'); // Crie essa ID no modal de edição também
 });
 
-function abrirDetalhes(id, nome, cpf, foto, telefone, filial_id, email, modelo_aparelho, memoria_ram, permitir_galeria, categoria) {
+function abrirDetalhes(id, nome, cpf, foto, telefone, filial_id, email, modelo_aparelho, memoria_ram, modo_camera, categoria) {
     document.getElementById('edit_id').value = id;
     document.getElementById('edit_nome').value = nome;
     document.getElementById('edit_cpf').value = cpf;
@@ -590,8 +594,11 @@ function abrirDetalhes(id, nome, cpf, foto, telefone, filial_id, email, modelo_a
     document.getElementById('edit_email').value = email || '';
     document.getElementById('edit_categoria').value = categoria || 'EMPRESA';
     
-    // Tratamento do Checkbox e Info de Hardware
-    document.getElementById('edit_permitir_galeria').checked = (permitir_galeria === 'true');
+    // Tratamento do Modo de Câmera e Info de Hardware
+    const selectModoCamera = document.getElementById('edit_modo_camera');
+    if (selectModoCamera) {
+        selectModoCamera.value = modo_camera || 'camera_padrao';
+    }
     
     const boxHardware = document.getElementById('hardware_info_box');
     const txtModelo = document.getElementById('view_modelo_aparelho');

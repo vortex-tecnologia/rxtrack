@@ -466,18 +466,63 @@
     </div>
 
 
+    <!-- ===================================================== -->
+    <!-- MODAL DE CÂMERA INTERNA LEVE DO TRACK                 -->
+    <!-- ===================================================== -->
     <div id="full-screen-camera"
-        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999;">
-        <video id="video-full" autoplay playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 99999;">
+        
+        <!-- Preview de Vídeo da Câmera -->
+        <video id="video-camera-interna" autoplay playsinline muted
+            style="width: 100%; height: 100%; object-fit: cover; display: block;"></video>
+        
+        <!-- Canvas Temporário de Captura (apenas memória interna) -->
+        <canvas id="canvas-captura-interna" style="display: none;"></canvas>
+        
+        <!-- Imagem de Preview Estático pós-captura (Revisão) -->
+        <img id="img-preview-captura"
+            style="display: none; width: 100%; height: 100%; object-fit: contain; background: #000;" alt="Pré-visualização da foto">
 
-        <div style="position: absolute; bottom: 30px; left: 0; width: 100%; text-align: center;">
-            <button type="button" class="btn btn-light rounded-circle" onclick="capturarFotoFull()"
-                style="width: 70px; height: 70px; border: 5px solid rgba(0,0,0,0.2);">
-                <i class="bi bi-camera-fill fs-2"></i>
+        <!-- Mensagem de Erro ou Permissão Negada -->
+        <div id="msg-erro-camera-interna"
+            style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; z-index: 10;">
+        </div>
+
+        <!-- Barra Superior: Flash e Fechar -->
+        <div style="position: absolute; top: 20px; left: 0; width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; z-index: 5;">
+            <button type="button" id="btn-flash-camera-interna" class="btn btn-outline-light rounded-circle shadow-sm"
+                onclick="_cameraInterna_flash()"
+                style="width: 44px; height: 44px; display: none;" title="Alternar Flash">
+                <i class="bi bi-lightning fs-5"></i>
             </button>
-            <button type="button" class="btn btn-danger rounded-pill ms-3" onclick="fecharCameraFull()"
-                style="position: absolute; top: 15px; right: 20px;">
-                Sair
+            <div style="flex: 1;"></div>
+            <button type="button" class="btn btn-dark bg-opacity-75 rounded-circle text-white shadow-sm border-0"
+                onclick="_cameraInterna_fechar()"
+                style="width: 44px; height: 44px;" title="Fechar Câmera">
+                <i class="bi bi-x-lg fs-5"></i>
+            </button>
+        </div>
+
+        <!-- Barra Inferior: Modo PREVIEW (Disparo) -->
+        <div id="controles-camera-preview"
+            style="position: absolute; bottom: 35px; left: 0; width: 100%; display: flex; justify-content: center; align-items: center; z-index: 5;">
+            <button type="button" class="btn btn-light rounded-circle shadow-lg d-flex align-items-center justify-content-center"
+                onclick="_cameraInterna_capturar()"
+                style="width: 74px; height: 74px; border: 5px solid rgba(255,255,255,0.4); background: #ffffff;" title="Tirar Foto">
+                <i class="bi bi-camera-fill fs-2 text-dark"></i>
+            </button>
+        </div>
+
+        <!-- Barra Inferior: Modo REVISÃO (Refazer / Usar Foto) -->
+        <div id="controles-camera-revisao"
+            style="display: none; position: absolute; bottom: 35px; left: 0; width: 100%; justify-content: center; align-items: center; gap: 16px; padding: 0 20px; z-index: 5;">
+            <button type="button" class="btn btn-outline-light rounded-pill px-4 py-2 fw-semibold shadow-sm"
+                onclick="_cameraInterna_refazer()">
+                <i class="bi bi-arrow-repeat me-1"></i> Refazer
+            </button>
+            <button type="button" class="btn btn-success rounded-pill px-4 py-2 fw-bold shadow"
+                onclick="_cameraInterna_usar()">
+                <i class="bi bi-check2-circle me-1"></i> Usar Foto
             </button>
         </div>
     </div>
@@ -2108,6 +2153,7 @@
     <script src="{% static 'js/serviceworker.js' %}?v=1.46"></script>
     <script src="/static/js/login_motorista/authFetch.js"></script>
     <script src="{% static 'js/image_quality_v1.js' %}?v=1.0"></script>
+    <script src="{% static 'js/camera_interna.js' %}?v=1.0"></script>
     <script src="{% static 'js/manifesto_v19.js' %}?v=1.47"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pulltorefreshjs/0.1.22/index.umd.min.js"></script>
     <script>

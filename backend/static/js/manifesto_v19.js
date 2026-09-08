@@ -282,6 +282,30 @@ document.addEventListener('DOMContentLoaded', async () => {
             inputCamera.addEventListener('change', handleCameraNativa);
         }
 
+        // NOVO: Intercepta cliques de captura para Câmera Interna Leve
+        const labelCamera = document.getElementById('label-camera');
+        if (labelCamera) {
+            labelCamera.addEventListener('click', acionarCapturaFoto);
+        }
+        const btnNovaFoto = document.getElementById('btn-nova-foto');
+        if (btnNovaFoto) {
+            btnNovaFoto.addEventListener('click', acionarCapturaFoto);
+        }
+        const btnNovaFotoQ = document.getElementById('btn-nova-foto-quality');
+        if (btnNovaFotoQ) {
+            btnNovaFotoQ.addEventListener('click', acionarCapturaFoto);
+        }
+
+        // Garante liberação da câmera interna se o modal de baixa for fechado
+        const modalBaixaEl = document.getElementById('modalBaixa');
+        if (modalBaixaEl) {
+            modalBaixaEl.addEventListener('hidden.bs.modal', () => {
+                if (window.CameraInterna && typeof window.CameraInterna.fechar === 'function') {
+                    window.CameraInterna.fechar();
+                }
+            });
+        }
+
         // =====================================================
         // FLUXO DE FINALIZAÇÃO DE MANIFESTO (AUTOMÁTICO)
         // =====================================================
@@ -1485,6 +1509,73 @@ function configurarBotaoWhats(erroMsg, chave) {
 
 //// FUNÇÕES AUXILIARES DE CÂMERA NATIVA E MODAIS ////
 
+/**
+ * Intercepta os cliques nos botões/labels de captura de foto quando o motorista
+ * está configurado com o modo 'camera_interna'.
+ */
+async function acionarCapturaFoto(event) {
+    if (window._modoCameraMotorista === 'camera_interna' && !window._permitirFallbackNativo) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        if (!window.CameraInterna || typeof window.CameraInterna.abrir !== 'function') {
+            console.warn('[CameraInterna] Módulo CameraInterna não disponível. Abrindo câmera nativa como contingência.');
+            const inputCam = document.getElementById('camera-nativa');
+            if (inputCam) inputCam.click();
+            return;
+        }
+
+        const canvasPreview = document.getElementById('canvas-preview');
+        if (!canvasPreview) return;
+
+        const fotoAceita = await window.CameraInterna.abrir(canvasPreview);
+        if (fotoAceita) {
+            // Atualiza a interface de forma LEVE (apenas ícone e texto, idêntico a handleCameraNativa)
+            const icone = document.getElementById('icone-camera');
+            const texto = document.getElementById('texto-status-foto');
+
+            if (icone) {
+                icone.className = "bi bi-check-circle-fill text-success";
+                icone.style.fontSize = "2rem";
+            }
+            if (texto) {
+                texto.innerText = "Foto capturada com sucesso!";
+                texto.className = "text-success fw-bold small mt-1";
+            }
+
+            const labelCam = document.getElementById('label-camera');
+            if (labelCam) labelCam.style.display = 'none';
+
+            // Se for análise V1 (ocorrência 01), dispara validação
+            if (_deveExecutarAnaliseV1()) {
+                const btnNova = document.getElementById('btn-nova-foto');
+                if (btnNova) btnNova.style.display = 'none';
+
+                const file = window._ultimoArquivoFoto;
+                if (file) {
+                    _tentarAnaliseQualidadeV1(file);
+                } else {
+                    canvasPreview.toBlob((blob) => {
+                        if (blob) {
+                            try {
+                                window._ultimoArquivoFoto = new File([blob], 'canhoto.jpg', { type: 'image/jpeg' });
+                            } catch (e) {
+                                window._ultimoArquivoFoto = blob;
+                            }
+                            _tentarAnaliseQualidadeV1(window._ultimoArquivoFoto);
+                        }
+                    }, 'image/jpeg', 0.85);
+                }
+            } else {
+                const btnNova = document.getElementById('btn-nova-foto');
+                if (btnNova) btnNova.style.display = 'block';
+            }
+        }
+    }
+}
+
 async function handleCameraNativa(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -2273,19 +2364,22 @@ async function carregarDadosCabecalho() {
                 filialIdMotorista = dados.filial_id;
             }
 
-            // 3. Verifica se tem permissão para usar Galeria (Celulares Fracos)
-            if (dados.permitir_upload_galeria) {
-                console.log("Liberando uso da Galeria (Workaround Celular Fraco ativo)");
-                // Pega os inputs de câmera nativa no HTML
-                const inputCameraNativa = document.getElementById('camera-nativa');
-                const inputOcorrencia = document.getElementById('foto-ocorrencia'); // se existir outro
+            // 3. Modo de Captura do Canhoto (camera_padrao, camera_interna, galeria)
+            // Fonte da verdade: dados.modo_camera (fallback retrocompatível: permitir_upload_galeria)
+            const modoCamera = dados.modo_camera || (dados.permitir_upload_galeria ? 'galeria' : 'camera_padrao');
+            window._modoCameraMotorista = modoCamera;
+            console.log(`[Câmera] Modo de captura ativo: ${modoCamera}`);
 
-                if (inputCameraNativa) {
-                    inputCameraNativa.removeAttribute('capture');
-                }
-                if (inputOcorrencia) {
-                    inputOcorrencia.removeAttribute('capture');
-                }
+            const inputCameraNativa = document.getElementById('camera-nativa');
+            const inputOcorrencia = document.getElementById('foto-ocorrencia');
+
+            if (modoCamera === 'galeria') {
+                console.log("[Câmera] Modo Galeria ativo: removendo atributo capture");
+                if (inputCameraNativa) inputCameraNativa.removeAttribute('capture');
+                if (inputOcorrencia) inputOcorrencia.removeAttribute('capture');
+            } else {
+                if (inputCameraNativa) inputCameraNativa.setAttribute('capture', 'environment');
+                if (inputOcorrencia) inputOcorrencia.setAttribute('capture', 'environment');
             }
 
             // 4. Envia dados do hardware do celular para o admin saber se é celular fraco

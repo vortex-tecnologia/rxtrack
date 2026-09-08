@@ -31,7 +31,8 @@ def perfil_motorista(request):
             'foto_url': motorista.foto_perfil.url if motorista.foto_perfil else None,
             'filial_id': str(motorista.filial.id) if motorista.filial else 'todas',
             'filial_nome': motorista.filial.nome if motorista.filial else 'Geral',
-            'permitir_upload_galeria': motorista.permitir_upload_galeria
+            'permitir_upload_galeria': motorista.permitir_upload_galeria,
+            'modo_camera': motorista.modo_camera
         })
     except Exception as e:
         return JsonResponse({'error': 'Perfil não encontrado'}, status=404)

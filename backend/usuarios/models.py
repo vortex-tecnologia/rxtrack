@@ -98,15 +98,31 @@ class Motorista(models.Model):
     )
 
     # NOVO: Workaround para celulares com pouca RAM que matam o app PWA ao abrir a câmera
+    # DEPRECATED: Mantido apenas para retrocompatibilidade de migration.
+    # A fonte de verdade agora é o campo `modo_camera` abaixo.
     permitir_upload_galeria = models.BooleanField(
         default=False, 
-        verbose_name="Permitir Upload da Galeria (Celular Fraco)",
-        help_text="Se marcado, remove a trava da câmera nativa e permite que o motorista escolha fotos da galeria em vez de forçar a abertura da câmera (Evita travamento e recarregamento da página em celulares com pouca memória)."
+        verbose_name="[Legado] Permitir Upload da Galeria",
+        help_text="DEPRECATED — Use 'Modo de Captura do Canhoto' abaixo."
+    )
+
+    MODO_CAMERA_CHOICES = [
+        ('camera_padrao', 'Câmera Padrão'),
+        ('camera_interna', 'Câmera Interna do Track'),
+        ('galeria', 'Galeria'),
+    ]
+    modo_camera = models.CharField(
+        max_length=20,
+        choices=MODO_CAMERA_CHOICES,
+        default='camera_padrao',
+        verbose_name="Modo de Captura do Canhoto",
+        help_text="Define como o motorista captura fotos de canhoto no app. Câmera Padrão abre a câmera nativa do Android. Câmera Interna usa preview dentro do Track (recomendado para aparelhos fracos). Galeria permite selecionar uma imagem já existente."
     )
     
     # NOVO: Informações do Hardware coletadas automaticamente
     modelo_aparelho = models.CharField(max_length=100, null=True, blank=True, verbose_name="Modelo do Aparelho")
     memoria_ram = models.CharField(max_length=20, null=True, blank=True, verbose_name="Memória RAM")
+
 
     # NOVO: Token para envio de Notificações Push via Firebase (FCM) - Exclusivo APK
     fcm_token = models.TextField(null=True, blank=True, verbose_name="Token Firebase FCM")

@@ -1300,7 +1300,12 @@ def motorista_editar(request):
         motorista.filial_id = filial_id if filial_id else None
         
         motorista.categoria = request.POST.get('categoria', 'EMPRESA')
-        motorista.permitir_upload_galeria = request.POST.get('permitir_upload_galeria') == 'on'
+        modo_camera = request.POST.get('modo_camera', 'camera_padrao')
+        if modo_camera not in ('camera_padrao', 'camera_interna', 'galeria'):
+            modo_camera = 'camera_padrao'
+        motorista.modo_camera = modo_camera
+        # Sincroniza o campo legado para retrocompatibilidade
+        motorista.permitir_upload_galeria = (modo_camera == 'galeria')
         
         if request.FILES.get('foto_perfil'):
             motorista.foto_perfil = request.FILES.get('foto_perfil')
