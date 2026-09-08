@@ -190,8 +190,8 @@ class RegistrarBaixaView(APIView):
                         id_err = nota_id or chave_acesso or numero_nota or nota_id_tms
                         raise NotaFiscal.DoesNotExist(f"Documento {id_err} não localizado.")
 
-                # Trava pessimista no registro da nota para concorrência
-                nf = NotaFiscal.objects.select_for_update().select_related('manifesto', 'frete').filter(id=nf.id).first()
+                # Trava pessimista no registro da nota para concorrência (of=('self',) evita erro de outer join no PostgreSQL)
+                nf = NotaFiscal.objects.select_for_update(of=('self',)).select_related('manifesto', 'frete').filter(id=nf.id).first()
                 if not nf:
                     raise NotaFiscal.DoesNotExist("Nota fiscal não localizada após lock.")
 
@@ -312,7 +312,7 @@ class RegistrarBaixaView(APIView):
                 # Agrupamento estrito: apenas tipo ENTREGA, apenas com CT-e preenchido, apenas se aplicar_todas_cte ativo
                 if is_sucesso and tipo_op_atual == 'ENTREGA' and aplicar_todas_cte and cte_alvo and nf.manifesto:
                     candidatas = list(
-                        NotaFiscal.objects.select_for_update().filter(
+                        NotaFiscal.objects.select_for_update(of=('self',)).filter(
                             manifesto=nf.manifesto,
                             status='PENDENTE',
                             tipo_operacao='ENTREGA'
