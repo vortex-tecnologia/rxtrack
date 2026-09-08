@@ -1,5 +1,5 @@
-// UNIFICADO: Versão v1.48
-const CACHE_NAME = 'fluxo-logistica-v1.48';
+// UNIFICADO: Versão v1.49
+const CACHE_NAME = 'fluxo-logistica-v1.49';
 
 const filesToCache = [
     '/app/',
@@ -7,6 +7,7 @@ const filesToCache = [
     '/static/css/app_v2.css',
     '/static/css/login.css',
     '/static/js/manifesto_v19.js',
+    '/static/js/camera_interna.js',
     '/static/js/roteirizacao_v1.js',
     '/static/js/image_quality_v1.js',
     '/static/js/pwa_tracking.js',
@@ -82,24 +83,23 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
         caches.match(event.request).then((cachedResponse) => {
             const fetchPromise = fetch(event.request).then((networkResponse) => {
-
                 // ✅ Verificação robusta antes de clonar
-                if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-                    return networkResponse;
+                if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+                    const responseToCache = networkResponse.clone();
+                    caches.open(CACHE_NAME).then((cache) => {
+                        cache.put(event.request, responseToCache);
+                    });
                 }
-
-                // Clona para o cache
-                const responseToCache = networkResponse.clone();
-                caches.open(CACHE_NAME).then((cache) => {
-                    cache.put(event.request, responseToCache);
-                });
-
                 return networkResponse;
-            }).catch(() => {
-                // Silencia erros de rede para não travar o console
             });
 
-            return cachedResponse || fetchPromise;
+            // Se tem resposta no cache, retorna imediatamente e atualiza em background
+            if (cachedResponse) {
+                return cachedResponse;
+            }
+
+            // Se não tem em cache, repassa a requisição da rede diretamente (evita resolver para undefined)
+            return fetchPromise;
         })
     );
 });
