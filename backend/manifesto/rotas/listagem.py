@@ -21,6 +21,28 @@ class ListarNotasManifestoView(APIView):
         try:
             mft = Manifesto.objects.select_related('filial', 'veiculo').filter(numero_manifesto=numero).first()
             if mft:
+                # Se o manifesto constava como finalizado (<24h) porém possui notas pendentes (ex: atraso ESL), reabre
+                if mft.finalizado or mft.status == 'FINALIZADO':
+                    from datetime import timedelta
+                    limite_24h = timezone.now() - timedelta(hours=24)
+                    data_fim_mft = mft.data_finalizacao or mft.data_criacao
+                    recente_24h = bool(data_fim_mft and data_fim_mft >= limite_24h)
+                    outro_ativo = False
+                    if mft.motorista:
+                        outro_ativo = Manifesto.objects.filter(
+                            motorista=mft.motorista,
+                            status='EM_TRANSPORTE',
+                            finalizado=False
+                        ).exclude(id=mft.id).exists()
+
+                    if recente_24h and not outro_ativo:
+                        tem_pendentes = NotaFiscal.objects.filter(manifesto=mft, status='PENDENTE', baixa_info__isnull=True).exists()
+                        if tem_pendentes:
+                            mft.finalizado = False
+                            mft.status = 'EM_TRANSPORTE'
+                            mft.data_finalizacao = None
+                            mft.save(update_fields=['finalizado', 'status', 'data_finalizacao'])
+
                 mft.ultimo_acesso = timezone.now()
                 # Se o app mandar bateria/lat/lng no header ou query, pegamos aqui
                 bateria = request.query_params.get('bat')

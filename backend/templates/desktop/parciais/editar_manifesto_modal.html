@@ -16,7 +16,7 @@
 
             <div class="col-md-6">
                 <label class="form-label small fw-bold">Status Atual (Sistema/RXtrack)</label>
-                <select name="status" class="form-select">
+                <select name="status" id="selectStatusManifesto" class="form-select">
                     {% for val, label in manifesto.STATUS_CHOICES %}
                     <option value="{{ val }}" {% if manifesto.status == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
@@ -72,7 +72,7 @@
 
             <div class="col-md-12">
                 <div class="form-check form-switch mt-2">
-                    <input class="form-check-input" type="checkbox" name="finalizado" id="checkFinalizado" {% if manifesto.finalizado %}checked{% endif %}>
+                    <input class="form-check-input" type="checkbox" name="finalizado" id="checkFinalizado" {% if manifesto.finalizado and manifesto.status == 'FINALIZADO' %}checked{% endif %}>
                     <label class="form-check-label fw-bold" for="checkFinalizado">Marcar como Finalizado</label>
                 </div>
             </div>
@@ -86,5 +86,28 @@
     </div>
 </form>
 <script>
+(function() {
+    const selectStatus = document.getElementById('selectStatusManifesto');
+    const checkFinalizado = document.getElementById('checkFinalizado');
 
+    if (selectStatus && checkFinalizado) {
+        selectStatus.addEventListener('change', function() {
+            if (this.value === 'FINALIZADO') {
+                checkFinalizado.checked = true;
+            } else {
+                checkFinalizado.checked = false;
+            }
+        });
+
+        checkFinalizado.addEventListener('change', function() {
+            if (this.checked) {
+                selectStatus.value = 'FINALIZADO';
+            } else {
+                if (selectStatus.value === 'FINALIZADO') {
+                    selectStatus.value = 'EM_TRANSPORTE';
+                }
+            }
+        });
+    }
+})();
 </script>

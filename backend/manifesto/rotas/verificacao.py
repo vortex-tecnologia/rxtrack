@@ -21,16 +21,38 @@ class VerificarManifestoAtivoView(APIView):
             ).first()
 
             if not manifesto_ativo:
-                # Se não há manifesto ativo, busca o mais antigo com status 'AGUARDANDO' para o motorista
-                manifesto_pendente = Manifesto.objects.filter(
-                    motorista=motorista,
-                    status='AGUARDANDO'
-                ).order_by('data_criacao').first()
+                # 1. Verifica se existe manifesto finalizado há menos de 24h que recebeu novas notas pendentes (atraso ESL)
+                from django.utils import timezone
+                from datetime import timedelta
+                from django.db.models import Q
+                limite_24h = timezone.now() - timedelta(hours=24)
 
-                if manifesto_pendente:
-                    manifesto_pendente.status = 'EM_TRANSPORTE'
-                    manifesto_pendente.save()
-                    manifesto_ativo = manifesto_pendente
+                manifesto_com_pendencia = Manifesto.objects.filter(
+                    motorista=motorista,
+                    notas_fiscais__status='PENDENTE',
+                    notas_fiscais__baixa_info__isnull=True
+                ).filter(
+                    Q(data_finalizacao__gte=limite_24h) | (Q(data_finalizacao__isnull=True) & Q(data_criacao__gte=limite_24h))
+                ).distinct().order_by('-data_criacao', '-id').first()
+
+                if manifesto_com_pendencia and (manifesto_com_pendencia.finalizado or manifesto_com_pendencia.status == 'FINALIZADO'):
+                    manifesto_com_pendencia.status = 'EM_TRANSPORTE'
+                    manifesto_com_pendencia.finalizado = False
+                    manifesto_com_pendencia.data_finalizacao = None
+                    manifesto_com_pendencia.save(update_fields=['status', 'finalizado', 'data_finalizacao'])
+                    manifesto_ativo = manifesto_com_pendencia
+                else:
+                    # 2. Se não há manifesto ativo, busca o mais antigo com status 'AGUARDANDO' para o motorista
+                    manifesto_pendente = Manifesto.objects.filter(
+                        motorista=motorista,
+                        status='AGUARDANDO'
+                    ).order_by('data_criacao').first()
+
+                    if manifesto_pendente:
+                        manifesto_pendente.status = 'EM_TRANSPORTE'
+                        manifesto_pendente.finalizado = False
+                        manifesto_pendente.save(update_fields=['status', 'finalizado'])
+                        manifesto_ativo = manifesto_pendente
 
             if manifesto_ativo:
                 return Response({

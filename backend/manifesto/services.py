@@ -180,16 +180,6 @@ def tentar_autofinalizar_manifesto(manifesto_ou_id, km_final=None):
     if not manifesto:
         return False, "Manifesto não encontrado."
 
-    # Se já está finalizado, garante consistência e retorna sucesso
-    if manifesto.finalizado or manifesto.status == 'FINALIZADO':
-        if km_final and str(km_final).strip() not in ["0", "0.0", ""]:
-            try:
-                manifesto.km_final = km_final
-                manifesto.save(update_fields=['km_final'])
-            except Exception:
-                pass
-        return True, "Manifesto já se encontra finalizado."
-
     # 2. Deve ter ao menos 1 nota
     total_notas = NotaFiscal.objects.filter(manifesto=manifesto).count()
     if total_notas == 0:
@@ -201,6 +191,54 @@ def tentar_autofinalizar_manifesto(manifesto_ou_id, km_final=None):
         status='PENDENTE',
         baixa_info__isnull=False
     ).update(status='BAIXADA')
+
+    # 4. Se o manifesto está marcado como finalizado, checa se chegaram novas notas pendentes (ex: atraso de webhook ESL)
+    notas_pendentes_reais = NotaFiscal.objects.filter(
+        manifesto=manifesto,
+        status='PENDENTE',
+        baixa_info__isnull=True
+    ).count()
+
+    if (manifesto.finalizado or manifesto.status == 'FINALIZADO'):
+        data_fim_manifesto = manifesto.data_finalizacao or manifesto.data_criacao
+        recente_24h = bool(data_fim_manifesto and (timezone.now() - data_fim_manifesto <= timedelta(hours=24)))
+        outro_ativo = False
+        if manifesto.motorista:
+            outro_ativo = Manifesto.objects.filter(
+                motorista=manifesto.motorista,
+                status='EM_TRANSPORTE',
+                finalizado=False
+            ).exclude(id=manifesto.id).exists()
+
+        if notas_pendentes_reais > 0 and recente_24h and not outro_ativo:
+            logger.warning(
+                f"⚠️ [AUTO-REABERTURA] Manifesto #{manifesto.numero_manifesto} constava como finalizado (<24h e sem outro ativo), "
+                f"mas possui {notas_pendentes_reais} nota(s) pendente(s)! Reabrindo imediatamente para o motorista."
+            )
+            manifesto.status = 'EM_TRANSPORTE'
+            manifesto.finalizado = False
+            manifesto.data_finalizacao = None
+            manifesto.save(update_fields=['status', 'finalizado', 'data_finalizacao'])
+
+            try:
+                enviar_painel(manifesto)
+            except Exception as e_painel:
+                logger.warning(f"Erro ao enviar painel na reabertura do manifesto #{manifesto.numero_manifesto}: {e_painel}")
+
+            return False, f"Manifesto reaberto: possui {notas_pendentes_reais} nota(s) pendente(s) de entrega."
+        else:
+            # Garante consistência dos dois campos (status e finalizado)
+            if not manifesto.finalizado or manifesto.status != 'FINALIZADO':
+                manifesto.finalizado = True
+                manifesto.status = 'FINALIZADO'
+                manifesto.save(update_fields=['finalizado', 'status'])
+            if km_final and str(km_final).strip() not in ["0", "0.0", ""]:
+                try:
+                    manifesto.km_final = km_final
+                    manifesto.save(update_fields=['km_final'])
+                except Exception:
+                    pass
+            return True, "Manifesto já se encontra finalizado."
 
     # 4. Conferência de Notas Pendentes (que verdadeiramente não possuem baixa)
     notas_pendentes_qs = NotaFiscal.objects.filter(

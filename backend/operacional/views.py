@@ -764,7 +764,6 @@ def salvar_edicao_manifesto_view(request, manifesto_id):
             }, status=400)
 
         # 3. Atualização dos campos permitidos
-        manifesto.status = status_post
         manifesto.km_inicial = km_inicial if km_ini_raw else None
         manifesto.km_final = km_final if km_fin_raw else None
         
@@ -774,7 +773,12 @@ def salvar_edicao_manifesto_view(request, manifesto_id):
         # 4. Lógica de Status e Datas de Finalização
         enviar_finalizacao_tms = False
         
-        if (foi_finalizado or status_post == 'FINALIZADO'):
+        # Se o operador selecionou explicitamente um status ativo (ex: EM_TRANSPORTE ou AGUARDANDO)
+        if status_post and status_post != 'FINALIZADO':
+            manifesto.status = status_post
+            manifesto.finalizado = False
+            manifesto.data_finalizacao = None
+        elif foi_finalizado or status_post == 'FINALIZADO':
             if not manifesto.finalizado:
                 manifesto.data_finalizacao = timezone.now()
                 enviar_finalizacao_tms = True
@@ -785,7 +789,7 @@ def salvar_edicao_manifesto_view(request, manifesto_id):
         else:
             manifesto.finalizado = False
             manifesto.data_finalizacao = None
-            manifesto.status = status_post
+            manifesto.status = status_post or 'EM_TRANSPORTE'
 
         # 5. Salva no Banco de Dados
         manifesto.save()

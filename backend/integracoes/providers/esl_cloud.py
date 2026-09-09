@@ -503,15 +503,15 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     if not mft_existente.data_finalizacao:
                         mft_existente.data_finalizacao = timezone.now()
                     mft_existente.save(update_fields=['status', 'status_tms', 'finalizado', 'data_finalizacao'])
-                    log.status = 'PROCESSADO'
-                    log.mensagem_erro = "Manifesto já finalizado no TMS. Atualizado localmente para finalizado."
+                    log.status = 'ERRO'
+                    log.mensagem_erro = f"O Manifesto #{numero_visual} já se encontra FINALIZADO no TMS (status 'closed')."
                     log.save(update_fields=['status', 'mensagem_erro'])
-                    logger.info(f"✅ Manifesto {numero_visual} sincronizado como finalizado (status 'closed' no TMS).")
+                    logger.info(f"🚫 Manifesto {numero_visual} já finalizado no TMS ('closed'). Log marcado como ERRO para informar o motorista.")
                     return
                 else:
                     log.status = 'ERRO'
-                    log.mensagem_erro = "Este manifesto já foi finalizado no TMS. Não é possível carregar um manifesto ativo."
-                    log.save()
+                    log.mensagem_erro = f"O Manifesto #{numero_visual} já se encontra FINALIZADO no TMS. Não é possível iniciar uma rota já encerrada."
+                    log.save(update_fields=['status', 'mensagem_erro'])
                     logger.warning(f"🚫 Manifesto {numero_visual} BLOQUEADO: status 'closed' no TMS.")
                     return
 
@@ -916,7 +916,53 @@ class ESLCloudAdapter(BaseTMSAdapter):
             except Exception as e:
                 logger.error(f"Erro ao tentar remover notas órfãs: {e}")
 
-            logger.info(f"✅ Manifesto {numero_visual} processado. Entregas/Transferências: {total_processadas}. Coletas: {total_coletas}")
+            # === VERIFICAÇÃO DE PENDÊNCIAS E AUTO-REABERTURA ===
+            notas_pendentes_count = NotaFiscal.objects.filter(manifesto=manifesto_obj, status='PENDENTE').count()
+            if notas_pendentes_count > 0 and status_tms != 'closed':
+                if manifesto_obj.finalizado or manifesto_obj.status == 'FINALIZADO':
+                    from datetime import timedelta
+                    data_ref_fim = manifesto_obj.data_finalizacao or manifesto_obj.data_criacao
+                    recente_24h = bool(data_ref_fim and (timezone.now() - data_ref_fim <= timedelta(hours=24)))
+                    outro_ativo = False
+                    if motorista:
+                        outro_ativo = Manifesto.objects.filter(
+                            motorista=motorista,
+                            status='EM_TRANSPORTE',
+                            finalizado=False
+                        ).exclude(id=manifesto_obj.id).exists()
+
+                    if recente_24h and not outro_ativo:
+                        manifesto_obj.status = 'EM_TRANSPORTE'
+                        manifesto_obj.finalizado = False
+                        manifesto_obj.data_finalizacao = None
+                        manifesto_obj.save(update_fields=['status', 'finalizado', 'data_finalizacao'])
+                        logger.info(f"🔄 [AUTO-REABERTURA BUSCA TMS] Manifesto #{numero_visual} REABERTO (<24h e sem outro ativo)! {notas_pendentes_count} nota(s) pendente(s).")
+
+                        try:
+                            if motorista and motorista.fcm_token:
+                                from common.tasks_notificacoes import notificar_atribuicao_manifesto
+                                notificar_atribuicao_manifesto(motorista, numero_visual, total_processadas + total_coletas)
+                        except Exception as push_err:
+                            logger.error(f"⚠️ Erro ao disparar Push FCM de reabertura busca TMS #{numero_visual}: {push_err}")
+                    else:
+                        manifesto_obj.status = 'FINALIZADO'
+                        manifesto_obj.finalizado = True
+                        manifesto_obj.save(update_fields=['status', 'finalizado'])
+            elif notas_pendentes_count == 0 and (status_tms == 'closed' or manifesto_obj.finalizado):
+                manifesto_obj.status = 'FINALIZADO'
+                manifesto_obj.finalizado = True
+                manifesto_obj.save(update_fields=['status', 'finalizado'])
+
+            if manifesto_obj.finalizado or manifesto_obj.status == 'FINALIZADO':
+                log.status = 'ERRO'
+                log.mensagem_erro = f"O Manifesto #{numero_visual} já se encontra FINALIZADO (todas as notas concluídas)."
+                log.save(update_fields=['status', 'mensagem_erro'])
+                logger.info(f"🚫 Manifesto {numero_visual} finalizado. Log de busca marcado como ERRO para alertar no app.")
+            else:
+                log.status = 'PROCESSADO'
+                log.mensagem_erro = None
+                log.save(update_fields=['status', 'mensagem_erro'])
+                logger.info(f"✅ Manifesto {numero_visual} processado e ativo com sucesso.")
 
             transaction.on_commit(lambda: enviar_painel(manifesto_obj))
 

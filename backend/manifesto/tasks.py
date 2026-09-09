@@ -354,14 +354,46 @@ def processar_webhook_manifesto_task(self, event_id):
 
             num_mani = num_visual
 
-            # 🛡️ TRAVA 1: MANIFESTO JÁ FINALIZADO OU CANCELADO NO APP (NÃO REABRE NEM ALTERA HISTÓRICO)
-            if manifesto_existente and manifesto_existente.status in ['FINALIZADO', 'CANCELADO']:
+            # 🛡️ TRAVA 1: MANIFESTO CANCELADO NO APP (NÃO REABRE NEM ALTERA HISTÓRICO)
+            if manifesto_existente and manifesto_existente.status == 'CANCELADO':
                 event.status = 'IGNORADO'
-                event.erro = f"Manifesto #{num_visual} já está {manifesto_existente.status} no app. Atualização via Webhook ignorada para proteger o histórico operacional."
+                event.erro = f"Manifesto #{num_visual} já está CANCELADO no app. Atualização via Webhook ignorada para proteger o histórico operacional."
                 event.processed_at = timezone.now()
                 event.save()
-                logger.info(f"🔒 [PROTEÇÃO] Manifesto #{num_visual} já está {manifesto_existente.status} no app. Webhook ignorado.")
-                return f"Manifesto #{num_visual} já finalizado/cancelado. Ignorado."
+                logger.info(f"🔒 [PROTEÇÃO] Manifesto #{num_visual} já está CANCELADO no app. Webhook ignorado.")
+                return f"Manifesto #{num_visual} já cancelado. Ignorado."
+
+            # Verifica se o manifesto estava previamente finalizado (auto-finalização precoce antes do envio de notas adicionais pela ESL)
+            era_finalizado = bool(manifesto_existente and (manifesto_existente.status == 'FINALIZADO' or manifesto_existente.finalizado))
+
+            # 🛡️ TRAVA 1.1: REGRAS RÍGIDAS PARA MANIFESTO PREVIAMENTE FINALIZADO
+            if era_finalizado:
+                # REGRA 1: Filtro de 24 horas (não reativa manifestos antigos de dias anteriores)
+                from datetime import timedelta
+                data_fim_ref = manifesto_existente.data_finalizacao or manifesto_existente.data_criacao
+                if data_fim_ref and (timezone.now() - data_fim_ref > timedelta(hours=24)):
+                    event.status = 'IGNORADO'
+                    event.erro = f"Manifesto #{num_visual} já foi finalizado há mais de 24 horas ({data_fim_ref.strftime('%d/%m/%Y %H:%M')}). Atualização tardia da ESL ignorada."
+                    event.processed_at = timezone.now()
+                    event.save()
+                    logger.info(f"🔒 [TRAVA 24H] Manifesto #{num_visual} finalizado há >24h ({data_fim_ref}). Webhook ignorado.")
+                    return f"Manifesto #{num_visual} finalizado há mais de 24h. Ignorado."
+
+                # REGRA 2: Motorista já possui OUTRO manifesto ativo em transporte?
+                # Se o motorista já está executando uma nova viagem ativa, não reabre a antiga
+                outro_em_transporte = Manifesto.objects.filter(
+                    motorista=motorista_obj,
+                    status='EM_TRANSPORTE',
+                    finalizado=False
+                ).exclude(id=manifesto_existente.id).first()
+
+                if outro_em_transporte:
+                    event.status = 'IGNORADO'
+                    event.erro = f"Manifesto #{num_visual} estava finalizado e o motorista '{motorista_obj.nome_completo}' já possui outro manifesto ativo em transporte (#{outro_em_transporte.numero_manifesto}). Webhook ignorado para evitar conflito."
+                    event.processed_at = timezone.now()
+                    event.save()
+                    logger.info(f"🔒 [TRAVA CONFLITO] Motorista {motorista_obj.nome_completo} já possui MFT #{outro_em_transporte.numero_manifesto} em transporte. Webhook #{num_visual} ignorado.")
+                    return f"Motorista já possui manifesto #{outro_em_transporte.numero_manifesto} em transporte ativo. Ignorado."
 
             # 🛡️ TRAVA 2: BASE/FILIAL INATIVA NO APP (Checa a base de operação real)
             base_checar = filial_operacao_obj or filial_obj
@@ -384,7 +416,8 @@ def processar_webhook_manifesto_task(self, event_id):
                 return f"Motorista '{motorista_obj.nome_completo}' sem usuário ativo. Pré-cadastro registrado, manifesto ignorado."
 
             # 🛡️ PRESERVAÇÃO DE STATUS EXISTENTE:
-            # - Se já existia (seja EM_TRANSPORTE ou AGUARDANDO), MANTÉM exatamente o status atual.
+            # - Se já existia (seja EM_TRANSPORTE, FINALIZADO ou AGUARDANDO), MANTÉM o status atual na carga inicial.
+            # - A transição para EM_TRANSPORTE se dará no pós-processamento somente se houver notas pendentes.
             # - Se for um manifesto novo, inicia como AGUARDANDO.
             status_novo = manifesto_existente.status if manifesto_existente else 'AGUARDANDO'
 
@@ -395,6 +428,7 @@ def processar_webhook_manifesto_task(self, event_id):
                 'status': status_novo,
                 'manifesto_id_tms': id_tms_final,
             }
+
             # Só vincula veículo se veio no payload ou ESL (não sobrescreve com None)
             if veiculo_obj:
                 manifesto_defaults['veiculo'] = veiculo_obj
@@ -625,6 +659,21 @@ def processar_webhook_manifesto_task(self, event_id):
             except Exception as e:
                 logger.error(f"Erro ao tentar remover notas órfãs no webhook: {e}")
 
+            # 🔄 AUTO-REABERTURA OU PRESERVAÇÃO DE FINALIZAÇÃO:
+            notas_pendentes_count = NotaFiscal.objects.filter(manifesto=manifesto_obj, status='PENDENTE').count()
+            if era_finalizado:
+                if notas_pendentes_count > 0:
+                    manifesto_obj.status = 'EM_TRANSPORTE'
+                    manifesto_obj.finalizado = False
+                    manifesto_obj.data_finalizacao = None
+                    manifesto_obj.save(update_fields=['status', 'finalizado', 'data_finalizacao'])
+                    logger.info(f"🔄 [AUTO-REABERTURA WEBHOOK] Manifesto #{num_mani} REABERTO! {notas_pendentes_count} nova(s) nota(s) pendente(s) da ESL.")
+                else:
+                    # Todas as notas já estavam concluídas/baixadas, mantém finalizado
+                    manifesto_obj.status = 'FINALIZADO'
+                    manifesto_obj.finalizado = True
+                    manifesto_obj.save(update_fields=['status', 'finalizado'])
+
             # 5. Criar Log de Auditoria/Visibilidade no Dashboard
             ManifestoBuscaLog.objects.update_or_create(
                 numero_manifesto=num_mani,
@@ -643,10 +692,10 @@ def processar_webhook_manifesto_task(self, event_id):
 
             # 📲 DISPARO INSTANTÂNEO DE NOTIFICAÇÃO PUSH (FCM) PARA O MOTORISTA (APK)
             try:
-                if motorista_obj and motorista_obj.fcm_token:
+                if motorista_obj and motorista_obj.fcm_token and (not era_finalizado or notas_pendentes_count > 0):
                     from common.tasks_notificacoes import notificar_atribuicao_manifesto
                     notificar_atribuicao_manifesto(motorista_obj, num_mani, count_notas)
-                    logger.info(f"📲 Push FCM de novo manifesto enviado com sucesso para {motorista_obj.nome_completo} (MFT: #{num_mani})")
+                    logger.info(f"📲 Push FCM de manifesto enviado com sucesso para {motorista_obj.nome_completo} (MFT: #{num_mani})")
             except Exception as push_err:
                 logger.error(f"⚠️ Erro ao disparar Notificação Push Webhook para MFT {num_mani}: {push_err}")
 
@@ -759,12 +808,40 @@ def processar_soap_task(self, evento_id):
 
         with transaction.atomic():
             manifesto_obj = Manifesto.objects.filter(numero_manifesto=numero_rota).first()
-            if manifesto_obj and manifesto_obj.status in ['FINALIZADO', 'CANCELADO']:
+            if manifesto_obj and manifesto_obj.status == 'CANCELADO':
                 evento.status = 'IGNORADO'
-                evento.erro = f"Manifesto #{numero_rota} ja esta {manifesto_obj.status} no app. Integracao ignorada."
+                evento.erro = f"Manifesto #{numero_rota} ja esta CANCELADO no app. Integracao ignorada."
                 evento.processed_at = timezone.now()
                 evento.save()
-                return f"Manifesto #{numero_rota} ja finalizado/cancelado."
+                return f"Manifesto #{numero_rota} ja cancelado."
+
+            era_finalizado_soap = bool(manifesto_obj and (manifesto_obj.status == 'FINALIZADO' or manifesto_obj.finalizado))
+
+            # 🛡️ TRAVA: REGRAS PARA MANIFESTO SOAP PREVIAMENTE FINALIZADO
+            if era_finalizado_soap:
+                from datetime import timedelta
+                data_fim_soap = manifesto_obj.data_finalizacao or manifesto_obj.data_criacao
+                if data_fim_soap and (timezone.now() - data_fim_soap > timedelta(hours=24)):
+                    evento.status = 'IGNORADO'
+                    evento.erro = f"Manifesto #{numero_rota} já finalizado há mais de 24 horas ({data_fim_soap.strftime('%d/%m/%Y %H:%M')}). Integração SOAP ignorada."
+                    evento.processed_at = timezone.now()
+                    evento.save()
+                    logger.info(f"🔒 [SOAP 24H] Manifesto #{numero_rota} finalizado há >24h. Ignorado.")
+                    return f"Manifesto #{numero_rota} finalizado há mais de 24h. Ignorado."
+
+                outro_em_transporte = Manifesto.objects.filter(
+                    motorista=motorista_obj,
+                    status='EM_TRANSPORTE',
+                    finalizado=False
+                ).exclude(id=manifesto_obj.id).first()
+
+                if outro_em_transporte:
+                    evento.status = 'IGNORADO'
+                    evento.erro = f"Manifesto #{numero_rota} estava finalizado e o motorista já possui outro manifesto ativo em transporte (#{outro_em_transporte.numero_manifesto}). Integração SOAP ignorada para evitar conflito."
+                    evento.processed_at = timezone.now()
+                    evento.save()
+                    logger.info(f"🔒 [SOAP CONFLITO] Motorista já tem MFT #{outro_em_transporte.numero_manifesto} em transporte. SOAP #{numero_rota} ignorado.")
+                    return f"Motorista já possui manifesto #{outro_em_transporte.numero_manifesto} em transporte ativo. Ignorado."
 
             # 🛡️ TRAVA: MOTORISTA NÃO CADASTRADO NO APP (APENAS PRÉ-CADASTRO)
             if not motorista_obj.user or not motorista_obj.user.is_active:
@@ -775,11 +852,16 @@ def processar_soap_task(self, evento_id):
                 logger.info(f"👤 [SOAP PRÉ-CADASTRO] Motorista '{motorista_obj.nome_completo}' ({cpf}) sem usuario ativo. Manifesto #{numero_rota} ignorado.")
                 return f"Motorista '{motorista_obj.nome_completo}' sem usuario ativo. Pre-cadastro registrado, manifesto ignorado."
 
-            status_novo = manifesto_obj.status if manifesto_obj else 'AGUARDANDO'
+            defaults_soap = {
+                'motorista': motorista_obj,
+                'filial': filial_obj,
+            }
+            if not manifesto_obj:
+                defaults_soap['status'] = 'AGUARDANDO'
 
             manifesto_obj, _ = Manifesto.objects.update_or_create(
                 numero_manifesto=numero_rota,
-                defaults={'motorista': motorista_obj, 'filial': filial_obj, 'status': status_novo}
+                defaults=defaults_soap
             )
 
             paradas = find_tag(rota_element, 'Paradas')
@@ -849,6 +931,20 @@ def processar_soap_task(self, evento_id):
                     logger.info(f"Removendo {qtd_removidas} notas orfas do manifesto SOAP {numero_rota}")
                     notas_removidas.delete()
 
+            # 4. Auto-Reabertura se o manifesto estava finalizado mas chegaram novas notas pendentes
+            notas_pendentes_count = NotaFiscal.objects.filter(manifesto=manifesto_obj, status='PENDENTE').count()
+            if era_finalizado_soap:
+                if notas_pendentes_count > 0:
+                    manifesto_obj.status = 'EM_TRANSPORTE'
+                    manifesto_obj.finalizado = False
+                    manifesto_obj.data_finalizacao = None
+                    manifesto_obj.save(update_fields=['status', 'finalizado', 'data_finalizacao'])
+                    logger.info(f"🔄 [AUTO-REABERTURA SOAP] Manifesto #{numero_rota} REABERTO! {notas_pendentes_count} nova(s) nota(s) pendente(s) da rota SOAP.")
+                else:
+                    manifesto_obj.status = 'FINALIZADO'
+                    manifesto_obj.finalizado = True
+                    manifesto_obj.save(update_fields=['status', 'finalizado'])
+
             ManifestoBuscaLog.objects.update_or_create(
                 numero_manifesto=numero_rota, motorista=motorista_obj,
                 defaults={'status': 'PROCESSADO', 'mensagem_erro': None, 'quantidade_notas': count_notas}
@@ -858,6 +954,15 @@ def processar_soap_task(self, evento_id):
         evento.status = 'PROCESSADO'
         evento.processed_at = timezone.now()
         evento.save()
+
+        # 📲 DISPARO DE NOTIFICAÇÃO PUSH (FCM) SE REABERTO OU NOVO
+        try:
+            if motorista_obj and motorista_obj.fcm_token and (not era_finalizado_soap or notas_pendentes_count > 0):
+                from common.tasks_notificacoes import notificar_atribuicao_manifesto
+                notificar_atribuicao_manifesto(motorista_obj, numero_rota, count_notas)
+                logger.info(f"📲 Push FCM de manifesto SOAP enviado para {motorista_obj.nome_completo} (MFT: #{numero_rota})")
+        except Exception as push_err:
+            logger.error(f"⚠️ Erro ao disparar Notificação Push SOAP para MFT {numero_rota}: {push_err}")
 
         # ⚡ Notifica Torre de Controle + SAC Live em tempo real
         try:

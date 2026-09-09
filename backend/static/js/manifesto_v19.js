@@ -360,12 +360,25 @@ async function handleManifestoSearch(event) {
             body: JSON.stringify({ numero_manifesto: numero }),
         });
 
+        let data = {};
+        try {
+            data = await response.json();
+        } catch (jsonErr) {
+            data = {};
+        }
+
         if (response.ok) {
             localStorage.setItem('manifesto_ativo', numero);
-            startPolling();
+            if (data.local) {
+                loadingModal?.hide();
+                renderEstruturaLista(numero);
+            } else {
+                startPolling();
+            }
         } else {
             loadingModal?.hide();
-            renderSearchScreen('Manifesto não encontrado ou erro no servidor.', 'error');
+            const msgErro = data.erro || data.mensagem || 'Manifesto não encontrado ou indisponível no servidor.';
+            renderSearchScreen(msgErro, 'error');
         }
     } catch (err) {
         loadingModal?.hide();
@@ -998,8 +1011,12 @@ async function verificarEstadoInicial() {
         } else {
             console.log("ℹ️ Nenhum manifesto ativo.");
             localStorage.removeItem('manifesto_ativo');
-            if (mID_salvo) localStorage.removeItem(`cache_notas_${mID_salvo}`);
-            renderSearchScreen(); // Agora sim, aqui ele mostra o input de busca
+            if (mID_salvo) {
+                localStorage.removeItem(`cache_notas_${mID_salvo}`);
+                renderSearchScreen(`O manifesto #${mID_salvo} foi finalizado ou não está mais ativo.`, 'info');
+            } else {
+                renderSearchScreen();
+            }
         }
     } catch (err) {
         console.warn("📡 Falha na verificação de status.");
