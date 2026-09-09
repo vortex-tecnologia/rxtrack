@@ -1282,17 +1282,61 @@ class ESLCloudAdapter(BaseTMSAdapter):
     def _buscar_freight_id_minuta(self, nf, ignorar_ids=None):
         """
         Busca o freight_id correto de uma Minuta na ESL Cloud usando múltiplos fallbacks:
-        1. invoice_occurrences pelo manifesto (tentando numero_manifesto e manifesto_id_tms com paginação)
-        2. Relatório de Fretes (Report 7693) buscando pelo número da nota/minuta
-        3. Objeto Frete vinculado no banco se tiver ID válido
+        1. Busca direta em /api/invoice_occurrences por invoice_number ou invoice_key
+        2. Busca em /api/invoice_occurrences pelo manifesto (com paginação 'start')
+        3. Relatório de Fretes (Report 7693) buscando pelo número da nota/minuta
         """
         ignorar = set(str(x).strip() for x in (ignorar_ids or []) if x)
         TOKEN = self.config.token_invoices
         manifesto = nf.manifesto
         numero_local = str(nf.numero_nota or '').strip()
         numero_local_limpo = numero_local.lstrip('0')
+        chave_local = str(nf.chave_acesso or '').strip()
 
-        # 1. Busca no endpoint de invoice_occurrences do manifesto
+        url_oc = f"https://{self.config.dominio_esl}/api/invoice_occurrences"
+        headers = {"Authorization": f"Bearer {TOKEN}"}
+
+        def _item_bate(item):
+            invoice = item.get("invoice") or {}
+            freight = item.get("freight") or {}
+            
+            num_inv = str(invoice.get("number") or "").strip()
+            key_inv = str(invoice.get("key") or "").strip()
+            seq_freight = str(freight.get("sequence_code") or "").strip()
+            cte_freight = str(freight.get("cte_number") or "").strip()
+
+            return (
+                (num_inv and (num_inv == numero_local or num_inv.lstrip('0') == numero_local_limpo)) or
+                (key_inv and (key_inv == numero_local or key_inv == chave_local or key_inv.lstrip('0') == numero_local_limpo)) or
+                (seq_freight and (seq_freight == numero_local or seq_freight.lstrip('0') == numero_local_limpo)) or
+                (cte_freight and (cte_freight == numero_local or cte_freight.lstrip('0') == numero_local_limpo))
+            )
+
+        # 1. Busca direta por invoice_number ou invoice_key na ESL (mais rápido e assertivo)
+        buscas_diretas = []
+        if numero_local:
+            buscas_diretas.append({"invoice_number": numero_local, "per": 50})
+            if numero_local_limpo and numero_local_limpo != numero_local:
+                buscas_diretas.append({"invoice_number": numero_local_limpo, "per": 50})
+        if chave_local and chave_local != numero_local:
+            buscas_diretas.append({"invoice_key": chave_local, "per": 50})
+
+        for p_dir in buscas_diretas:
+            try:
+                resp = requests.get(url_oc, headers=headers, params=p_dir, timeout=20)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for item in data.get("data", []):
+                        if _item_bate(item):
+                            freight = item.get("freight") or {}
+                            fid = freight.get("id")
+                            if fid and str(fid) not in ignorar:
+                                logger.info(f"🎯 [ESL MINUTA] Freight ID interno {fid} encontrado via busca direta ({p_dir}) para Minuta #{nf.numero_nota}")
+                                return str(fid)
+            except Exception as e_dir:
+                logger.warning(f"Aviso na busca direta de minuta ({p_dir}): {e_dir}")
+
+        # 2. Busca no endpoint de invoice_occurrences do manifesto com paginação correta ('start')
         ids_manifesto_para_tentar = []
         if manifesto:
             if manifesto.numero_manifesto:
@@ -1300,18 +1344,15 @@ class ESLCloudAdapter(BaseTMSAdapter):
             if manifesto.manifesto_id_tms and str(manifesto.manifesto_id_tms).strip() not in ids_manifesto_para_tentar:
                 ids_manifesto_para_tentar.append(str(manifesto.manifesto_id_tms).strip())
 
-        url_oc = f"https://{self.config.dominio_esl}/api/invoice_occurrences"
-        headers = {"Authorization": f"Bearer {TOKEN}"}
-
         for m_id in ids_manifesto_para_tentar:
             try:
-                next_id = None
-                for _ in range(5):  # até 5 páginas (250 registros)
+                start_id = None
+                for _ in range(5):  # até 5 páginas
                     params = {"manifest_id": str(m_id), "per": 50}
-                    if next_id:
-                        params["after_id"] = next_id
+                    if start_id:
+                        params["start"] = start_id
 
-                    resp = requests.get(url_oc, headers=headers, params=params, timeout=30)
+                    resp = requests.get(url_oc, headers=headers, params=params, timeout=25)
                     if resp.status_code != 200:
                         break
 
@@ -1321,53 +1362,50 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         break
 
                     for item in itens:
-                        invoice = item.get("invoice") or {}
-                        freight = item.get("freight") or {}
-
-                        num_inv = str(invoice.get("number") or "").strip()
-                        seq_freight = str(freight.get("sequence_code") or "").strip()
-                        cte_freight = str(freight.get("cte_number") or "").strip()
-
-                        bate_numero = (
-                            (num_inv and (num_inv == numero_local or num_inv.lstrip('0') == numero_local_limpo)) or
-                            (seq_freight and (seq_freight == numero_local or seq_freight.lstrip('0') == numero_local_limpo)) or
-                            (cte_freight and (cte_freight == numero_local or cte_freight.lstrip('0') == numero_local_limpo))
-                        )
-
-                        if bate_numero:
-                            fid = freight.get("id") or freight.get("sequence_code")
+                        if _item_bate(item):
+                            freight = item.get("freight") or {}
+                            fid = freight.get("id")
                             if fid and str(fid) not in ignorar:
-                                logger.info(f"🎯 [ESL MINUTA] Freight ID encontrado via invoice_occurrences (Manifesto {m_id}): {fid} para Minuta #{nf.numero_nota}")
+                                logger.info(f"🎯 [ESL MINUTA] Freight ID interno {fid} encontrado via manifesto {m_id} para Minuta #{nf.numero_nota}")
                                 return str(fid)
 
                     paging = data.get("paging") or {}
-                    next_id = paging.get("next_id")
-                    if not next_id or next_id >= paging.get("last_id", 0):
+                    start_id = paging.get("next_id")
+                    if not start_id or start_id >= paging.get("last_id", 0):
                         break
             except Exception as e_oc:
                 logger.warning(f"Erro ao buscar invoice_occurrences para manifesto {m_id}: {e_oc}")
 
-        # 2. Fallback: Busca no Relatório de Fretes (Report 7693)
+        # 3. Fallback: Busca no Relatório de Fretes (Report 7693)
         try:
             token_geral = self.config.token_analytics or TOKEN
             dados_frete = self.buscar_dados_frete_report_7693(
-                chave=None, 
+                chave=chave_local or None, 
                 numero=numero_local, 
                 token=token_geral
             )
             if dados_frete:
-                fid = dados_frete.get("id") or dados_frete.get("sequence_code")
+                # Procura explicitamente pelo ID interno da ESL (fit_fhe_id ou id)
+                fid = dados_frete.get("fit_fhe_id") or dados_frete.get("id") or dados_frete.get("freight_id")
                 if fid and str(fid) not in ignorar:
-                    logger.info(f"🎯 [ESL MINUTA] Freight ID encontrado via Report 7693: {fid} para Minuta #{nf.numero_nota}")
+                    logger.info(f"🎯 [ESL MINUTA] Freight ID interno encontrado via Report 7693: {fid} para Minuta #{nf.numero_nota}")
                     return str(fid)
+                
+                # Se o relatório só tem cte_number, tenta buscar o ID interno via cte_number em invoice_occurrences
+                cte_num = dados_frete.get("fit_fhe_cte_number")
+                if cte_num:
+                    try:
+                        r_cte = requests.get(url_oc, headers=headers, params={"cte_number": str(cte_num)}, timeout=20)
+                        if r_cte.status_code == 200:
+                            for it in r_cte.json().get("data", []):
+                                f_id = (it.get("freight") or {}).get("id")
+                                if f_id and str(f_id) not in ignorar:
+                                    logger.info(f"🎯 [ESL MINUTA] Freight ID interno {f_id} obtido via CT-e {cte_num}")
+                                    return str(f_id)
+                    except Exception:
+                        pass
         except Exception as e_rep:
             logger.warning(f"Erro ao buscar minuta no Report 7693: {e_rep}")
-
-        # 3. Fallback: Se nf.frete tiver freight_id_tms válido
-        if nf.frete and nf.frete.freight_id_tms:
-            fid = str(nf.frete.freight_id_tms).strip()
-            if fid and fid not in ignorar and (not fid.isdigit() or int(fid) >= 100):
-                return fid
 
         return None
 
@@ -1444,7 +1482,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             data_ocorrencia_str = baixa.data_baixa.astimezone(fuso_br).strftime('%Y-%m-%dT%H:%M:%S.000-03:00')
             motorista = manifesto.motorista.nome_completo if (manifesto and manifesto.motorista) else "Motorista não identificado"
 
-            # 📦 MONTA O PAYLOAD ANTECIPADAMENTE (Garante que baixa.payload_enviado NUNCA seja null!)
+            # 📦 MONTA O PAYLOAD BASE (comprovante incluído se existir)
             payload = {
                 "invoice_occurrence": {
                     "receiver": baixa.recebedor or "Nao identificado",
@@ -1458,6 +1496,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     }
                 }
             }
+            if baixa.comprovante_foto_url:
+                payload["invoice_occurrence"]["delivery_receipt_url"] = baixa.comprovante_foto_url
 
             baixa.payload_enviado = {
                 **payload,
@@ -1474,11 +1514,27 @@ class ESLCloudAdapter(BaseTMSAdapter):
             }
             baixa.save(update_fields=['payload_enviado'])
 
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {TOKEN}"
+            }
+
+            response = None
+            sucesso = False
+            msg_sucesso = ""
+            url_tentada = ""
+
+            # --- ESTRATÉGIA 1: TENTATIVA VIA ENDPOINT DE FRETE V1 (/api/v1/freights/{id}/invoice_occurrences) ---
             freight_id = nf.freight_id_tms
-            # Se freight_id for ausente ou suspeito (ex: número sequencial de parada 1, 2, 3...)
-            id_suspeito = not freight_id or (str(freight_id).isdigit() and int(freight_id) < 100)
+            # Identifica ID ausente ou suspeito (menor que 100, ou igual ao número da própria nota/chave)
+            id_suspeito = (
+                not freight_id or 
+                (str(freight_id).isdigit() and int(freight_id) < 100) or
+                (str(freight_id).strip() == str(nf.numero_nota).strip()) or
+                (nf.chave_acesso and str(freight_id).strip() == str(nf.chave_acesso).strip())
+            )
             if id_suspeito:
-                logger.info(f"Minuta {nf.numero_nota}: freight_id '{freight_id}' ausente/suspeito. Buscando ID real na ESL...")
+                logger.info(f"Minuta {nf.numero_nota}: freight_id '{freight_id}' ausente/suspeito. Buscando ID interno real na ESL...")
                 novo_fid = self._buscar_freight_id_minuta(nf, ignorar_ids=[freight_id] if freight_id else [])
                 if novo_fid:
                     freight_id = novo_fid
@@ -1486,42 +1542,108 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     nf.save(update_fields=['freight_id_tms'])
                     logger.info(f"Minuta {nf.numero_nota}: freight_id real encontrado = {freight_id}")
 
-            if not freight_id:
-                msg_falta_id = (
-                    f"Minuta #{nf.numero_nota} sem freight_id: não foi possível localizar o ID do Frete "
-                    f"correspondente na ESL Cloud (Manifesto #{manifesto.numero_manifesto if manifesto else 'N/A'})."
+            if freight_id:
+                URL_ESL_FRETE = f"https://{self.config.dominio_esl}/api/v1/freights/{freight_id}/invoice_occurrences"
+                url_tentada = URL_ESL_FRETE
+                logger.info(f"🚀 [ESL TRANSMISSÃO MINUTA V1] Minuta NF: {nf.numero_nota} | Freight ID: {freight_id} -> {URL_ESL_FRETE}")
+                try:
+                    res_frete = requests.post(URL_ESL_FRETE, json=payload, headers=headers, timeout=30)
+                    if res_frete.status_code in [200, 201]:
+                        response = res_frete
+                        sucesso = True
+                        msg_sucesso = f"Sucesso: Baixa de Minuta integrada via Freight ID {freight_id}"
+                    elif res_frete.status_code == 404:
+                        logger.warning(f"⚠️ Freight ID {freight_id} retornou 404 na ESL para Minuta {nf.numero_nota}. Buscando ID alternativo...")
+                        novo_fid = self._buscar_freight_id_minuta(nf, ignorar_ids=[freight_id])
+                        if novo_fid and novo_fid != freight_id:
+                            freight_id = novo_fid
+                            nf.freight_id_tms = novo_fid
+                            nf.save(update_fields=['freight_id_tms'])
+                            URL_ESL_FRETE_NOVO = f"https://{self.config.dominio_esl}/api/v1/freights/{freight_id}/invoice_occurrences"
+                            url_tentada = URL_ESL_FRETE_NOVO
+                            res_frete_novo = requests.post(URL_ESL_FRETE_NOVO, json=payload, headers=headers, timeout=30)
+                            if res_frete_novo.status_code in [200, 201]:
+                                response = res_frete_novo
+                                sucesso = True
+                                msg_sucesso = f"Sucesso: Baixa de Minuta integrada via Freight ID {freight_id}"
+                            else:
+                                response = res_frete_novo
+                        else:
+                            response = res_frete
+                    else:
+                        response = res_frete
+                except Exception as e_post_frete:
+                    logger.warning(f"Exceção no envio via Freight ID {freight_id}: {e_post_frete}")
+
+            # --- ESTRATÉGIA 2: FALLBACK PARA ENDPOINT GERAL (/api/invoice_occurrences) ---
+            # Se a tentativa de frete não deu sucesso (404 ou sem freight_id), tenta o endpoint geral de notas
+            if not sucesso:
+                URL_ESL_NOTAS = f"https://{self.config.dominio_esl}/api/invoice_occurrences"
+                logger.info(f"🔄 [FALLBACK MINUTA] Tentando endpoint geral {URL_ESL_NOTAS} para Minuta #{nf.numero_nota}...")
+                
+                # Tentativa 2.1: Enviar com a chave cadastrada (mesmo curta, como '2373')
+                if nf.chave_acesso:
+                    payload_chave = {
+                        "invoice_occurrence": {
+                            **payload["invoice_occurrence"],
+                            "invoice": {
+                                "key": str(nf.chave_acesso),
+                                "delivery_receipt_url": baixa.comprovante_foto_url or ""
+                            }
+                        }
+                    }
+                    if manifesto and manifesto.manifesto_id_tms and str(manifesto.manifesto_id_tms).isdigit():
+                        payload_chave["invoice_occurrence"]["manifest"] = {"id": int(manifesto.manifesto_id_tms)}
+
+                    url_tentada = URL_ESL_NOTAS
+                    try:
+                        res_chave = requests.post(URL_ESL_NOTAS, json=payload_chave, headers=headers, timeout=30)
+                        if res_chave.status_code in [200, 201]:
+                            response = res_chave
+                            sucesso = True
+                            msg_sucesso = f"Sucesso: Baixa de Minuta integrada via /api/invoice_occurrences (chave: {nf.chave_acesso})"
+                        elif res_chave.status_code == 422:
+                            response = res_chave
+                    except Exception as e_chave:
+                        logger.warning(f"Aviso no envio por chave em invoice_occurrences: {e_chave}")
+
+                # Tentativa 2.2: Enviar com o número do documento
+                if not sucesso:
+                    payload_num = {
+                        "invoice_occurrence": {
+                            **payload["invoice_occurrence"],
+                            "invoice": {
+                                "number": str(nf.numero_nota),
+                                "delivery_receipt_url": baixa.comprovante_foto_url or ""
+                            }
+                        }
+                    }
+                    if manifesto and manifesto.manifesto_id_tms and str(manifesto.manifesto_id_tms).isdigit():
+                        payload_num["invoice_occurrence"]["manifest"] = {"id": int(manifesto.manifesto_id_tms)}
+
+                    url_tentada = URL_ESL_NOTAS
+                    try:
+                        res_num = requests.post(URL_ESL_NOTAS, json=payload_num, headers=headers, timeout=30)
+                        if res_num.status_code in [200, 201]:
+                            response = res_num
+                            sucesso = True
+                            msg_sucesso = f"Sucesso: Baixa de Minuta integrada via /api/invoice_occurrences (número: {nf.numero_nota})"
+                        elif res_num.status_code == 422 or not response:
+                            response = res_num
+                    except Exception as e_num:
+                        logger.warning(f"Aviso no envio por número em invoice_occurrences: {e_num}")
+
+            if not response:
+                raise Exception(
+                    f"Minuta #{nf.numero_nota} sem freight_id válido e nenhuma rota de integração foi concluída (Manifesto #{manifesto.numero_manifesto if manifesto else 'N/A'})."
                 )
-                raise Exception(msg_falta_id)
-
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {TOKEN}"
-            }
-
-            URL_ESL_FRETE = f"https://{self.config.dominio_esl}/api/v1/freights/{freight_id}/invoice_occurrences"
-            logger.info(f"🚀 [ESL TRANSMISSÃO MINUTA V1] Minuta NF: {nf.numero_nota} | Freight ID: {freight_id} -> {URL_ESL_FRETE}")
-            logger.info(f"Payload: {json.dumps(payload)}")
-
-            response = requests.post(URL_ESL_FRETE, json=payload, headers=headers, timeout=30)
-
-            # 🔄 RECUPERAÇÃO AUTOMÁTICA DE 404: Se o freight_id atual deu 404, ele é inválido na ESL!
-            if response.status_code == 404:
-                logger.warning(f"⚠️ Freight ID {freight_id} retornou 404 na ESL para Minuta {nf.numero_nota}. Buscando ID correto na ESL...")
-                novo_fid = self._buscar_freight_id_minuta(nf, ignorar_ids=[freight_id])
-                if novo_fid and novo_fid != freight_id:
-                    logger.info(f"🔄 Novo freight_id encontrado para Minuta {nf.numero_nota}: {novo_fid}. Reenviando com ID correto...")
-                    freight_id = novo_fid
-                    nf.freight_id_tms = novo_fid
-                    nf.save(update_fields=['freight_id_tms'])
-                    URL_ESL_FRETE_NOVO = f"https://{self.config.dominio_esl}/api/v1/freights/{freight_id}/invoice_occurrences"
-                    response = requests.post(URL_ESL_FRETE_NOVO, json=payload, headers=headers, timeout=30)
 
             response.raise_for_status()
 
             baixa.processado_tms = True
             baixa.integrado_tms = True
             baixa.data_integracao = timezone.now()
-            baixa.log_erro_tms = f"Sucesso: Baixa de Minuta integrada via Freight ID {freight_id}"
+            baixa.log_erro_tms = msg_sucesso or f"Sucesso: Baixa de Minuta integrada (Freight: {freight_id})"
             baixa.save()
             
             try:
@@ -1531,7 +1653,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             except Exception as auto_e:
                 logger.error(f"Erro auto-resolucao minuta: {auto_e}")
             
-            return f"Baixa de Minuta {nf.numero_nota} enviada com sucesso (Freight: {freight_id})."
+            return f"Baixa de Minuta {nf.numero_nota} enviada com sucesso ({msg_sucesso})."
 
         except Exception as e:
             payload_str = f" | Payload: {json.dumps(payload)}" if payload else ""
@@ -1572,9 +1694,10 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 
                 return f"Baixa de Minuta {nf.numero_nota if nf else baixa_id} integrada (Já existia no TMS)."
 
-            msg_falha = f"Erro na integração da Minuta: {str(e)}{payload_str}"
+            info_url = f" [URL: {url_tentada}]" if url_tentada else ""
+            msg_falha = f"Erro na integração da Minuta{info_url}: {str(e)}{payload_str}"
             if status_code:
-                msg_falha = f"Erro na integração da Minuta ({status_code}): {response_text}{payload_str}"
+                msg_falha = f"Erro na integração da Minuta ({status_code}){info_url}: {response_text}{payload_str}"
             
             if baixa:
                 baixa.log_erro_tms = msg_falha[:500]
