@@ -98,14 +98,24 @@ def obter_codigo_ocorrencia_seguro(codigo_tms_val, tipo_operacao=None, nota_fisc
 
 
 def _is_chave_nfe_valida(chave):
-    """Verifica se a chave de acesso é uma chave NF-e válida (44 dígitos numéricos).
-    A ESL pode retornar valores curtos (ex: número da nota) no campo 'key' para minutas,
-    que NÃO são chaves de acesso válidas e não funcionam no endpoint de NF-e.
+    """Verifica se a chave de acesso é uma chave NF-e/NFC-e válida (44 dígitos numéricos, modelo 55 ou 65).
+    Chaves com modelo 99 são Minutas / Documentos Não Fiscais / Outros.
+    Chaves com modelo 57 são CT-e (Conhecimento de Transporte).
+    Valores curtos são números de nota ou IDs internos.
     """
     if not chave:
         return False
     chave_str = str(chave).strip()
-    return len(chave_str) == 44 and chave_str.isdigit()
+    if len(chave_str) != 44 or not chave_str.isdigit():
+        return False
+    
+    # Posições 20 a 22 (0-indexed: [20:22]) contêm o modelo fiscal na chave SEFAZ de 44 dígitos:
+    # 55 = NF-e (Nota Fiscal Eletrônica de mercadorias)
+    # 65 = NFC-e (Nota Fiscal ao Consumidor Eletrônica)
+    # 99 = Minuta / Declaração / Não Fiscal (deve ser tratada como Minuta/Frete na ESL)
+    # 57 = CT-e (Conhecimento de Transporte Eletrônico)
+    modelo = chave_str[20:22]
+    return modelo in ('55', '65')
 
 
 class ESLCloudAdapter(BaseTMSAdapter):
@@ -1113,6 +1123,43 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 headers=headers,
                 timeout=30
             )
+
+            # --- AUTO-RECUPERAÇÃO DE ERRO 404 NA TRANSMISSÃO DE NF-e ---
+            if response.status_code == 404:
+                logger.warning(f"⚠️ [ESL 404] NF #{nf.numero_nota} retornou 404 na ESL. Iniciando auto-recuperação...")
+                
+                # Tentativa 1: Reenviar sem o bloco 'manifest'
+                # Se manifesto_id_tms for o sequence_code visual e não o ID interno, a ESL rejeita com 404 Not Found
+                if "manifest" in payload.get("invoice_occurrence", {}):
+                    logger.info(f"🔄 Tentativa 1: Reenviando NF #{nf.numero_nota} sem o campo manifest...")
+                    import copy
+                    payload_sem_m = copy.deepcopy(payload)
+                    payload_sem_m["invoice_occurrence"].pop("manifest", None)
+                    res_sem_m = requests.post(URL_ESL, json=payload_sem_m, headers=headers, timeout=30)
+                    if res_sem_m.status_code in [200, 201]:
+                        response = res_sem_m
+                        logger.info(f"✅ NF #{nf.numero_nota} integrada com sucesso sem vincular manifest!")
+                
+                # Tentativa 2: Reenviar por número da nota (caso a ESL não encontre pela chave enviada)
+                if response.status_code == 404 and nf.numero_nota:
+                    logger.info(f"🔄 Tentativa 2: Reenviando por número da nota ({nf.numero_nota})...")
+                    import copy
+                    payload_num = copy.deepcopy(payload)
+                    payload_num["invoice_occurrence"]["invoice"] = {
+                        "number": str(nf.numero_nota),
+                        "delivery_receipt_url": url_foto or ""
+                    }
+                    payload_num["invoice_occurrence"].pop("manifest", None)
+                    res_num = requests.post(URL_ESL, json=payload_num, headers=headers, timeout=30)
+                    if res_num.status_code in [200, 201]:
+                        response = res_num
+                        logger.info(f"✅ NF #{nf.numero_nota} integrada com sucesso por número da nota!")
+
+                # Tentativa 3: Se ainda for 404, redireciona para a rota de Minutas/Fretes
+                # (O documento pode estar cadastrado na ESL como Frete/Minuta e não como Invoice tradicional)
+                if response.status_code == 404:
+                    logger.warning(f"🔄 Tentativa 3: NF #{nf.numero_nota} não encontrada no endpoint geral. Redirecionando para enviar_baixa_minuta...")
+                    return self.enviar_baixa_minuta(baixa_id, task=task)
             
             response.raise_for_status()
 
@@ -2070,7 +2117,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
             # Define se a operação é por Frete (CT-e/Minuta/Despacho) ou por Invoice (NF-e)
             tipo_op = str(nf.tipo_operacao or '').strip().upper()
-            is_operacao_frete = tipo_op in ['DESPACHO', 'TRANSFERENCIA', 'FRETE'] or (not nf.chave_acesso)
+            tem_chave_nfe = _is_chave_nfe_valida(nf.chave_acesso)
+            is_operacao_frete = tipo_op in ['DESPACHO', 'TRANSFERENCIA', 'FRETE'] or (not tem_chave_nfe)
 
             chave_cte = nf.chave_cte or (nf.frete.chave_cte if (hasattr(nf, 'frete') and nf.frete) else None) or nf.numero_cte
 
@@ -2086,8 +2134,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     }
                 }
                 logger.info(f"📸 [ESL COMPROVANTE FRETE/CT-E] Enviando comprovante da Nota #{nf.numero_nota} (Chave CT-e: {chave_cte})")
-            elif nf.chave_acesso:
-                # 📍 Endpoint 2: Cadastrar Comprovante de Entrega por NF-e (Invoice)
+            elif tem_chave_nfe:
+                # 📍 Endpoint 2: Cadastrar Comprovante de Entrega por NF-e (Invoice modelo 55/65)
                 url_esl = f"https://{self.config.dominio_esl}/api/freight_invoice_delivery_receipts"
                 payload = {
                     "freight_invoice_delivery_receipt": {
@@ -2110,8 +2158,18 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     }
                 }
                 logger.info(f"📸 [ESL COMPROVANTE FRETE] Enviando comprovante da Nota #{nf.numero_nota} (Chave CT-e: {chave_cte})")
+            elif is_operacao_frete:
+                # Minutas sem CT-e: O comprovante é enviado embutido diretamente no endpoint de ocorrência de Minutas
+                msg_ok = f"Sucesso: Comprovante de Minuta #{nf.numero_nota} vinculado via ocorrência."
+                baixa.processado_tms = True
+                baixa.integrado_tms = True
+                baixa.log_erro_tms = msg_ok
+                baixa.data_integracao = timezone.now()
+                baixa.save(update_fields=['processado_tms', 'integrado_tms', 'log_erro_tms', 'data_integracao'])
+                logger.info(f"✅ {msg_ok}")
+                return msg_ok
             else:
-                msg = f"Nota #{nf.numero_nota} sem chave_acesso nem chave_cte para envio do comprovante ao TMS."
+                msg = f"Nota #{nf.numero_nota} sem chave NF-e nem chave CT-e válida para envio isolado de comprovante."
                 logger.warning(msg)
                 baixa.log_erro_tms = msg
                 baixa.save(update_fields=['log_erro_tms'])
