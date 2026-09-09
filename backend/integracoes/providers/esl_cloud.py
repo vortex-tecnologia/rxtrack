@@ -1572,7 +1572,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             url_tentada = ""
 
             # --- ESTRATÉGIA 1: TENTATIVA VIA ENDPOINT DE FRETE V1 (/api/v1/freights/{id}/invoice_occurrences) ---
-            freight_id = nf.freight_id_tms
+            freight_id = nf.freight_id_tms or (nf.frete.freight_id_tms if (hasattr(nf, 'frete') and nf.frete) else None)
             # Identifica ID ausente ou suspeito (menor que 100, ou igual ao número da própria nota/chave)
             id_suspeito = (
                 not freight_id or 
