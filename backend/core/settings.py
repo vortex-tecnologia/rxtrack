@@ -28,6 +28,7 @@ CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(',') if o.strip()
 
 SHARED_APPS = [
     'django_tenants',          # 1º: Obrigatório primeiro para roteamento
+    'core',                    # Comandos de gestão e admin
     'tenants',                 # Novo app de gestão de clientes/domínios
     'tutoriais',               # Novo app de vídeos de treinamento compartilhados
     'blog',                    # App compartilhado de blog e lançamentos da plataforma
