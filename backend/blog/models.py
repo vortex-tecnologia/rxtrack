@@ -117,3 +117,107 @@ class PostBlog(models.Model):
         if self.imagem_url:
             return self.imagem_url
         return '/static/images/megafone_3d.png'
+
+
+class AlertaSistema(models.Model):
+    """
+    Model Global (SHARED_APP / schema public).
+    Alertas Operacionais e Notificações Globais da Plataforma.
+    Permite aos administradores emitir avisos sobre instabilidades ou comunicados técnicos
+    filtrados por provedor TMS (ex: ESL, Brudam, Todos) ou schemas específicos.
+    """
+    TIPO_CHOICES = [
+        ('PERIGO', '🔴 Intermitência / Falha Crítica'),
+        ('AVISO', '🟡 Atenção / Instabilidade Parcial'),
+        ('INFO', '🔵 Informativo / Comunicado'),
+        ('SUCESSO', '🟢 Normalizado / Resolvido'),
+    ]
+
+    TMS_ALVO_CHOICES = [
+        ('TODOS', '🌐 Todos os Provedores (Geral)'),
+        ('esl_cloud', '⚡ ESL Cloud'),
+        ('brudam', '🚚 Brudam TMS'),
+        ('totvs', '🏢 TOTVS'),
+        ('sap_tm', '💼 SAP TM'),
+        ('intelipost', '📦 Intelipost'),
+        ('nenhum', '⚪ Sem integração TMS'),
+    ]
+
+    titulo = models.CharField(
+        max_length=200,
+        verbose_name="Título do Alerta",
+        help_text="Ex: Instabilidade na integração com ESL Cloud (Despacho / Transferência)"
+    )
+    tipo = models.CharField(
+        max_length=20,
+        choices=TIPO_CHOICES,
+        default='AVISO',
+        verbose_name="Severidade / Tipo"
+    )
+    tms_alvo = models.CharField(
+        max_length=30,
+        choices=TMS_ALVO_CHOICES,
+        default='TODOS',
+        verbose_name="Provedor TMS Afetado",
+        help_text="Selecione qual sistema TMS receberá este alerta. Se 'Todos', todos os clientes verão."
+    )
+    schemas_especificos = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+        verbose_name="Schemas Específicos (Opcional)",
+        help_text="Deixe em branco para todos os clientes do provedor selecionado. Ou separe schemas por vírgula (ex: rdexpresso, homolog)"
+    )
+    conteudo_html = models.TextField(
+        verbose_name="Conteúdo Detalhado (HTML)",
+        help_text="Escreva a mensagem em HTML com explicações, passos a tomar, prazos e orientações."
+    )
+    ativo = models.BooleanField(
+        default=True,
+        verbose_name="Alerta Ativo / Visível",
+        help_text="Se desmarcado, o ícone flutuante desaparece imediatamente para todos."
+    )
+    fixar_topo = models.BooleanField(
+        default=False,
+        verbose_name="Alta Prioridade (Glow / Pulsação)",
+        help_text="Se marcado, força animação de pulsação contínua e destaque no ícone flutuante."
+    )
+    data_criacao = models.DateTimeField(
+        default=timezone.now,
+        verbose_name="Data de Criação"
+    )
+    data_expiracao = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name="Data/Hora de Expiração Automática (Opcional)",
+        help_text="Se preenchido, o alerta deixará de ser exibido automaticamente após esse horário."
+    )
+
+    class Meta:
+        verbose_name = "Alerta do Sistema (Notificação Global)"
+        verbose_name_plural = "Alertas do Sistema (Notificações Globais)"
+        ordering = ['-fixar_topo', '-data_criacao', '-id']
+
+    def __str__(self):
+        return f"[{self.get_tipo_display()}] {self.titulo} ({self.get_tms_alvo_display()})"
+
+    @property
+    def cor_badge(self):
+        mapa = {
+            'PERIGO': 'danger',
+            'AVISO': 'warning',
+            'INFO': 'primary',
+            'SUCESSO': 'success'
+        }
+        return mapa.get(self.tipo, 'warning')
+
+    @property
+    def icone_bootstrap(self):
+        mapa = {
+            'PERIGO': 'bi-exclamation-octagon-fill',
+            'AVISO': 'bi-exclamation-triangle-fill',
+            'INFO': 'bi-info-circle-fill',
+            'SUCESSO': 'bi-check-circle-fill'
+        }
+        return mapa.get(self.tipo, 'bi-exclamation-triangle-fill')
+

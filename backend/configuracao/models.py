@@ -112,6 +112,7 @@ class ConfiguracaoSistema(models.Model):
     # ===== PROVEDOR TMS =====
     TMS_CHOICES = [
         ('esl_cloud', 'ESL Cloud'),
+        ('brudam', 'Brudam TMS'),
         ('totvs', 'TOTVS'),
         ('sap_tm', 'SAP TM'),
         ('intelipost', 'Intelipost'),
