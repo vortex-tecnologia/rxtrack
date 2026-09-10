@@ -46,6 +46,11 @@ class BuscarManifestoView(APIView):
 
                     # CASO 2: FINALIZADO (ou com trava finalizado=True)
                     if manifesto_existente.finalizado or manifesto_existente.status == 'FINALIZADO':
+                        if getattr(manifesto_existente, 'status_tms', '') == 'closed':
+                            return Response({
+                                'erro': f"O Manifesto #{manifesto_existente.numero_manifesto} consta como FINALIZADO no TMS (sistema central). Não é possível iniciar ou reabrir esta rota."
+                            }, status=400)
+
                         notas_pendentes_qs = NotaFiscal.objects.filter(
                             manifesto=manifesto_existente,
                             status='PENDENTE',

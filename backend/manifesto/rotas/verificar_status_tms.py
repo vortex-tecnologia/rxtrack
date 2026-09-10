@@ -80,7 +80,20 @@ class VerificarStatusTmsView(APIView):
             atualizado = False
             if novo_status != manifesto.status_tms and novo_status in ('pending', 'in_transit', 'closed'):
                 manifesto.status_tms = novo_status
-                manifesto.save(update_fields=['status_tms'])
+                if novo_status == 'closed':
+                    from django.utils import timezone
+                    manifesto.status = 'FINALIZADO'
+                    manifesto.finalizado = True
+                    if not manifesto.data_finalizacao:
+                        manifesto.data_finalizacao = timezone.now()
+                    manifesto.save(update_fields=['status_tms', 'status', 'finalizado', 'data_finalizacao'])
+                    try:
+                        from manifesto.services import enviar_painel
+                        enviar_painel(manifesto)
+                    except Exception as p_err:
+                        logger.warning(f"Erro ao enviar painel no verificar status closed: {p_err}")
+                else:
+                    manifesto.save(update_fields=['status_tms'])
                 atualizado = True
                 logger.info(f"✅ Status TMS do manifesto {numero} atualizado para '{novo_status}'")
 
@@ -94,6 +107,7 @@ class VerificarStatusTmsView(APIView):
             return Response({
                 'status_tms': novo_status,
                 'atualizado': atualizado,
+                'fechar_app': novo_status == 'closed',
                 'whatsapp_operacional': whatsapp_operacional,
                 'nome_filial': nome_filial,
             })
@@ -108,3 +122,41 @@ class VerificarStatusTmsView(APIView):
         except Exception as e:
             logger.error(f"Erro ao verificar status TMS: {e}")
             return Response({'erro': str(e)}, status=500)
+
+
+class EncerrarManifestoFechadoTmsView(APIView):
+    """
+    Endpoint chamado pelo app para forçar o encerramento do manifesto local
+    quando detectado que o mesmo já foi finalizado/fechado no TMS.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from django.utils import timezone
+        numero = request.data.get('numero_manifesto')
+        if not numero:
+            return Response({'erro': 'Número do manifesto é obrigatório.'}, status=400)
+
+        manifesto = Manifesto.objects.filter(numero_manifesto=str(numero)).first()
+        if not manifesto:
+            return Response({'erro': 'Manifesto não encontrado.'}, status=404)
+
+        manifesto.status = 'FINALIZADO'
+        manifesto.finalizado = True
+        manifesto.status_tms = 'closed'
+        if not manifesto.data_finalizacao:
+            manifesto.data_finalizacao = timezone.now()
+        manifesto.save(update_fields=['status', 'finalizado', 'status_tms', 'data_finalizacao'])
+
+        try:
+            from manifesto.services import enviar_painel
+            enviar_painel(manifesto)
+        except Exception as e:
+            logger.warning(f"Erro ao enviar painel no encerramento fechado TMS: {e}")
+
+        logger.info(f"🏁 [ENCERRAMENTO TMS] Manifesto #{numero} finalizado no banco por detecção de encerramento no TMS.")
+        return Response({
+            'sucesso': True,
+            'mensagem': f'Manifesto #{numero} encerrado com sucesso.'
+        })
+

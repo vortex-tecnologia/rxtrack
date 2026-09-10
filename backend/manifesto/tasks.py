@@ -395,6 +395,15 @@ def processar_webhook_manifesto_task(self, event_id):
                     logger.info(f"🔒 [TRAVA CONFLITO] Motorista {motorista_obj.nome_completo} já possui MFT #{outro_em_transporte.numero_manifesto} em transporte. Webhook #{num_visual} ignorado.")
                     return f"Motorista já possui manifesto #{outro_em_transporte.numero_manifesto} em transporte ativo. Ignorado."
 
+                # REGRA 3: Status no TMS é 'closed' (finalizado no próprio TMS)
+                if getattr(manifesto_existente, 'status_tms', '') == 'closed':
+                    event.status = 'IGNORADO'
+                    event.erro = f"Manifesto #{num_visual} consta como FINALIZADO no TMS (status_tms='closed'). Atualização tardia da ESL ignorada."
+                    event.processed_at = timezone.now()
+                    event.save()
+                    logger.info(f"🔒 [STATUS TMS CLOSED] Manifesto #{num_visual} já fechado no TMS. Webhook ignorado.")
+                    return f"Manifesto #{num_visual} fechado no TMS. Ignorado."
+
             # 🛡️ TRAVA 2: BASE/FILIAL INATIVA NO APP (Checa a base de operação real)
             base_checar = filial_operacao_obj or filial_obj
             if hasattr(base_checar, 'operacao_ativa') and not base_checar.operacao_ativa:
@@ -662,7 +671,7 @@ def processar_webhook_manifesto_task(self, event_id):
             # 🔄 AUTO-REABERTURA OU PRESERVAÇÃO DE FINALIZAÇÃO:
             notas_pendentes_count = NotaFiscal.objects.filter(manifesto=manifesto_obj, status='PENDENTE').count()
             if era_finalizado:
-                if notas_pendentes_count > 0:
+                if notas_pendentes_count > 0 and getattr(manifesto_obj, 'status_tms', '') != 'closed':
                     manifesto_obj.status = 'EM_TRANSPORTE'
                     manifesto_obj.finalizado = False
                     manifesto_obj.data_finalizacao = None
@@ -843,6 +852,15 @@ def processar_soap_task(self, evento_id):
                     logger.info(f"🔒 [SOAP CONFLITO] Motorista já tem MFT #{outro_em_transporte.numero_manifesto} em transporte. SOAP #{numero_rota} ignorado.")
                     return f"Motorista já possui manifesto #{outro_em_transporte.numero_manifesto} em transporte ativo. Ignorado."
 
+                # Status no TMS é 'closed'
+                if getattr(manifesto_obj, 'status_tms', '') == 'closed':
+                    evento.status = 'IGNORADO'
+                    evento.erro = f"Manifesto #{numero_rota} consta como FINALIZADO no TMS (status_tms='closed'). Integração SOAP ignorada."
+                    evento.processed_at = timezone.now()
+                    evento.save()
+                    logger.info(f"🔒 [SOAP CLOSED] Manifesto #{numero_rota} já fechado no TMS. SOAP ignorado.")
+                    return f"Manifesto #{numero_rota} fechado no TMS. Ignorado."
+
             # 🛡️ TRAVA: MOTORISTA NÃO CADASTRADO NO APP (APENAS PRÉ-CADASTRO)
             if not motorista_obj.user or not motorista_obj.user.is_active:
                 evento.status = 'IGNORADO'
@@ -934,7 +952,7 @@ def processar_soap_task(self, evento_id):
             # 4. Auto-Reabertura se o manifesto estava finalizado mas chegaram novas notas pendentes
             notas_pendentes_count = NotaFiscal.objects.filter(manifesto=manifesto_obj, status='PENDENTE').count()
             if era_finalizado_soap:
-                if notas_pendentes_count > 0:
+                if notas_pendentes_count > 0 and getattr(manifesto_obj, 'status_tms', '') != 'closed':
                     manifesto_obj.status = 'EM_TRANSPORTE'
                     manifesto_obj.finalizado = False
                     manifesto_obj.data_finalizacao = None

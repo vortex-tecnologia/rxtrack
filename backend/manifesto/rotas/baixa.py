@@ -233,10 +233,23 @@ class RegistrarBaixaView(APIView):
                             'numero_manifesto': manifesto_da_nota.numero_manifesto,
                         }, status=409)
                     elif status_tms_atual == 'closed':
-                        logger.warning(f"🚫 Baixa BLOQUEADA: Manifesto {numero_mft} está FINALIZADO no TMS.")
+                        logger.warning(f"🚫 Baixa BLOQUEADA: Manifesto {numero_mft} está FINALIZADO no TMS. Finalizando localmente.")
+                        manifesto_da_nota.status = 'FINALIZADO'
+                        manifesto_da_nota.finalizado = True
+                        manifesto_da_nota.status_tms = 'closed'
+                        if not manifesto_da_nota.data_finalizacao:
+                            manifesto_da_nota.data_finalizacao = timezone.now()
+                        manifesto_da_nota.save(update_fields=['status', 'finalizado', 'status_tms', 'data_finalizacao'])
+                        try:
+                            from manifesto.services import enviar_painel
+                            enviar_painel(manifesto_da_nota)
+                        except Exception as p_err:
+                            logger.warning(f"Erro ao enviar painel na baixa bloqueada closed: {p_err}")
+
                         return Response({
                             'erro': 'manifesto_finalizado_tms',
-                            'mensagem': 'Este manifesto já foi finalizado no TMS. Não é possível registrar baixas.',
+                            'fechar_app': True,
+                            'mensagem': 'Este manifesto já foi finalizado no TMS. O aplicativo foi encerrado para esta rota.',
                             'whatsapp_operacional': None,
                             'nome_filial': None,
                             'numero_manifesto': manifesto_da_nota.numero_manifesto,

@@ -1401,6 +1401,11 @@ async function salvarRegistro() {
                 mostrarModalPendenteTms();
                 return;
             }
+            if (response.status === 409 && (data.erro === 'manifesto_finalizado_tms' || data.fechar_app)) {
+                window.manifestoStatusTms = 'closed';
+                tratarManifestoFinalizadoTms(data.mensagem || 'Este manifesto já foi finalizado no TMS. O aplicativo foi encerrado para esta rota.');
+                return;
+            }
             if (data.status_integracao === 'erro_tms') {
                 atualizarStatusUI('warning', '⚠️ Salvo com Alerta', `O canhoto foi salvo no App, mas houve um erro na ESL: ${data.erro}`);
             } else {
@@ -1943,7 +1948,7 @@ function abrirModalBaixaMassa() {
         return;
     }
     if (window.manifestoStatusTms === 'closed') {
-        alert('⛔ Este manifesto já foi finalizado no TMS. Não é possível registrar baixas.');
+        tratarManifestoFinalizadoTms('Este manifesto já consta como FINALIZADO no TMS. Não é possível registrar baixas e a rota foi encerrada no aplicativo.');
         return;
     }
 
@@ -2139,7 +2144,7 @@ function abrirModalBaixa(numeroNota, chaveAcesso, tipo) {
         return;
     }
     if (window.manifestoStatusTms === 'closed') {
-        alert('⛔ Este manifesto já foi finalizado no TMS. Não é possível registrar baixas.');
+        tratarManifestoFinalizadoTms('Este manifesto já consta como FINALIZADO no TMS. Não é possível registrar baixas e a rota foi encerrada no aplicativo.');
         return;
     }
 
@@ -2740,7 +2745,7 @@ async function registrarChegadaColetiva(manifestoId) {
         return;
     }
     if (window.manifestoStatusTms === 'closed') {
-        alert('⛔ Este manifesto já foi finalizado no TMS. Não é possível registrar transferências.');
+        tratarManifestoFinalizadoTms('Este manifesto já consta como FINALIZADO no TMS. Não é possível registrar transferências e a rota foi encerrada no aplicativo.');
         return;
     }
 
@@ -2818,7 +2823,7 @@ function abrirModalPerguntaOperacional(numeroNota, chave, tipo) {
         return;
     }
     if (window.manifestoStatusTms === 'closed') {
-        alert('⛔ Este manifesto já foi finalizado no TMS. Não é possível registrar baixas.');
+        tratarManifestoFinalizadoTms('Este manifesto já consta como FINALIZADO no TMS. Não é possível registrar baixas e a rota foi encerrada no aplicativo.');
         return;
     }
 
@@ -2999,7 +3004,7 @@ function abrirModalColeta(numero, pickId, tipo) {
         return;
     }
     if (window.manifestoStatusTms === 'closed') {
-        alert('⛔ Este manifesto já foi finalizado no TMS. Não é possível registrar coletas.');
+        tratarManifestoFinalizadoTms('Este manifesto já consta como FINALIZADO no TMS. Não é possível registrar coletas e a rota foi encerrada no aplicativo.');
         return;
     }
 
@@ -3342,8 +3347,60 @@ window.addEventListener('focus', tratarRetornoAppFoco);
 
 
 // =====================================================
-// 4. CONTROLE DE STATUS DO MANIFESTO NO TMS (PENDENTE / LIBERADO)
+// 4. CONTROLE DE STATUS DO MANIFESTO NO TMS (PENDENTE / LIBERADO / FINALIZADO)
 // =====================================================
+
+async function tratarManifestoFinalizadoTms(mensagemCustom) {
+    const numMft = manifestoAtual || localStorage.getItem('manifesto_ativo') || '';
+    
+    // 1. Fecha modais de baixa se estiverem abertos
+    ['modalBaixa', 'modalBaixaMassa', 'modalColeta', 'modalOperacional', 'modalStatusProcessamento', 'modalManifestoPendenteTms'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            const m = bootstrap.Modal.getInstance(el);
+            if (m) m.hide();
+        }
+    });
+
+    // 2. Notifica backend para sincronizar como FINALIZADO caso ainda não esteja
+    if (numMft) {
+        try {
+            authFetch(`${API_BASE}manifesto/encerrar-fechado-tms/`, {
+                method: 'POST',
+                body: JSON.stringify({ numero_manifesto: numMft })
+            }).catch(() => {});
+        } catch(e) {}
+    }
+
+    // 3. Limpa storage local do manifesto ativo
+    localStorage.removeItem('manifesto_ativo');
+    window.manifestoAtual = null;
+
+    // 4. Exibe o modal informativo para o motorista
+    const modalEl = document.getElementById('modalManifestoFinalizadoTms');
+    if (modalEl) {
+        if (mensagemCustom) {
+            const msgEl = document.getElementById('finalizado-tms-mensagem');
+            if (msgEl) msgEl.innerText = mensagemCustom;
+        }
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    } else {
+        alert(mensagemCustom || 'Este manifesto já foi finalizado no TMS e não aceita mais baixas. O manifesto foi encerrado no aplicativo.');
+        window.location.reload();
+    }
+}
+
+function fecharManifestoEIrParaBusca() {
+    const modalEl = document.getElementById('modalManifestoFinalizadoTms');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+    }
+    localStorage.removeItem('manifesto_ativo');
+    window.manifestoAtual = null;
+    window.location.reload();
+}
 
 function mostrarModalPendenteTms() {
     const modalEl = document.getElementById('modalManifestoPendenteTms');
@@ -3443,10 +3500,8 @@ async function verificarNovamenteStatusTms() {
                 }, 1500);
             } else if (statusAtual === 'closed') {
                 window.manifestoStatusTms = 'closed';
-                if (feedbackEl) {
-                    feedbackEl.className = 'alert alert-danger py-2 px-3 small rounded-3 mb-3 d-block';
-                    feedbackEl.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> <strong>Finalizado:</strong> Este manifesto consta como finalizado no TMS.';
-                }
+                tratarManifestoFinalizadoTms('Este manifesto já consta como FINALIZADO no TMS. O aplicativo foi encerrado para esta rota.');
+                return;
             } else {
                 // Continua pending
                 window.manifestoStatusTms = 'pending';

@@ -2055,6 +2055,35 @@
         </div>
     </div>
 
+    <!-- ===================================================== -->
+    <!-- MODAL DE AVISO / ENCERRAMENTO: MANIFESTO FINALIZADO NO TMS -->
+    <!-- ===================================================== -->
+    <div class="modal fade" id="modalManifestoFinalizadoTms" tabindex="-1" aria-labelledby="modalManifestoFinalizadoTmsLabel" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg border-0" style="border-radius: 20px; overflow: hidden;">
+                <div class="modal-header bg-danger bg-opacity-10 border-0 pt-4 pb-2 px-4 d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="d-inline-flex align-items-center justify-content-center bg-danger bg-opacity-25 rounded-circle p-2" style="width: 44px; height: 44px;">
+                            <i class="bi bi-x-circle-fill text-danger fs-4"></i>
+                        </div>
+                        <h5 class="modal-title fw-bold text-dark mb-0" id="modalManifestoFinalizadoTmsLabel">Manifesto Finalizado</h5>
+                    </div>
+                </div>
+                <div class="modal-body p-4 text-center">
+                    <h6 class="fw-bold text-dark mb-2">Manifesto Encerrado no TMS</h6>
+                    <p class="text-muted small mb-3" id="finalizado-tms-mensagem">
+                        Este manifesto já foi finalizado no sistema central da transportadora (TMS) e não aceita mais baixas. O manifesto foi encerrado no aplicativo.
+                    </p>
+                    <div class="d-grid gap-2 mt-4">
+                        <button type="button" class="btn btn-primary btn-lg fw-bold py-2 rounded-pill shadow-sm" id="btn-finalizado-tms-ok" onclick="fecharManifestoEIrParaBusca()">
+                            <i class="bi bi-arrow-right-circle me-1"></i> OK, Ir para a Busca
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <!-- MODAL DE ROTEIRIZAÇÃO MANUAL -->
     <div class="modal fade" id="modalRoteirizacao" tabindex="-1" aria-labelledby="modalRoteirizacaoLabel" aria-hidden="true" data-bs-backdrop="static">
@@ -2154,7 +2183,7 @@
     <script src="/static/js/login_motorista/authFetch.js"></script>
     <script src="{% static 'js/image_quality_v1.js' %}?v=1.0"></script>
     <script src="{% static 'js/camera_interna.js' %}?v=1.0"></script>
-    <script src="{% static 'js/manifesto_v19.js' %}?v=1.48"></script>
+    <script src="{% static 'js/manifesto_v19.js' %}?v=1.49"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pulltorefreshjs/0.1.22/index.umd.min.js"></script>
     <script>
         PullToRefresh.init({
