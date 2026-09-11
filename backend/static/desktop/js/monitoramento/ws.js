@@ -1078,3 +1078,196 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 
 conectarWebSocket();
+
+// =========================================================
+// SISTEMA DE RECONCILIAÇÃO DOM (ANTI-STANDBY / ANTI-FANTASMA)
+// =========================================================
+
+let _ultimoSyncTorre = 0;
+let _syncEmAndamento = false;
+
+/**
+ * Full Sync da Torre de Controle.
+ * Busca todos os manifestos ativos do servidor e reconcilia com o DOM:
+ *  - Remove cards fantasma (finalizados/cancelados enquanto browser estava em standby)
+ *  - Cria cards novos (manifestos criados enquanto browser estava inativo)
+ *  - Atualiza dados dos cards existentes (progresso, status, etc.)
+ */
+async function fullSyncTorre() {
+    if (_syncEmAndamento) return;
+
+    const agora = Date.now();
+    // Debounce de 3 segundos entre syncs
+    if (agora - _ultimoSyncTorre < 3000) return;
+
+    _syncEmAndamento = true;
+    _ultimoSyncTorre = agora;
+
+    console.log("🔄 [Torre Sync] Iniciando reconciliação completa do painel...");
+
+    try {
+        const response = await fetch('/api/manifesto/painel-sync/', {
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+
+        if (!response.ok) {
+            console.error("❌ [Torre Sync] Erro HTTP:", response.status);
+            _syncEmAndamento = false;
+            return;
+        }
+
+        const data = await response.json();
+        const manifestosServidor = data.manifestos_ativos || [];
+        const filiaisCountServidor = data.filiais_count || {};
+
+        // 1. Mapa de IDs ativos no servidor
+        const idsServidor = new Set(manifestosServidor.map(m => String(m.manifesto_id)));
+
+        // 2. Remover cards fantasma (presentes no DOM mas NÃO no servidor)
+        const grid = document.getElementById('grid-monitoramento');
+        if (grid) {
+            const cardsDOM = grid.querySelectorAll('.manifesto-card-item');
+            let removidos = 0;
+
+            cardsDOM.forEach(card => {
+                const mID = card.id.replace('card-mft-', '');
+                if (!idsServidor.has(mID) && !card.dataset.removendo) {
+                    card.dataset.removendo = 'true';
+                    card.classList.add('fade-out');
+                    removidos++;
+                    setTimeout(() => {
+                        card.remove();
+                        if (typeof aplicarFiltroFilialNaGrid === 'function') {
+                            aplicarFiltroFilialNaGrid();
+                        }
+                        if (typeof reavaliarStacks === 'function') {
+                            reavaliarStacks();
+                        }
+                    }, 500);
+                }
+            });
+
+            if (removidos > 0) {
+                console.log(`🗑️ [Torre Sync] ${removidos} card(s) fantasma removido(s).`);
+            }
+        }
+
+        // 3. Criar cards novos e atualizar existentes
+        let criados = 0;
+        let atualizados = 0;
+
+        manifestosServidor.forEach(d => {
+            const mID = String(d.manifesto_id);
+            let cardContainer = document.getElementById(`card-mft-${mID}`);
+
+            if (!cardContainer) {
+                // Card não existe no DOM → criar
+                if (typeof criarNovoCardManifesto === 'function') {
+                    criarNovoCardManifesto(d);
+                    criados++;
+                }
+            } else {
+                // Card existe → atualizar dados silenciosamente
+                atualizados++;
+
+                // Atualiza barra de progresso
+                const progressBar = document.getElementById(`progress-bar-${mID}`);
+                if (progressBar) progressBar.style.width = (d.porcentagem || 0) + '%';
+
+                // Atualiza números
+                const baixadasEl = document.getElementById(`baixadas-${mID}`);
+                if (baixadasEl) baixadasEl.innerText = d.baixadas;
+
+                const totalEl = document.getElementById(`total-${mID}`);
+                if (totalEl) totalEl.innerText = d.total;
+
+                const percentEl = document.getElementById(`percent-${mID}`);
+                if (percentEl) percentEl.innerText = d.porcentagem;
+
+                // Atualiza status
+                if (d.status) {
+                    cardContainer.setAttribute('data-status', d.status);
+                    const elTorre = document.getElementById(`sinal-torre-${mID}`);
+                    if (elTorre) elTorre.setAttribute('data-status', d.status);
+                }
+
+                // Atualiza último acesso
+                if (d.ultimo_acesso_iso) {
+                    const elTorre = document.getElementById(`sinal-torre-${mID}`);
+                    if (elTorre) elTorre.setAttribute('data-iso', d.ultimo_acesso_iso);
+                }
+
+                // Atualiza badge ilegível
+                const badgeIlegivel = document.getElementById(`badge-ilegivel-${mID}`);
+                const countIlegivel = document.getElementById(`count-ilegivel-${mID}`);
+                if (badgeIlegivel && countIlegivel) {
+                    const totalIlegivel = parseInt(d.total_ilegivel || 0);
+                    countIlegivel.innerText = totalIlegivel;
+                    if (totalIlegivel > 0) {
+                        badgeIlegivel.classList.remove('d-none');
+                    } else {
+                        badgeIlegivel.classList.add('d-none');
+                    }
+                }
+            }
+        });
+
+        // 4. Atualiza contadores de filiais
+        Object.entries(filiaisCountServidor).forEach(([fId, count]) => {
+            if (typeof atualizarContadorFilial === 'function') {
+                atualizarContadorFilial(fId, count);
+            }
+        });
+
+        // 5. Re-avalia filtro e stacks
+        if (typeof aplicarFiltroFilialNaGrid === 'function') {
+            aplicarFiltroFilialNaGrid();
+        }
+        if (typeof atualizarUltimoSinalTorre === 'function') {
+            atualizarUltimoSinalTorre();
+        }
+
+        if (criados > 0 || atualizados > 0) {
+            console.log(`✅ [Torre Sync] Sync completo: ${criados} criado(s), ${atualizados} atualizado(s).`);
+        } else {
+            console.log("✅ [Torre Sync] Sync completo. Painel está em dia.");
+        }
+
+    } catch (err) {
+        console.error("❌ [Torre Sync] Erro ao sincronizar:", err);
+    } finally {
+        _syncEmAndamento = false;
+    }
+}
+
+/**
+ * Handler para quando o navegador volta do standby/minimizado.
+ * Faz full sync e reconecta WebSocket se necessário.
+ */
+function tratarRetornoTorre() {
+    const agora = Date.now();
+    if (agora - _ultimoSyncTorre < 3000) return;
+
+    console.log("🔄 [Torre Retorno] Navegador voltou ao primeiro plano. Sincronizando...");
+
+    // 1. Full sync dos dados
+    fullSyncTorre();
+
+    // 2. Reconecta WebSocket se estiver morto
+    if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
+        console.log("🔌 [Torre Retorno] WebSocket morto. Reconectando...");
+        conectarWebSocket();
+    }
+}
+
+// CAMADA 1: visibilitychange + focus (retorno do standby)
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        tratarRetornoTorre();
+    }
+});
+window.addEventListener('focus', tratarRetornoTorre);
+
+// CAMADA 2: Heartbeat periódico de segurança (full sync a cada 2 minutos)
+setInterval(fullSyncTorre, 120000);

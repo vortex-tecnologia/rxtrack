@@ -100,3 +100,84 @@ def painel_monitoramento(request):
         'filial_selecionada': 'todas', # Conecta o socket ao grupo geral para escutar todas as filiais
     }
     return render(request, 'desktop/paginas/painel/monitoramento.html', context)
+
+
+@login_required(login_url='/login/')
+def painel_sync(request):
+    """
+    Endpoint leve de reconciliação para a Torre de Controle Live.
+    Retorna JSON com todos os manifestos ativos (AGUARDANDO + EM_TRANSPORTE)
+    para que o frontend possa remover cards fantasma e criar cards novos
+    quando o navegador volta de standby ou após perda de conexão WebSocket.
+    """
+    from datetime import timedelta
+    from django.http import JsonResponse
+    from django.utils.timezone import localtime
+    from manifesto.models import BaixaNF
+
+    limite_48h = timezone.now() - timedelta(hours=48)
+
+    manifestos = Manifesto.objects.filter(
+        status__in=['AGUARDANDO', 'EM_TRANSPORTE']
+    ).select_related('motorista', 'filial', 'filial_operacao', 'veiculo').prefetch_related(
+        'notas_fiscais'
+    ).annotate(
+        total_nfe=Count('notas_fiscais', distinct=True),
+        baixadas=Count('notas_fiscais', filter=Q(notas_fiscais__status__in=['BAIXADA', 'OCORRENCIA']), distinct=True),
+        total_ilegivel=Count('notas_fiscais__baixa_info', filter=Q(notas_fiscais__baixa_info__solicitar_nova_foto=True), distinct=True)
+    )
+
+    resultado = []
+    for m in manifestos:
+        # Exclui manifestos AGUARDANDO com mais de 48h (serão cancelados proativamente)
+        if m.status == 'AGUARDANDO' and m.data_criacao and m.data_criacao < limite_48h:
+            continue
+
+        filial_efetiva = m.filial_operacao or m.filial
+        porcentagem = int((m.baixadas / m.total_nfe) * 100) if m.total_nfe else 0
+
+        # Data de criação para análise de manifesto antigo
+        data_criacao_iso = m.data_criacao.isoformat() if m.data_criacao else None
+        ultimo_acesso_iso = localtime(m.ultimo_acesso).isoformat() if m.ultimo_acesso else None
+
+        # Calcula se é antigo (>12h para alerta, >24h para vermelho)
+        horas_criado = (timezone.now() - m.data_criacao).total_seconds() / 3600 if m.data_criacao else 0
+        is_viagem = getattr(m, 'is_viagem', False)
+
+        resultado.append({
+            'manifesto_id': str(m.numero_manifesto),
+            'status': m.status,
+            'filial_id': str(filial_efetiva.id) if filial_efetiva else '',
+            'filial_nome': filial_efetiva.nome if filial_efetiva else 'Sem Filial',
+            'motorista_id': str(m.motorista.id) if m.motorista else '',
+            'motorista_nome': m.motorista.nome_completo if m.motorista else 'Desconhecido',
+            'motorista_categoria': m.motorista.categoria if (m.motorista and m.motorista.categoria) else 'EMPRESA',
+            'foto_motorista': m.motorista.foto_perfil.url if (m.motorista and m.motorista.foto_perfil) else None,
+            'icone_dispositivo': m.motorista.icone_dispositivo_html if m.motorista else '',
+            'placa_veiculo': m.veiculo.placa if (m.veiculo and m.veiculo.placa) else None,
+            'tipo_veiculo': m.veiculo.tipo if (m.veiculo and m.veiculo.tipo) else None,
+            'baixadas': m.baixadas,
+            'total': m.total_nfe,
+            'porcentagem': porcentagem,
+            'total_ilegivel': m.total_ilegivel,
+            'data_criacao_iso': data_criacao_iso,
+            'ultimo_acesso_iso': ultimo_acesso_iso,
+            'data_registro': localtime(m.data_criacao).strftime('%d/%m/%Y %H:%M') if m.data_criacao else '',
+            'is_antigo': horas_criado >= 12 and not is_viagem,
+            'dias_criado': int(horas_criado / 24),
+            'is_viagem': is_viagem,
+            'uf_destino_viagem': getattr(m, 'uf_destino_viagem', '') or '',
+        })
+
+    # Contagem de ativos por filial
+    filiais_count = {}
+    for item in resultado:
+        fid = item['filial_id']
+        if fid:
+            filiais_count[fid] = filiais_count.get(fid, 0) + 1
+
+    return JsonResponse({
+        'manifestos_ativos': resultado,
+        'filiais_count': filiais_count,
+        'timestamp': timezone.now().isoformat(),
+    })
