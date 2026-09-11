@@ -22,12 +22,17 @@ def painel_monitoramento(request):
 
     # 2. Carregar todas as filiais cadastradas com contagem de manifestos ativos (em transporte + aguardando)
     #    Usa filial_operacao (base física) com fallback para filial (fiscal)
+    from datetime import timedelta
+    limite_48h = timezone.now() - timedelta(hours=48)
+
     filiais_qs = Filial.objects.all().order_by('nome')
     filiais_data = []
     for f in filiais_qs:
         total_ativos = Manifesto.objects.filter(
             Q(filial_operacao=f) | (Q(filial_operacao__isnull=True) & Q(filial=f)),
             status__in=['AGUARDANDO', 'EM_TRANSPORTE']
+        ).exclude(
+            status='AGUARDANDO', data_criacao__lt=limite_48h
         ).count()
         filiais_data.append({
             'id': f.id,
@@ -57,12 +62,23 @@ def painel_monitoramento(request):
         total_ilegivel=Count('notas_fiscais__baixa_info', filter=Q(notas_fiscais__baixa_info__solicitar_nova_foto=True), distinct=True)
     ).order_by('status', 'filial', 'motorista__user__first_name')
 
-    # 4.1 Auto-finalização proativa no Backend:
-    # Se qualquer manifesto na grade ativa estiver com 100% das notas concluídas e nenhum canhoto ilegível pendente,
-    # o backend finaliza o manifesto de forma autônoma e o remove da grade ativa da torre de controle,
-    # sem depender de ação do motorista ou da versão do PWA.
+    # 4.1 Processamento proativo no Backend:
     manifestos_ativos = []
     for m in manifestos:
+        # A. Limpeza proativa de manifestos em AGUARDANDO há mais de 48h
+        if m.status == 'AGUARDANDO' and m.data_criacao and m.data_criacao < limite_48h:
+            try:
+                m.status = 'CANCELADO'
+                m.finalizado = True
+                m.data_finalizacao = timezone.now()
+                m.save(update_fields=['status', 'finalizado', 'data_finalizacao'])
+                from manifesto.services import enviar_painel
+                enviar_painel(m)
+            except Exception:
+                pass
+            continue  # Expirado e cancelado! Sai da grade ativa da torre
+
+        # B. Auto-finalização proativa de manifestos 100% concluídos:
         if m.total_nfe > 0 and m.baixadas >= m.total_nfe and m.total_ilegivel == 0:
             try:
                 from manifesto.services import tentar_autofinalizar_manifesto

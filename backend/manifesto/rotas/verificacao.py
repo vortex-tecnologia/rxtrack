@@ -21,17 +21,35 @@ class VerificarManifestoAtivoView(APIView):
             ).first()
 
             if not manifesto_ativo:
-                # Se não há manifesto ativo em transporte, busca o mais antigo com status 'AGUARDANDO' para o motorista
-                manifesto_pendente = Manifesto.objects.filter(
+                # Se não há manifesto ativo em transporte, busca manifestos em 'AGUARDANDO' para o motorista
+                from django.utils import timezone
+                from datetime import timedelta
+                limite_48h = timezone.now() - timedelta(hours=48)
+
+                manifestos_pendentes = Manifesto.objects.filter(
                     motorista=motorista,
                     status='AGUARDANDO'
-                ).order_by('data_criacao').first()
+                ).order_by('data_criacao')
 
-                if manifesto_pendente:
-                    manifesto_pendente.status = 'EM_TRANSPORTE'
-                    manifesto_pendente.finalizado = False
-                    manifesto_pendente.save(update_fields=['status', 'finalizado'])
-                    manifesto_ativo = manifesto_pendente
+                for m_pend in manifestos_pendentes:
+                    if m_pend.data_criacao and m_pend.data_criacao < limite_48h:
+                        # Expirado há mais de 48h: cancela imediatamente e notifica Torre
+                        m_pend.status = 'CANCELADO'
+                        m_pend.finalizado = True
+                        m_pend.data_finalizacao = timezone.now()
+                        m_pend.save(update_fields=['status', 'finalizado', 'data_finalizacao'])
+                        try:
+                            from manifesto.services import enviar_painel
+                            enviar_painel(m_pend)
+                        except Exception:
+                            pass
+                    else:
+                        # Manifesto recente válido (< 48h): promove para EM_TRANSPORTE
+                        m_pend.status = 'EM_TRANSPORTE'
+                        m_pend.finalizado = False
+                        m_pend.save(update_fields=['status', 'finalizado'])
+                        manifesto_ativo = m_pend
+                        break
 
             if manifesto_ativo:
                 return Response({

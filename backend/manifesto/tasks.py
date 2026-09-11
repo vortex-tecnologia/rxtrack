@@ -1050,21 +1050,57 @@ def limpar_manifestos_antigos_aguardando_task():
     """
     Cancela/expira manifestos que ficaram mais de 48h com status AGUARDANDO
     sem que o motorista tenha iniciado a viagem.
-    Evita acúmulo de rotas não utilizadas nas bases.
+    Itera sobre todos os tenants (django-tenants) e dispara atualização via WebSocket
+    para a Torre de Controle Live.
     """
+    total_cancelados = 0
+    try:
+        from django_tenants.utils import get_tenant_model, schema_context
+        tenants = list(get_tenant_model().objects.exclude(schema_name='public'))
+        if tenants:
+            for tenant in tenants:
+                try:
+                    with schema_context(tenant.schema_name):
+                        total_cancelados += _cancelar_manifestos_aguardando_tenant(tenant.schema_name)
+                except Exception as t_err:
+                    logger.error(f"⚠️ [LIMPEZA MFT] Erro no tenant '{tenant.schema_name}': {t_err}")
+            return f"{total_cancelados} manifestos expirados cancelados em {len(tenants)} tenant(s)."
+    except Exception as e_ten:
+        logger.warning(f"⚠️ [LIMPEZA MFT] Aviso multi-tenant: {e_ten}")
+
+    # Fallback para schema public caso não utilize django-tenants ou tenants vazios
+    try:
+        total_cancelados += _cancelar_manifestos_aguardando_tenant('public')
+    except Exception as e_pub:
+        logger.error(f"⚠️ [LIMPEZA MFT] Erro schema public: {e_pub}")
+
+    return f"{total_cancelados} manifestos expirados cancelados."
+
+
+def _cancelar_manifestos_aguardando_tenant(schema_name=None):
     from manifesto.models import Manifesto
     from django.utils import timezone
     from datetime import timedelta
+    from manifesto.services import enviar_painel
 
     limite = timezone.now() - timedelta(hours=48)
-    manifestos_antigos = Manifesto.objects.filter(
+    manifestos_antigos = list(Manifesto.objects.filter(
         status='AGUARDANDO',
         data_criacao__lt=limite
-    )
+    ).select_related('filial', 'filial_operacao', 'motorista', 'veiculo'))
 
-    qtd = manifestos_antigos.count()
+    qtd = len(manifestos_antigos)
     if qtd > 0:
-        logger.info(f"🧹 Cancelando {qtd} manifesto(s) antigo(s) parado(s) em AGUARDANDO há mais de 48h.")
-        manifestos_antigos.update(status='CANCELADO', finalizado=True)
-    return f"{qtd} manifestos expirados cancelados."
+        logger.info(f"🧹 [LIMPEZA MFT - {schema_name}] Cancelando {qtd} manifesto(s) em AGUARDANDO há mais de 48h.")
+        agora = timezone.now()
+        for m in manifestos_antigos:
+            m.status = 'CANCELADO'
+            m.finalizado = True
+            m.data_finalizacao = agora
+            m.save(update_fields=['status', 'finalizado', 'data_finalizacao'])
+            try:
+                enviar_painel(m)
+            except Exception as e_ws:
+                logger.warning(f"⚠️ [LIMPEZA MFT - {schema_name}] Erro ao enviar WebSocket para #{m.numero_manifesto}: {e_ws}")
+    return qtd
 

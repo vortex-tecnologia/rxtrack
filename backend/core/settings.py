@@ -151,10 +151,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'manifesto.tasks_auto_recovery.auto_finalizar_manifestos_concluidos_task',
         'schedule': crontab(minute='*/2'),  # A cada 2 minutos
     },
-    # Limpeza diária de manifestos antigos em AGUARDANDO há mais de 48h
+    # Limpeza periódica de manifestos antigos em AGUARDANDO há mais de 48h
     'limpar-manifestos-antigos-aguardando': {
         'task': 'manifesto.tasks.limpar_manifestos_antigos_aguardando_task',
-        'schedule': crontab(hour=1, minute=0),  # Todo dia à 01:00 AM
+        'schedule': crontab(minute='*/30'),  # A cada 30 minutos
     },
 }
 
