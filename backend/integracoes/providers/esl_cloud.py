@@ -1614,6 +1614,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
             response = None
             sucesso = False
+            integrado_via_frete = False
             msg_sucesso = ""
             url_tentada = ""
 
@@ -1639,11 +1640,28 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 URL_ESL_FRETE = f"https://{self.config.dominio_esl}/api/v1/freights/{freight_id}/invoice_occurrences"
                 url_tentada = URL_ESL_FRETE
                 logger.info(f"🚀 [ESL TRANSMISSÃO MINUTA V1] Minuta NF: {nf.numero_nota} | Freight ID: {freight_id} -> {URL_ESL_FRETE}")
+                
+                # Payload limpo para rota de ocorrência por Frete (sem delivery_receipt_url, não aceito por este endpoint)
+                payload_frete = {
+                    "invoice_occurrence": {
+                        "receiver": baixa.recebedor or "Nao identificado",
+                        "document_number": baixa.documento_recebedor or "",
+                        "comments": f"Baixa Minuta via App - Motorista: {motorista}. Obs: {baixa.observacao or ''}",
+                        "occurrence_at": data_ocorrencia_str,
+                        "latitude": float(baixa.latitude) if baixa.latitude else None,
+                        "longitude": float(baixa.longitude) if baixa.longitude else None,
+                        "occurrence": {
+                            "code": codigo_ocorrencia
+                        }
+                    }
+                }
+
                 try:
-                    res_frete = requests.post(URL_ESL_FRETE, json=payload, headers=headers, timeout=30)
+                    res_frete = requests.post(URL_ESL_FRETE, json=payload_frete, headers=headers, timeout=30)
                     if res_frete.status_code in [200, 201]:
                         response = res_frete
                         sucesso = True
+                        integrado_via_frete = True
                         msg_sucesso = f"Sucesso: Baixa de Minuta integrada via Freight ID {freight_id}"
                     elif res_frete.status_code == 404:
                         logger.warning(f"⚠️ Freight ID {freight_id} retornou 404 na ESL para Minuta {nf.numero_nota}. Buscando ID alternativo...")
@@ -1654,10 +1672,11 @@ class ESLCloudAdapter(BaseTMSAdapter):
                             nf.save(update_fields=['freight_id_tms'])
                             URL_ESL_FRETE_NOVO = f"https://{self.config.dominio_esl}/api/v1/freights/{freight_id}/invoice_occurrences"
                             url_tentada = URL_ESL_FRETE_NOVO
-                            res_frete_novo = requests.post(URL_ESL_FRETE_NOVO, json=payload, headers=headers, timeout=30)
+                            res_frete_novo = requests.post(URL_ESL_FRETE_NOVO, json=payload_frete, headers=headers, timeout=30)
                             if res_frete_novo.status_code in [200, 201]:
                                 response = res_frete_novo
                                 sucesso = True
+                                integrado_via_frete = True
                                 msg_sucesso = f"Sucesso: Baixa de Minuta integrada via Freight ID {freight_id}"
                             else:
                                 response = res_frete_novo
@@ -1738,6 +1757,13 @@ class ESLCloudAdapter(BaseTMSAdapter):
             baixa.data_integracao = timezone.now()
             baixa.log_erro_tms = msg_sucesso or f"Sucesso: Baixa de Minuta integrada (Freight: {freight_id})"
             baixa.save()
+
+            # 📸 SE A BAIXA FOI FEITA VIA FRETE E TEM FOTO, ENVIA O ANEXO PARA POST /api/freight_attachments
+            if integrado_via_frete and baixa.comprovante_foto_url:
+                ok_anexo, msg_anexo = self.enviar_anexo_frete(baixa=baixa, nf=nf, freight_id=freight_id)
+                if ok_anexo:
+                    baixa.log_erro_tms = f"{baixa.log_erro_tms} | {msg_anexo}"
+                    baixa.save(update_fields=['log_erro_tms'])
             
             try:
                 from operacional.services import resolver_erros_automaticamente
@@ -1777,6 +1803,13 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     baixa.data_integracao = timezone.now()
                     baixa.log_erro_tms = "Sucesso: Baixa de Minuta já registrada previamente no TMS (ESL Cloud)."
                     baixa.save()
+
+                    # 📸 Mesmo se a ocorrência já existia, se tiver foto de comprovante, envia o anexo de frete
+                    if baixa.comprovante_foto_url and (integrado_via_frete or freight_id):
+                        ok_anexo, msg_anexo = self.enviar_anexo_frete(baixa=baixa, nf=nf, freight_id=freight_id)
+                        if ok_anexo:
+                            baixa.log_erro_tms = f"{baixa.log_erro_tms} | {msg_anexo}"
+                            baixa.save(update_fields=['log_erro_tms'])
                     
                     if nf and nf.manifesto:
                         try:
@@ -2134,12 +2167,195 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 raise task.retry(exc=exc, countdown=300)
             raise
 
+    def _resolver_chave_cte_para_frete(self, nf, fid=None):
+        """Busca chave de CT-e (44 dígitos) no objeto local ou consulta ESL."""
+        if not nf:
+            return None
+
+        # 1. Chave gravada diretamente na nota
+        if nf.chave_cte and len(str(nf.chave_cte).strip()) == 44:
+            return str(nf.chave_cte).strip()
+
+        # 2. Chave gravada no Frete relacionado
+        if hasattr(nf, 'frete') and nf.frete and nf.frete.chave_cte and len(str(nf.frete.chave_cte).strip()) == 44:
+            k = str(nf.frete.chave_cte).strip()
+            if not nf.chave_cte:
+                try:
+                    nf.chave_cte = k
+                    nf.save(update_fields=['chave_cte'])
+                except Exception:
+                    pass
+            return k
+
+        # 3. Chave de acesso da nota com 44 dígitos (se modelo 57 ou minuta com chave)
+        if nf.chave_acesso and len(str(nf.chave_acesso).strip()) == 44 and str(nf.chave_acesso).strip().isdigit():
+            return str(nf.chave_acesso).strip()
+
+        # 4. Consulta rápida em /api/invoice_occurrences por invoice_number ou freight_id para obter cte_key
+        try:
+            num = str(nf.numero_nota or '').strip()
+            url_oc = f"https://{self.config.dominio_esl}/api/invoice_occurrences"
+            headers = {"Authorization": f"Bearer {self.config.token_invoices}"}
+            params = {}
+            if num:
+                params["invoice_number"] = num
+            elif fid:
+                params["freight_id"] = str(fid).strip()
+
+            if params:
+                r = requests.get(url_oc, headers=headers, params=params, timeout=15)
+                if r.status_code == 200:
+                    for it in r.json().get("data", []):
+                        f_info = it.get("freight") or {}
+                        k = f_info.get("cte_key")
+                        if k and len(str(k).strip()) == 44:
+                            cte_k = str(k).strip()
+                            try:
+                                nf.chave_cte = cte_k
+                                nf.save(update_fields=['chave_cte'])
+                                if hasattr(nf, 'frete') and nf.frete and not nf.frete.chave_cte:
+                                    nf.frete.chave_cte = cte_k
+                                    nf.frete.save(update_fields=['chave_cte'])
+                            except Exception:
+                                pass
+                            return cte_k
+        except Exception as e_busca_cte:
+            logger.warning(f"Aviso ao consultar cte_key na ESL: {e_busca_cte}")
+
+        return None
+
+    def enviar_anexo_frete(self, baixa, nf=None, freight_id=None):
+        """
+        Envia a foto de comprovante para fretes/minutas na ESL Cloud com roteamento inteligente:
+        1. Se houver chave do CT-e (cte_key), envia via POST /api/freight_delivery_receipts (Comprovante Oficial).
+        2. Se não houver chave do CT-e (ou se delivery_receipts falhar), envia via POST /api/freight_attachments
+           usando o ID interno do frete e o número da minuta (draft_number).
+        """
+        if not baixa:
+            return False, "Baixa inexistente"
+
+        url_foto = getattr(baixa, 'comprovante_foto_url', None) or getattr(baixa, 'url_foto_recortada', None) or getattr(baixa, 'url_foto_original', None)
+        if not url_foto:
+            logger.info(f"ℹ️ Baixa #{getattr(baixa, 'id', 'N/A')} sem foto de comprovante. Pulando envio.")
+            return True, "Sem foto para enviar"
+
+        # Se for uma URL do proxy interno do painel, extrai a URL real da imagem
+        url_foto_final = str(url_foto).strip()
+        if 'proxy-imagem' in url_foto_final and 'url=' in url_foto_final:
+            try:
+                from urllib.parse import parse_qs, urlparse, unquote
+                parsed_qs = parse_qs(urlparse(url_foto_final).query)
+                if 'url' in parsed_qs:
+                    url_foto_final = unquote(parsed_qs['url'][0])
+            except Exception:
+                pass
+
+        if not nf and hasattr(baixa, 'nota_fiscal'):
+            nf = baixa.nota_fiscal
+
+        # Resolve freight_id (ID interno da ESL)
+        fid = freight_id or getattr(nf, 'freight_id_tms', None) or (getattr(nf.frete, 'freight_id_tms', None) if (nf and hasattr(nf, 'frete') and nf.frete) else None)
+        
+        # Resolve número da minuta / nota (draft_number)
+        draft_num = getattr(nf, 'numero_nota', None) or getattr(baixa, 'numero_nota', None)
+
+        # 1. Tenta resolver a chave do CT-e (cte_key de 44 dígitos)
+        cte_key = self._resolver_chave_cte_para_frete(nf, fid=fid)
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.config.token_invoices}"
+        }
+
+        # =========================================================================
+        # ROTA 1: Se tem chave CT-e de 44 dígitos -> POST /api/freight_delivery_receipts
+        # (Cadastrar Comprovante de Entrega por Frete - Canhoto Oficial)
+        # =========================================================================
+        if cte_key and len(str(cte_key).strip()) == 44:
+            url_receipt = f"https://{self.config.dominio_esl}/api/freight_delivery_receipts"
+            payload_receipt = {
+                "freight_delivery_receipt": {
+                    "freight": {
+                        "cte_key": str(cte_key).strip(),
+                        "delivery_receipt_url": url_foto_final
+                    }
+                }
+            }
+            logger.info(f"📸 [ESL COMPROVANTE FRETE] Enviando via CT-e {cte_key} -> {url_receipt}")
+            try:
+                resp_rec = requests.post(url_receipt, json=payload_receipt, headers=headers, timeout=30)
+                if resp_rec.status_code == 429:
+                    import time
+                    time.sleep(2.5)
+                    resp_rec = requests.post(url_receipt, json=payload_receipt, headers=headers, timeout=30)
+
+                if resp_rec.status_code in [200, 201]:
+                    logger.info(f"✅ [ESL COMPROVANTE FRETE] Comprovante oficial cadastrado com sucesso via CT-e {cte_key}!")
+                    return True, f"Comprovante cadastrado via CT-e ({cte_key[:6]}...)"
+                else:
+                    logger.warning(f"⚠️ [ESL COMPROVANTE FRETE] Status {resp_rec.status_code} em delivery_receipts ({resp_rec.text[:200]}). Tentando freight_attachments como fallback...")
+            except Exception as e_rec:
+                logger.warning(f"⚠️ [ESL COMPROVANTE FRETE] Exceção em delivery_receipts: {e_rec}. Tentando freight_attachments...")
+
+        # =========================================================================
+        # ROTA 2: Sem chave CT-e (ou fallback) -> POST /api/freight_attachments
+        # (Cadastrar Anexo por Frete usando ID interno e draft_number)
+        # =========================================================================
+        freight_data = {
+            "attachment_url": url_foto_final
+        }
+        if fid:
+            freight_data["id"] = str(fid).strip()
+        if draft_num:
+            freight_data["draft_number"] = str(draft_num).strip()
+        if cte_key:
+            freight_data["cte_key"] = str(cte_key).strip()
+
+        # Se não temos nem ID nem draft_number nem cte_key, tenta buscar ID interno na ESL
+        if not (fid or draft_num or cte_key):
+            if nf:
+                fid = self._buscar_freight_id_minuta(nf)
+                if fid:
+                    freight_data["id"] = str(fid).strip()
+            if not (freight_data.get("id") or freight_data.get("draft_number")):
+                msg_falha = f"Impossível enviar foto: nenhum identificador de frete encontrado (id, draft_number, cte_key) para nota #{draft_num or 'N/A'}"
+                logger.warning(f"⚠️ {msg_falha}")
+                return False, msg_falha
+
+        url_esl = f"https://{self.config.dominio_esl}/api/freight_attachments"
+        payload = {
+            "freight_attachment": {
+                "freight": freight_data
+            }
+        }
+
+        logger.info(f"📸 [ESL ANEXO FRETE] Enviando via Anexo de Frete (ID: {fid}, Draft: {draft_num}, CT-e: {cte_key}) -> {url_esl}")
+
+        try:
+            resp = requests.post(url_esl, json=payload, headers=headers, timeout=30)
+            if resp.status_code == 429:
+                import time
+                logger.warning("Rate limit 429 atingido ao enviar anexo de frete. Aguardando 2.5s...")
+                time.sleep(2.5)
+                resp = requests.post(url_esl, json=payload, headers=headers, timeout=30)
+
+            if resp.status_code in [200, 201]:
+                logger.info(f"✅ [ESL ANEXO FRETE] Comprovante anexado ao frete com sucesso! (ID: {fid}, Draft: {draft_num})")
+                return True, f"Anexo de frete integrado com sucesso (ESL Status {resp.status_code})"
+            else:
+                detalhe = resp.text
+                logger.warning(f"⚠️ [ESL ANEXO FRETE] Resposta inesperada ({resp.status_code}): {detalhe}")
+                return False, f"Erro status {resp.status_code}: {detalhe[:200]}"
+        except Exception as e:
+            logger.error(f"❌ [ESL ANEXO FRETE] Erro de conexão ao enviar anexo de frete: {e}")
+            return False, str(e)
+
     def enviar_comprovante_entrega(self, baixa_id, task=None):
         """
         Cadastra/Atualiza o comprovante de entrega (foto/canhoto) no TMS ESL Cloud.
         Endpoints ESL Cloud:
         1. NF-e (chave_acesso): POST /api/freight_invoice_delivery_receipts
-        2. Frete / CT-e (chave_cte): POST /api/freight_delivery_receipts
+        2. Frete / CT-e / Minuta: POST /api/freight_attachments
         """
         TOKEN = self.config.token_invoices
         try:
@@ -2166,22 +2382,22 @@ class ESLCloudAdapter(BaseTMSAdapter):
             tem_chave_nfe = _is_chave_nfe_valida(nf.chave_acesso)
             is_operacao_frete = tipo_op in ['DESPACHO', 'TRANSFERENCIA', 'FRETE'] or (not tem_chave_nfe)
 
-            chave_cte = nf.chave_cte or (nf.frete.chave_cte if (hasattr(nf, 'frete') and nf.frete) else None) or nf.numero_cte
+            if is_operacao_frete:
+                # 📍 Operação de Frete/Minuta: Envia anexo via POST /api/freight_attachments
+                ok_anexo, msg_anexo = self.enviar_anexo_frete(baixa=baixa, nf=nf)
+                if ok_anexo:
+                    baixa.processado_tms = True
+                    baixa.integrado_tms = True
+                    baixa.log_erro_tms = f"Sucesso: Comprovante anexado ao frete no TMS ({msg_anexo}) em {timezone.localtime().strftime('%d/%m/%Y %H:%M')}"
+                    baixa.data_integracao = timezone.now()
+                    baixa.save(update_fields=['processado_tms', 'integrado_tms', 'log_erro_tms', 'data_integracao'])
+                    logger.info(f"✅ {baixa.log_erro_tms}")
+                    return f"Comprovante de frete da nota #{nf.numero_nota} atualizado com sucesso."
+                else:
+                    raise Exception(msg_anexo)
 
-            if is_operacao_frete and chave_cte:
-                # 📍 Endpoint 1: Cadastrar Comprovante de Entrega por Frete (CT-e)
-                url_esl = f"https://{self.config.dominio_esl}/api/freight_delivery_receipts"
-                payload = {
-                    "freight_delivery_receipt": {
-                        "freight": {
-                            "cte_key": str(chave_cte).strip(),
-                            "delivery_receipt_url": str(url_foto).strip()
-                        }
-                    }
-                }
-                logger.info(f"📸 [ESL COMPROVANTE FRETE/CT-E] Enviando comprovante da Nota #{nf.numero_nota} (Chave CT-e: {chave_cte})")
             elif tem_chave_nfe:
-                # 📍 Endpoint 2: Cadastrar Comprovante de Entrega por NF-e (Invoice modelo 55/65)
+                # 📍 Cadastrar Comprovante de Entrega por NF-e (Invoice modelo 55/65)
                 url_esl = f"https://{self.config.dominio_esl}/api/freight_invoice_delivery_receipts"
                 payload = {
                     "freight_invoice_delivery_receipt": {
@@ -2192,30 +2408,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     }
                 }
                 logger.info(f"📸 [ESL COMPROVANTE INVOICE/NF-E] Enviando comprovante da Nota #{nf.numero_nota} (Chave NF-e: {nf.chave_acesso})")
-            elif chave_cte:
-                # Fallback: Se tem chave_cte envia por Frete
-                url_esl = f"https://{self.config.dominio_esl}/api/freight_delivery_receipts"
-                payload = {
-                    "freight_delivery_receipt": {
-                        "freight": {
-                            "cte_key": str(chave_cte).strip(),
-                            "delivery_receipt_url": str(url_foto).strip()
-                        }
-                    }
-                }
-                logger.info(f"📸 [ESL COMPROVANTE FRETE] Enviando comprovante da Nota #{nf.numero_nota} (Chave CT-e: {chave_cte})")
-            elif is_operacao_frete:
-                # Minutas sem CT-e: O comprovante é enviado embutido diretamente no endpoint de ocorrência de Minutas
-                msg_ok = f"Sucesso: Comprovante de Minuta #{nf.numero_nota} vinculado via ocorrência."
-                baixa.processado_tms = True
-                baixa.integrado_tms = True
-                baixa.log_erro_tms = msg_ok
-                baixa.data_integracao = timezone.now()
-                baixa.save(update_fields=['processado_tms', 'integrado_tms', 'log_erro_tms', 'data_integracao'])
-                logger.info(f"✅ {msg_ok}")
-                return msg_ok
             else:
-                msg = f"Nota #{nf.numero_nota} sem chave NF-e nem chave CT-e válida para envio isolado de comprovante."
+                msg = f"Nota #{nf.numero_nota} sem chave NF-e nem dados de frete para envio de comprovante."
                 logger.warning(msg)
                 baixa.log_erro_tms = msg
                 baixa.save(update_fields=['log_erro_tms'])

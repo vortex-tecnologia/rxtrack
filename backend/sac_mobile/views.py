@@ -512,11 +512,27 @@ def api_registrar_baixa_sac(request):
             status_tms='PENDENTE'
         )
 
+        # Tenta resolver chave_cte local se disponível
+        chave_cte = None
+        if numero_nota:
+            try:
+                from manifesto.models import NotaFiscal
+                nf_item = NotaFiscal.objects.filter(numero_nota=numero_nota).select_related('frete').first()
+                if nf_item:
+                    if nf_item.chave_cte and len(str(nf_item.chave_cte).strip()) == 44:
+                        chave_cte = str(nf_item.chave_cte).strip()
+                    elif hasattr(nf_item, 'frete') and nf_item.frete and nf_item.frete.chave_cte and len(str(nf_item.frete.chave_cte).strip()) == 44:
+                        chave_cte = str(nf_item.frete.chave_cte).strip()
+            except Exception:
+                pass
+
         # Dados para a task
         dados_baixa = {
             'historico_id': historico.id,
             'chave_acesso': chave_acesso,
             'freight_id': freight_id,
+            'numero_nota': numero_nota,
+            'chave_cte': chave_cte,
             'url_foto': url_final_foto,
             'somente_comprovante': somente_comprovante,
             'ocorrencia_codigo': codigo_tms,
