@@ -51,6 +51,13 @@ def manifesto_post_save_checklist_notify(sender, instance, created, **kwargs):
     from django.db import connection
     schema_atual = getattr(connection, 'schema_name', 'public')
 
+    # Validação rápida de elegibilidade: se o motorista estiver carregado e não for 'EMPRESA', ignora
+    if instance.motorista_id:
+        motorista_inst = getattr(instance, 'motorista', None)
+        if motorista_inst and getattr(motorista_inst, 'categoria', None):
+            if str(motorista_inst.categoria).strip().upper() != 'EMPRESA':
+                return
+
     # Transição para EM_TRANSPORTE (Em Rota / Em Trânsito)
     if (created and new_status == 'EM_TRANSPORTE') or (old_status != 'EM_TRANSPORTE' and new_status == 'EM_TRANSPORTE'):
         from manifesto.tasks import enviar_status_manifesto_checklist_task

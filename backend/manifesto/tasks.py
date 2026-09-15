@@ -1144,8 +1144,24 @@ def enviar_status_manifesto_checklist_task(self, manifesto_id, evento_status, sc
         fuso_br = pytz.timezone('America/Sao_Paulo')
         agora_br = timezone.now().astimezone(fuso_br)
 
-        responsavel = manifesto.motorista.nome_completo if (manifesto.motorista and manifesto.motorista.nome_completo) else "Não informado"
         num_manifesto = str(manifesto.numero_manifesto).strip()
+
+        # Validação de Elegibilidade:
+        # Apenas manifestos com motorista da categoria 'EMPRESA' devem ser enviados para o Checklist QVX.
+        # Motoristas 'AGREGADO', 'DEDICADO' ou sem motorista não são enviados.
+        if not manifesto.motorista:
+            logger.info(f"⏭️ [CHECKLIST QVX] Manifesto #{num_manifesto} ignorado: sem motorista vinculado.")
+            return "Ignorado: sem motorista"
+
+        categoria_motorista = (getattr(manifesto.motorista, 'categoria', '') or '').strip().upper()
+        if categoria_motorista != 'EMPRESA':
+            logger.info(
+                f"⏭️ [CHECKLIST QVX] Manifesto #{num_manifesto} ignorado: "
+                f"motorista '{manifesto.motorista.nome_completo}' pertence à categoria '{manifesto.motorista.categoria}' (apenas EMPRESA é enviado)."
+            )
+            return f"Ignorado: categoria {manifesto.motorista.categoria}"
+
+        responsavel = manifesto.motorista.nome_completo or "Não informado"
 
         if evento_status == 'EM_TRANSITO':
             dt_inicio = manifesto.data_criacao.astimezone(fuso_br) if manifesto.data_criacao else agora_br
