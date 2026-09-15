@@ -1104,3 +1104,89 @@ def _cancelar_manifestos_aguardando_tenant(schema_name=None):
                 logger.warning(f"⚠️ [LIMPEZA MFT - {schema_name}] Erro ao enviar WebSocket para #{m.numero_manifesto}: {e_ws}")
     return qtd
 
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=30)
+def enviar_status_manifesto_checklist_task(self, manifesto_id, evento_status, schema_name=None):
+    """
+    Envia atualização de status do manifesto para a API do Checklist (QVX):
+    - Quando entra em rota: status="EM_TRANSITO", data_inicio="YYYY-MM-DDTHH:MM:SS"
+    - Quando finaliza: status="FINALIZADO", data_finalizacao="YYYY-MM-DDTHH:MM:SS"
+    """
+    from django_tenants.utils import schema_context
+    target_schema = schema_name or 'public'
+
+    with schema_context(target_schema):
+        from manifesto.models import Manifesto
+        from configuracao.utils import get_config
+        from django.core.cache import cache
+        from django.utils import timezone
+        import pytz
+        import requests
+        import json
+
+        # Idempotência simples para não enviar o mesmo evento repetido em menos de 60 segundos
+        cache_key = f"checklist_qvx_sent_{target_schema}_{manifesto_id}_{evento_status}"
+        if cache.get(cache_key):
+            logger.info(f"⏭️ [CHECKLIST QVX] Evento {evento_status} para manifesto #{manifesto_id} já enviado recentemente. Ignorando duplicata.")
+            return "Já enviado recentemente"
+
+        config = get_config()
+        if not getattr(config, 'habilitar_checklist_qvx', True):
+            logger.info(f"[CHECKLIST QVX] Integração desativada na configuração (schema: {target_schema}).")
+            return "Desativado"
+
+        try:
+            manifesto = Manifesto.objects.select_related('motorista').get(id=manifesto_id)
+        except Manifesto.DoesNotExist:
+            logger.error(f"[CHECKLIST QVX] Manifesto #{manifesto_id} não encontrado no schema {target_schema}.")
+            return "Manifesto não encontrado"
+
+        fuso_br = pytz.timezone('America/Sao_Paulo')
+        agora_br = timezone.now().astimezone(fuso_br)
+
+        responsavel = manifesto.motorista.nome_completo if (manifesto.motorista and manifesto.motorista.nome_completo) else "Não informado"
+        num_manifesto = str(manifesto.numero_manifesto).strip()
+
+        if evento_status == 'EM_TRANSITO':
+            dt_inicio = manifesto.data_criacao.astimezone(fuso_br) if manifesto.data_criacao else agora_br
+            payload = {
+                "manifesto": num_manifesto,
+                "status": "EM_TRANSITO",
+                "data_inicio": dt_inicio.strftime('%Y-%m-%dT%H:%M:%S'),
+                "responsavel": responsavel
+            }
+        else: # FINALIZADO
+            dt_fim = manifesto.data_finalizacao.astimezone(fuso_br) if manifesto.data_finalizacao else agora_br
+            payload = {
+                "manifesto": num_manifesto,
+                "status": "FINALIZADO",
+                "data_finalizacao": dt_fim.strftime('%Y-%m-%dT%H:%M:%S'),
+                "responsavel": responsavel
+            }
+
+        url = getattr(config, 'checklist_qvx_url', None) or "https://checklist.qvx.com.br/api/v1/drivers"
+        token = getattr(config, 'checklist_qvx_token', None) or "rx_live_t3wlOG4Y4vS0nFXycFIfftmD_GY4fiq5XWGZ1pvDqcY"
+
+        headers = {
+            "Authorization": f"Bearer {token.strip()}",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+
+        logger.info(f"🚀 [CHECKLIST QVX] Disparando {evento_status} (MFT #{num_manifesto}) para {url} | Payload: {json.dumps(payload)}")
+
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=20)
+            logger.info(f"📬 [CHECKLIST QVX] Resposta MFT #{num_manifesto}: HTTP {resp.status_code} - {resp.text[:250]}")
+            cache.set(cache_key, True, timeout=60)
+            if resp.status_code in [200, 201, 204]:
+                return f"Sucesso: {resp.status_code}"
+            else:
+                logger.warning(f"⚠️ [CHECKLIST QVX] Resposta inesperada HTTP {resp.status_code} para MFT #{num_manifesto}: {resp.text[:250]}")
+                return f"Aviso HTTP {resp.status_code}"
+        except Exception as exc:
+            logger.error(f"❌ [CHECKLIST QVX] Erro de conexão para MFT #{num_manifesto}: {exc}")
+            if self.request.retries < self.max_retries:
+                raise self.retry(exc=exc)
+            return f"Erro conexão: {exc}"
+

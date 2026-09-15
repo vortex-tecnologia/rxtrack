@@ -1,4 +1,4 @@
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save, post_delete, pre_save
 from django.dispatch import receiver
 from django.db import transaction
 from manifesto.models import BaixaNF , Manifesto , NotaFiscal
@@ -22,6 +22,47 @@ def manifesto_criado(sender, instance, created, **kwargs):
     if created:
         transaction.on_commit(
             lambda: enviar_painel(instance)
+        )
+
+
+@receiver(pre_save, sender=Manifesto)
+def manifesto_pre_save_track_status(sender, instance, **kwargs):
+    """Guarda o status anterior para detectar transição de status no post_save."""
+    if instance.pk:
+        try:
+            old = Manifesto.objects.only('status').get(pk=instance.pk)
+            instance._old_status_checklist = old.status
+        except Manifesto.DoesNotExist:
+            instance._old_status_checklist = None
+    else:
+        instance._old_status_checklist = None
+
+
+@receiver(post_save, sender=Manifesto)
+def manifesto_post_save_checklist_notify(sender, instance, created, **kwargs):
+    """
+    Dispara notificação para o Checklist QVX automaticamente quando o manifesto:
+    1. Ganha status de em rota (EM_TRANSPORTE) -> envia EM_TRANSITO
+    2. É finalizado (FINALIZADO) -> envia FINALIZADO
+    """
+    old_status = getattr(instance, '_old_status_checklist', None)
+    new_status = instance.status
+
+    from django.db import connection
+    schema_atual = getattr(connection, 'schema_name', 'public')
+
+    # Transição para EM_TRANSPORTE (Em Rota / Em Trânsito)
+    if (created and new_status == 'EM_TRANSPORTE') or (old_status != 'EM_TRANSPORTE' and new_status == 'EM_TRANSPORTE'):
+        from manifesto.tasks import enviar_status_manifesto_checklist_task
+        transaction.on_commit(
+            lambda m_id=instance.id, sch=schema_atual: enviar_status_manifesto_checklist_task.delay(m_id, 'EM_TRANSITO', schema_name=sch)
+        )
+
+    # Transição para FINALIZADO
+    elif old_status != 'FINALIZADO' and new_status == 'FINALIZADO':
+        from manifesto.tasks import enviar_status_manifesto_checklist_task
+        transaction.on_commit(
+            lambda m_id=instance.id, sch=schema_atual: enviar_status_manifesto_checklist_task.delay(m_id, 'FINALIZADO', schema_name=sch)
         )
 
 # REMOVIDO: Signal genérico que disparava enviar_painel em TODA atualização do Manifesto.

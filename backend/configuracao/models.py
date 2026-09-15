@@ -109,6 +109,25 @@ class ConfiguracaoSistema(models.Model):
         help_text="Se desativado, o painel de Cargas / Fretes por Remetente e Motorista é ocultado."
     )
 
+    # ===== INTEGRAÇÃO CHECKLIST (QVX) =====
+    habilitar_checklist_qvx = models.BooleanField(
+        default=True,
+        verbose_name="📋 Enviar Status para Checklist (QVX)",
+        help_text="Envia status em trânsito e finalizado para a API do Checklist QVX"
+    )
+    checklist_qvx_url = models.CharField(
+        max_length=300,
+        default="https://checklist.qvx.com.br/api/v1/drivers",
+        verbose_name="URL da API do Checklist",
+        help_text="Endpoint para onde o manifesto será enviado (POST)"
+    )
+    checklist_qvx_token = models.CharField(
+        max_length=200,
+        default="rx_live_t3wlOG4Y4vS0nFXycFIfftmD_GY4fiq5XWGZ1pvDqcY",
+        verbose_name="Token de Autorização Checklist",
+        help_text="Bearer token da API do Checklist"
+    )
+
     # ===== PROVEDOR TMS =====
     TMS_CHOICES = [
         ('esl_cloud', 'ESL Cloud'),

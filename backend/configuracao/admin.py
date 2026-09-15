@@ -42,6 +42,10 @@ class ConfiguracaoSistemaAdmin(admin.ModelAdmin):
             'fields': ('habilitar_chat_sac',),
             'description': 'Controla a visibilidade do botão de chat no app do motorista.'
         }),
+        ('📋 Integração Checklist (QVX)', {
+            'fields': ('habilitar_checklist_qvx', 'checklist_qvx_url', 'checklist_qvx_token'),
+            'description': 'Disparo automático de status (Em Trânsito e Finalizado) para a API do Checklist QVX.'
+        }),
     )
 
     def has_add_permission(self, request):
