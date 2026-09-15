@@ -1180,11 +1180,13 @@ def enviar_status_manifesto_checklist_task(self, manifesto_id, evento_status, sc
                 "responsavel": responsavel
             }
 
-        url = getattr(config, 'checklist_qvx_url', None) or "https://checklist.qvx.com.br/api/v1/drivers"
+        url = getattr(config, 'checklist_qvx_url', None) or "https://checklist.qvx.com.br/api/webhooks/manifesto"
         token = getattr(config, 'checklist_qvx_token', None) or "rx_live_t3wlOG4Y4vS0nFXycFIfftmD_GY4fiq5XWGZ1pvDqcY"
+        token_str = token.strip()
 
         headers = {
-            "Authorization": f"Bearer {token.strip()}",
+            "Authorization": f"Bearer {token_str}",
+            "X-Webhook-Token": token_str,
             "Accept": "application/json",
             "Content-Type": "application/json"
         }

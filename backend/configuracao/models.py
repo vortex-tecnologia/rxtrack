@@ -117,7 +117,7 @@ class ConfiguracaoSistema(models.Model):
     )
     checklist_qvx_url = models.CharField(
         max_length=300,
-        default="https://checklist.qvx.com.br/api/v1/drivers",
+        default="https://checklist.qvx.com.br/api/webhooks/manifesto",
         verbose_name="URL da API do Checklist",
         help_text="Endpoint para onde o manifesto será enviado (POST)"
     )
