@@ -1116,7 +1116,7 @@ def enviar_status_manifesto_checklist_task(self, manifesto_id, evento_status, sc
     target_schema = schema_name or 'public'
 
     with schema_context(target_schema):
-        from manifesto.models import Manifesto
+        from manifesto.models import Manifesto, LogChecklistManifesto
         from configuracao.utils import get_config
         from django.core.cache import cache
         from django.utils import timezone
@@ -1179,14 +1179,42 @@ def enviar_status_manifesto_checklist_task(self, manifesto_id, evento_status, sc
             resp = requests.post(url, json=payload, headers=headers, timeout=20)
             logger.info(f"📬 [CHECKLIST QVX] Resposta MFT #{num_manifesto}: HTTP {resp.status_code} - {resp.text[:250]}")
             cache.set(cache_key, True, timeout=60)
-            if resp.status_code in [200, 201, 204]:
+            status_envio = 'SUCESSO' if resp.status_code in [200, 201, 204] else 'ERRO'
+            try:
+                LogChecklistManifesto.objects.create(
+                    manifesto=manifesto,
+                    numero_manifesto=num_manifesto,
+                    evento=evento_status,
+                    status_envio=status_envio,
+                    http_status=resp.status_code,
+                    payload_enviado=payload,
+                    resposta_api=resp.text[:2000]
+                )
+            except Exception as e_db:
+                logger.error(f"Erro ao salvar LogChecklistManifesto: {e_db}")
+
+            if status_envio == 'SUCESSO':
                 return f"Sucesso: {resp.status_code}"
             else:
                 logger.warning(f"⚠️ [CHECKLIST QVX] Resposta inesperada HTTP {resp.status_code} para MFT #{num_manifesto}: {resp.text[:250]}")
                 return f"Aviso HTTP {resp.status_code}"
         except Exception as exc:
             logger.error(f"❌ [CHECKLIST QVX] Erro de conexão para MFT #{num_manifesto}: {exc}")
+            try:
+                LogChecklistManifesto.objects.create(
+                    manifesto=manifesto,
+                    numero_manifesto=num_manifesto,
+                    evento=evento_status,
+                    status_envio='ERRO',
+                    http_status=None,
+                    payload_enviado=payload,
+                    resposta_api=f"Exceção: {exc}"[:2000]
+                )
+            except Exception as e_db:
+                logger.error(f"Erro ao salvar LogChecklistManifesto (erro): {e_db}")
+
             if self.request.retries < self.max_retries:
                 raise self.retry(exc=exc)
             return f"Erro conexão: {exc}"
+
 

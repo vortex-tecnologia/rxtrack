@@ -568,3 +568,67 @@ class LogBaixaNfe(models.Model):
             models.Index(fields=['-criado_em']),
             models.Index(fields=['lido', 'tipo']),
         ]
+
+
+# 7. Log de Envio para Checklist QVX
+class LogChecklistManifesto(models.Model):
+    """
+    Registra os envios automáticos de status do Manifesto para a API externa do Checklist (QVX).
+    Permite auditar se o envio obteve sucesso ou falha, o payload enviado e a resposta da API.
+    """
+    STATUS_CHOICES = [
+        ('SUCESSO', 'Sucesso'),
+        ('ERRO', 'Erro'),
+        ('AVISO', 'Aviso / Resposta Inesperada'),
+    ]
+
+    manifesto = models.ForeignKey(
+        Manifesto,
+        on_delete=models.CASCADE,
+        related_name='logs_checklist',
+        null=True, blank=True,
+        verbose_name="Manifesto"
+    )
+    numero_manifesto = models.CharField(
+        max_length=50,
+        verbose_name="Nº Manifesto"
+    )
+    evento = models.CharField(
+        max_length=30,
+        verbose_name="Evento (Status)"
+    )
+    status_envio = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='SUCESSO',
+        verbose_name="Status do Envio"
+    )
+    http_status = models.IntegerField(
+        null=True, blank=True,
+        verbose_name="Status HTTP"
+    )
+    payload_enviado = models.JSONField(
+        null=True, blank=True,
+        verbose_name="Payload Enviado"
+    )
+    resposta_api = models.TextField(
+        blank=True, default='',
+        verbose_name="Resposta da API"
+    )
+    criado_em = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Data/Hora do Envio"
+    )
+
+    def __str__(self):
+        return f"[{self.status_envio}] MFT #{self.numero_manifesto} - {self.evento} (HTTP {self.http_status})"
+
+    class Meta:
+        verbose_name = "Log de Envio Checklist (QVX)"
+        verbose_name_plural = "Logs de Envio Checklist (QVX)"
+        ordering = ['-criado_em']
+        indexes = [
+            models.Index(fields=['-criado_em']),
+            models.Index(fields=['numero_manifesto']),
+            models.Index(fields=['status_envio']),
+        ]

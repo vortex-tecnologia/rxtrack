@@ -6,7 +6,7 @@ import json
 from .models import (
     Manifesto, NotaFiscal, Ocorrencia, BaixaNF, 
     HistoricoOcorrencia, ManifestoBuscaLog, WebhookEventoManifestoESL, WebhookTokenControl,
-    LogBaixaNfe, Frete, Veiculo
+    LogBaixaNfe, Frete, Veiculo, LogChecklistManifesto
 )
 from manifesto.tasks import enviar_baixa_esl_task
 
@@ -199,4 +199,29 @@ class LogBaixaNfeAdmin(ModelAdmin):
     search_fields = ("numero_nota", "manifesto_numero", "mensagem")
     readonly_fields = ("criado_em",)
     ordering = ("-criado_em",)
+
+
+@admin.register(LogChecklistManifesto)
+class LogChecklistManifestoAdmin(ModelAdmin):
+    list_display = ("numero_manifesto", "evento", "status_badge", "http_status", "criado_em")
+    list_filter = ("status_envio", "evento", "criado_em")
+    search_fields = ("numero_manifesto", "resposta_api")
+    readonly_fields = ("criado_em", "payload_formatado")
+    ordering = ("-criado_em",)
+
+    def status_badge(self, obj):
+        color = "#28a745" if obj.status_envio == "SUCESSO" else ("#ffc107" if obj.status_envio == "AVISO" else "#dc3545")
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 8px; border-radius: 4px; font-weight: bold;">{}</span>',
+            color,
+            obj.get_status_envio_display()
+        )
+    status_badge.short_description = "Status Envio"
+
+    def payload_formatado(self, obj):
+        if not obj.payload_enviado:
+            return "-"
+        return format_html("<pre>{}</pre>", json.dumps(obj.payload_enviado, indent=2, ensure_ascii=False))
+    payload_formatado.short_description = "Payload Formatado"
+
 
