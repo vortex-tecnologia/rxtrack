@@ -20,9 +20,12 @@ from django.db.models import Count, Q, Sum, Avg, ExpressionWrapper, FloatField, 
 from collections import defaultdict
 
 def login_operacional_view(request):
-    # ✅ NOVO: Se o usuário já estiver logado, redireciona para a página certa
+    # ✅ Se o usuário já estiver logado, redireciona para a página certa
     if request.method == 'GET':
         if request.user.is_authenticated:
+            # Verifica se é cliente primeiro
+            if hasattr(request.user, 'cliente_perfil'):
+                return redirect('/portal-cliente/')
             try:
                 tipo = request.user.motorista_perfil.tipo_usuario
                 if tipo == 'OPERACIONAL':
@@ -40,11 +43,60 @@ def login_operacional_view(request):
             senha = data.get('senha')
             acao = data.get('acao') 
 
+            # Tenta localizar como Motorista primeiro, depois como Cliente
+            perfil = None
+            is_cliente = False
             try:
                 perfil = Motorista.objects.get(cpf=cpf)
             except Motorista.DoesNotExist:
-                return JsonResponse({'status': 'erro', 'message': 'CPF não registrado.'}, status=404)
+                # Fallback: verifica se é um Cliente (Portal do Cliente)
+                from clientes.models import UsuarioCliente
+                try:
+                    perfil_cliente = UsuarioCliente.objects.get(cpf=cpf, ativo=True)
+                    is_cliente = True
+                except UsuarioCliente.DoesNotExist:
+                    return JsonResponse({'status': 'erro', 'message': 'CPF não registrado.'}, status=404)
 
+            # === FLUXO CLIENTE (Portal do Cliente) ===
+            if is_cliente:
+                if acao == 'verificar':
+                    if not perfil_cliente.user or not perfil_cliente.user.has_usable_password():
+                        return JsonResponse({'status': 'novo_usuario', 'nome': perfil_cliente.nome_completo, 'tipo': 'CLIENTE'})
+                    else:
+                        return JsonResponse({'status': 'usuario_registrado', 'nome': perfil_cliente.nome_completo, 'tipo': 'CLIENTE'})
+
+                if acao == 'cadastrar':
+                    if not perfil_cliente.user:
+                        user = User.objects.filter(username=cpf).first()
+                        if not user:
+                            user = User.objects.create_user(username=cpf, password=senha)
+                        else:
+                            user.set_password(senha)
+                        if perfil_cliente.nome_completo:
+                            user.first_name = perfil_cliente.nome_completo.split()[0]
+                            nomes = perfil_cliente.nome_completo.split()
+                            if len(nomes) > 1:
+                                user.last_name = " ".join(nomes[1:])
+                        user.save()
+                        perfil_cliente.user = user
+                        perfil_cliente.save()
+                    else:
+                        perfil_cliente.user.set_password(senha)
+                        perfil_cliente.user.save()
+                    login(request, perfil_cliente.user)
+                    return JsonResponse({'status': 'sucesso', 'url': '/portal-cliente/'})
+
+                if acao == 'login':
+                    user = authenticate(request, username=cpf, password=senha)
+                    if user:
+                        login(request, user)
+                        return JsonResponse({'status': 'sucesso', 'url': '/portal-cliente/'})
+                    else:
+                        return JsonResponse({'status': 'erro', 'message': 'Senha incorreta.'}, status=401)
+
+                return JsonResponse({'status': 'erro', 'message': 'Ação inválida.'}, status=400)
+
+            # === FLUXO MOTORISTA / OPERACIONAL / SAC ===
             # 1. Removida a restrição de acesso exclusivo do painel para a tela unificada
 
             # 2. Lógica de Verificação Inicial

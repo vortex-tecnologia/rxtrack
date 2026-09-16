@@ -19,6 +19,10 @@ def apenas_operacional(view_func):
         if not request.user.is_authenticated:
             return redirect('/login/')
 
+        # Bloqueia clientes — redireciona para o portal deles
+        if hasattr(request.user, 'cliente_perfil'):
+            return redirect('/portal-cliente/')
+
         # Verifica apenas a permissão. 
         # Se a view der erro (tipo Manifesto 404), o Django deve mostrar o erro, 
         # e não te deslogar.

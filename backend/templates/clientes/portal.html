@@ -1,0 +1,445 @@
+{% extends "clientes/base_cliente.html" %}
+{% load static %}
+
+{% block title %}Minhas Cargas{% endblock %}
+
+{% block content %}
+<!-- KPI Cards -->
+<div class="row g-3 mb-4" id="kpi-row">
+    <div class="col-6 col-lg-3 animate-in" style="animation-delay: 0.05s;">
+        <div class="kpi-card kpi-em-rota" onclick="filtrarStatus('em_rota')" id="kpi-em-rota">
+            <div class="kpi-icon"><i class="bi bi-truck"></i></div>
+            <div class="kpi-value" id="val-em-rota">—</div>
+            <div class="kpi-label">Em Rota</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3 animate-in" style="animation-delay: 0.1s;">
+        <div class="kpi-card kpi-entregue" onclick="filtrarStatus('entregue')" id="kpi-entregue">
+            <div class="kpi-icon"><i class="bi bi-check-circle"></i></div>
+            <div class="kpi-value" id="val-entregues">—</div>
+            <div class="kpi-label">Entregues</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3 animate-in" style="animation-delay: 0.15s;">
+        <div class="kpi-card kpi-ocorrencia" onclick="filtrarStatus('ocorrencia')" id="kpi-ocorrencia">
+            <div class="kpi-icon"><i class="bi bi-exclamation-triangle"></i></div>
+            <div class="kpi-value" id="val-ocorrencias">—</div>
+            <div class="kpi-label">Ocorrências</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3 animate-in" style="animation-delay: 0.2s;">
+        <div class="kpi-card kpi-total" onclick="filtrarStatus('todos')" id="kpi-total">
+            <div class="kpi-icon"><i class="bi bi-box-seam"></i></div>
+            <div class="kpi-value" id="val-total">—</div>
+            <div class="kpi-label">Total Geral</div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabela de Cargas -->
+<div class="table-container animate-in" style="animation-delay: 0.25s;">
+    <!-- Header -->
+    <div class="table-header">
+        <div>
+            <h6><i class="bi bi-box-seam me-2"></i>Minhas Cargas</h6>
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <div class="search-wrapper">
+                <i class="bi bi-search"></i>
+                <input type="text" class="search-input" id="inputBusca" placeholder="Buscar NF, CT-e ou destinatário..." autocomplete="off">
+            </div>
+            <button class="btn btn-outline-primary btn-sm px-3" onclick="exportarExcel()" title="Exportar relatório Excel">
+                <i class="bi bi-file-earmark-excel me-1"></i>Excel
+            </button>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="filters-bar">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-funnel text-muted" style="font-size: 0.85rem;"></i>
+            <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Filtros:</span>
+        </div>
+        <input type="date" class="form-control form-control-sm" id="filtroDataInicio" style="max-width: 160px;" title="Data início">
+        <input type="date" class="form-control form-control-sm" id="filtroDataFim" style="max-width: 160px;" title="Data fim">
+        {% if qtd_pagadores > 1 %}
+        <select class="form-select form-select-sm" id="filtroPagador" style="max-width: 220px;">
+            <option value="">Todos os Pagadores</option>
+            {% for p in pagadores %}
+            <option value="{{ p }}">{{ p }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+        <button class="btn btn-sm btn-outline-secondary" onclick="limparFiltros()">
+            <i class="bi bi-x-circle me-1"></i>Limpar
+        </button>
+    </div>
+
+    <!-- Tabela -->
+    <div class="table-responsive">
+        <table class="cli-table">
+            <thead>
+                <tr>
+                    <th>NF</th>
+                    <th>CT-e</th>
+                    <th>Destinatário</th>
+                    <th>Cidade / UF</th>
+                    {% if qtd_pagadores > 1 %}<th>Pagador</th>{% endif %}
+                    <th>Saída</th>
+                    <th>Entrega</th>
+                    <th>Status</th>
+                    <th style="width: 50px;"></th>
+                </tr>
+            </thead>
+            <tbody id="tabelaCargas">
+                <!-- Preenchido via JS -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Loading -->
+    <div class="loading-overlay" id="loadingCargas" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Carregando...</span>
+        </div>
+    </div>
+
+    <!-- Empty state -->
+    <div class="empty-state" id="emptyState" style="display: none;">
+        <i class="bi bi-inbox"></i>
+        <p>Nenhuma carga encontrada para os filtros selecionados.</p>
+    </div>
+
+    <!-- Paginação -->
+    <div class="cli-pagination" id="paginacao" style="display: none;">
+        <span class="page-info" id="pageInfo"></span>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" id="btnPrevPage" onclick="mudarPagina(-1)">
+                <i class="bi bi-chevron-left"></i> Anterior
+            </button>
+            <button class="btn btn-sm btn-outline-primary" id="btnNextPage" onclick="mudarPagina(1)">
+                Próxima <i class="bi bi-chevron-right"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Detalhes da Carga -->
+<div class="modal fade detail-modal" id="modalDetalhe" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-0" id="modalTitulo">
+                        <i class="bi bi-box-seam me-2"></i>Detalhes da Carga
+                    </h5>
+                    <small class="opacity-75" id="modalSubtitulo"></small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <div class="loading-overlay">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ========================================================
+// PORTAL DO CLIENTE — JAVASCRIPT
+// ========================================================
+
+const CSRF = '{{ csrf_token }}';
+const MULTI_PAGADOR = {{ qtd_pagadores }} > 1;
+let paginaAtual = 1;
+let statusFiltro = 'todos';
+let timerBusca = null;
+
+// ---- CARREGAR CARGAS ----
+async function carregarCargas(page = 1) {
+    const tbody = document.getElementById('tabelaCargas');
+    const loading = document.getElementById('loadingCargas');
+    const empty = document.getElementById('emptyState');
+
+    tbody.innerHTML = '';
+    loading.style.display = 'flex';
+    empty.style.display = 'none';
+
+    const params = new URLSearchParams();
+    params.set('page', page);
+    params.set('status', statusFiltro);
+
+    const q = document.getElementById('inputBusca').value.trim();
+    if (q) params.set('q', q);
+
+    const di = document.getElementById('filtroDataInicio').value;
+    if (di) params.set('data_inicio', di);
+
+    const df = document.getElementById('filtroDataFim').value;
+    if (df) params.set('data_fim', df);
+
+    const pagadorEl = document.getElementById('filtroPagador');
+    if (pagadorEl && pagadorEl.value) params.set('pagador', pagadorEl.value);
+
+    try {
+        const res = await fetch(`/portal-cliente/api/cargas/?${params.toString()}`);
+        const data = await res.json();
+
+        // Atualiza KPIs
+        document.getElementById('val-em-rota').textContent = data.resumo.em_rota;
+        document.getElementById('val-entregues').textContent = data.resumo.entregues;
+        document.getElementById('val-ocorrencias').textContent = data.resumo.ocorrencias;
+        document.getElementById('val-total').textContent = data.resumo.total;
+
+        loading.style.display = 'none';
+
+        if (data.cargas.length === 0) {
+            empty.style.display = 'block';
+            document.getElementById('paginacao').style.display = 'none';
+            return;
+        }
+
+        // Renderiza linhas
+        data.cargas.forEach((c, i) => {
+            const tr = document.createElement('tr');
+            tr.style.animationDelay = `${i * 0.02}s`;
+            tr.classList.add('animate-in');
+            tr.onclick = () => abrirDetalhe(c.id);
+
+            let pagadorCol = '';
+            if (MULTI_PAGADOR) {
+                pagadorCol = `<td><span class="text-truncate d-inline-block" style="max-width: 150px;" title="${c.pagador}">${c.pagador}</span></td>`;
+            }
+
+            tr.innerHTML = `
+                <td><strong>${c.numero_nota}</strong></td>
+                <td class="text-muted">${c.numero_cte || '—'}</td>
+                <td>
+                    <span class="text-truncate d-inline-block" style="max-width: 200px;" title="${c.destinatario}">
+                        ${c.destinatario || '—'}
+                    </span>
+                </td>
+                <td class="text-muted" style="font-size: 0.82rem;">${c.cidade_uf || '—'}</td>
+                ${pagadorCol}
+                <td style="font-size: 0.82rem;">${c.data_saida || '—'}</td>
+                <td style="font-size: 0.82rem;">${c.data_entrega || '—'}</td>
+                <td><span class="status-badge badge-${c.status_class}"><i class="bi bi-circle-fill" style="font-size: 0.4rem;"></i>${c.status}</span></td>
+                <td><i class="bi bi-chevron-right text-muted"></i></td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // Paginação
+        const pag = data.paginacao;
+        const pagDiv = document.getElementById('paginacao');
+        if (pag.total_pages > 1) {
+            pagDiv.style.display = 'flex';
+            document.getElementById('pageInfo').textContent = `Página ${pag.page} de ${pag.total_pages} (${pag.total} cargas)`;
+            document.getElementById('btnPrevPage').disabled = pag.page <= 1;
+            document.getElementById('btnNextPage').disabled = pag.page >= pag.total_pages;
+            paginaAtual = pag.page;
+        } else {
+            pagDiv.style.display = 'none';
+        }
+
+    } catch (err) {
+        loading.style.display = 'none';
+        console.error('Erro ao carregar cargas:', err);
+        Swal.fire('Erro', 'Não foi possível carregar as cargas. Tente novamente.', 'error');
+    }
+}
+
+// ---- FILTRO POR STATUS (click nos KPI cards) ----
+function filtrarStatus(status) {
+    // Remove active de todos os cards
+    document.querySelectorAll('.kpi-card').forEach(c => c.classList.remove('active-filter'));
+
+    // Ativa o card clicado
+    if (statusFiltro === status) {
+        statusFiltro = 'todos';
+        document.getElementById('kpi-total').classList.add('active-filter');
+    } else {
+        statusFiltro = status;
+        const cardMap = {
+            'em_rota': 'kpi-em-rota',
+            'entregue': 'kpi-entregue',
+            'ocorrencia': 'kpi-ocorrencia',
+            'todos': 'kpi-total',
+        };
+        const el = document.getElementById(cardMap[status]);
+        if (el) el.classList.add('active-filter');
+    }
+
+    paginaAtual = 1;
+    carregarCargas(1);
+}
+
+// ---- BUSCA COM DEBOUNCE ----
+document.getElementById('inputBusca').addEventListener('input', () => {
+    clearTimeout(timerBusca);
+    timerBusca = setTimeout(() => {
+        paginaAtual = 1;
+        carregarCargas(1);
+    }, 400);
+});
+
+// ---- FILTROS DE DATA ----
+document.getElementById('filtroDataInicio').addEventListener('change', () => carregarCargas(1));
+document.getElementById('filtroDataFim').addEventListener('change', () => carregarCargas(1));
+
+// ---- FILTRO DE PAGADOR ----
+const pagadorEl = document.getElementById('filtroPagador');
+if (pagadorEl) {
+    pagadorEl.addEventListener('change', () => carregarCargas(1));
+}
+
+// ---- LIMPAR FILTROS ----
+function limparFiltros() {
+    document.getElementById('inputBusca').value = '';
+    document.getElementById('filtroDataInicio').value = '';
+    document.getElementById('filtroDataFim').value = '';
+    if (pagadorEl) pagadorEl.value = '';
+    statusFiltro = 'todos';
+    document.querySelectorAll('.kpi-card').forEach(c => c.classList.remove('active-filter'));
+    paginaAtual = 1;
+    carregarCargas(1);
+}
+
+// ---- PAGINAÇÃO ----
+function mudarPagina(delta) {
+    carregarCargas(paginaAtual + delta);
+}
+
+// ---- DETALHE DA CARGA (MODAL) ----
+async function abrirDetalhe(notaId) {
+    const modal = new bootstrap.Modal(document.getElementById('modalDetalhe'));
+    const body = document.getElementById('modalBody');
+
+    body.innerHTML = '<div class="loading-overlay"><div class="spinner-border text-primary" role="status"></div></div>';
+    modal.show();
+
+    try {
+        const res = await fetch(`/portal-cliente/api/carga/${notaId}/`);
+        const data = await res.json();
+
+        if (data.erro) {
+            body.innerHTML = `<div class="empty-state"><i class="bi bi-exclamation-circle"></i><p>${data.erro}</p></div>`;
+            return;
+        }
+
+        const n = data.nota;
+        const mf = data.manifesto;
+        const fr = data.frete;
+        const bx = data.baixa;
+        const hist = data.historico;
+
+        document.getElementById('modalTitulo').innerHTML = `<i class="bi bi-box-seam me-2"></i>NF ${n.numero_nota}`;
+        document.getElementById('modalSubtitulo').textContent = n.destinatario;
+
+        let html = '';
+
+        // Seção: Dados da Carga
+        html += `
+        <div class="detail-section">
+            <h6><i class="bi bi-file-earmark-text"></i> Dados da Carga</h6>
+            <div class="detail-row"><span class="label">Nota Fiscal</span><span class="value">${n.numero_nota}</span></div>
+            ${n.numero_cte ? `<div class="detail-row"><span class="label">CT-e</span><span class="value">${n.numero_cte}</span></div>` : ''}
+            <div class="detail-row"><span class="label">Destinatário</span><span class="value">${n.destinatario || '—'}</span></div>
+            <div class="detail-row"><span class="label">Endereço</span><span class="value">${n.endereco || '—'}</span></div>
+            ${n.cep ? `<div class="detail-row"><span class="label">CEP</span><span class="value">${n.cep}</span></div>` : ''}
+            ${fr.volumes ? `<div class="detail-row"><span class="label">Volumes</span><span class="value">${fr.volumes}</span></div>` : ''}
+            ${fr.peso ? `<div class="detail-row"><span class="label">Peso</span><span class="value">${fr.peso} kg</span></div>` : ''}
+            <div class="detail-row"><span class="label">Data de Saída</span><span class="value">${mf.data_saida || '—'}</span></div>
+            ${mf.data_finalizacao ? `<div class="detail-row"><span class="label">Rota Finalizada</span><span class="value">${mf.data_finalizacao}</span></div>` : ''}
+        </div>`;
+
+        // Seção: Comprovante de Entrega
+        if (bx) {
+            html += `
+            <div class="detail-section">
+                <h6><i class="bi bi-camera"></i> Comprovante de Entrega</h6>
+                ${bx.recebedor ? `<div class="detail-row"><span class="label">Recebedor</span><span class="value">${bx.recebedor}</span></div>` : ''}
+                ${bx.documento_recebedor ? `<div class="detail-row"><span class="label">Documento</span><span class="value">${bx.documento_recebedor}</span></div>` : ''}
+                ${bx.data_baixa ? `<div class="detail-row"><span class="label">Data da Entrega</span><span class="value">${bx.data_baixa}</span></div>` : ''}
+                ${bx.observacao ? `<div class="detail-row"><span class="label">Observação</span><span class="value">${bx.observacao}</span></div>` : ''}
+                ${bx.ocorrencia ? `<div class="detail-row"><span class="label">Ocorrência</span><span class="value"><span class="status-badge badge-warning">${bx.ocorrencia}</span></span></div>` : ''}
+            `;
+
+            if (bx.comprovante_url) {
+                html += `
+                <div class="comprovante-container mt-3">
+                    <img src="${bx.comprovante_url}" alt="Comprovante de Entrega" onclick="window.open('${bx.comprovante_url}', '_blank')" title="Clique para ampliar">
+                    <div class="mt-2">
+                        <a href="${bx.comprovante_url}" target="_blank" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-download me-1"></i>Baixar Comprovante
+                        </a>
+                    </div>
+                </div>`;
+            } else {
+                html += `
+                <div class="comprovante-empty mt-3">
+                    <i class="bi bi-image"></i>
+                    <p class="mb-0">Comprovante físico retido para conferência</p>
+                    <small class="text-muted">O canhoto desta entrega está sob custódia operacional.</small>
+                </div>`;
+            }
+
+            html += '</div>';
+        }
+
+        // Seção: Rastreamento (Timeline)
+        if (hist && hist.length > 0) {
+            html += `
+            <div class="detail-section">
+                <h6><i class="bi bi-geo-alt"></i> Rastreamento</h6>
+                <ul class="timeline">`;
+
+            hist.forEach((h, i) => {
+                html += `
+                <li class="timeline-item">
+                    <div class="timeline-dot">${i === 0 ? '<i class="bi bi-geo-alt-fill" style="font-size: 0.7rem;"></i>' : (i + 1)}</div>
+                    <div class="timeline-content">
+                        <div class="timeline-date">${h.data || '—'}</div>
+                        <div class="timeline-text">${h.comentarios || 'Evento registrado'}</div>
+                    </div>
+                </li>`;
+            });
+
+            html += '</ul></div>';
+        }
+
+        body.innerHTML = html;
+
+    } catch (err) {
+        console.error('Erro ao carregar detalhe:', err);
+        body.innerHTML = '<div class="empty-state"><i class="bi bi-exclamation-circle"></i><p>Erro ao carregar os detalhes.</p></div>';
+    }
+}
+
+// ---- EXPORTAR EXCEL ----
+function exportarExcel() {
+    const params = new URLSearchParams();
+
+    const di = document.getElementById('filtroDataInicio').value;
+    if (di) params.set('data_inicio', di);
+
+    const df = document.getElementById('filtroDataFim').value;
+    if (df) params.set('data_fim', df);
+
+    const pagadorEl = document.getElementById('filtroPagador');
+    if (pagadorEl && pagadorEl.value) params.set('pagador', pagadorEl.value);
+
+    window.open(`/portal-cliente/api/exportar/?${params.toString()}`, '_blank');
+}
+
+// ---- INICIALIZAÇÃO ----
+document.addEventListener('DOMContentLoaded', () => {
+    carregarCargas(1);
+});
+</script>
+{% endblock %}

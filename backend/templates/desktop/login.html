@@ -119,6 +119,15 @@ async function verificarCPF() {
 async function fazerLogin() {
     const senha = document.getElementById('input-senha-login').value;
     
+    // CLIENTE usa login por sessão (mesmo fluxo do operacional)
+    if (globalTipo === 'CLIENTE') {
+        const res = await callAPI({ cpf: globalCPF, senha: senha, acao: 'login' });
+        const data = await res.json();
+        if (res.ok) window.location.href = data.url;
+        else showAlert(data.message);
+        return;
+    }
+    
     if (globalTipo === 'MOTORISTA' || globalTipo === 'SAC_MOBILE') {
         try {
             const res = await fetch(window.location.origin + '/api/auth/login/', {
@@ -165,6 +174,15 @@ async function cadastrarSenha() {
 
     if (p1 !== p2 || p1.length < 4) {
         showAlert("As senhas não conferem ou são muito curtas.");
+        return;
+    }
+
+    // CLIENTE usa cadastro por sessão (mesmo fluxo do operacional)
+    if (globalTipo === 'CLIENTE') {
+        const res = await callAPI({ cpf: globalCPF, senha: p1, acao: 'cadastrar' });
+        const data = await res.json();
+        if (res.ok) window.location.href = data.url;
+        else showAlert(data.message);
         return;
     }
 

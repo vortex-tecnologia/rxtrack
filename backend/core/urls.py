@@ -55,6 +55,7 @@ urlpatterns = [
     path('blog/', include(('blog.urls', 'blog'), namespace='blog')),
     path('novidades/', include(('blog.urls', 'novidades'), namespace='novidades')),
     path('financeiro/', include(('financeiro.urls', 'financeiro'), namespace='financeiro')),
+    path('portal-cliente/', include(('clientes.urls', 'clientes'), namespace='clientes')),
     path('', include('pwa.urls')),
     # Gestao de Usuarios
     path('gestao/', include('usuarios.gestao_urls')),
