@@ -47,6 +47,29 @@ def portal_cliente_view(request):
     return render(request, 'clientes/portal.html', context)
 
 
+def get_filtro_cliente_qs(pagadores, pagador_filtro=None):
+    """
+    Constrói o filtro Q abrangente para capturar todas as operações do cliente:
+    - Entregas onde ele é o pagador do frete ou remetente
+    - Coletas onde ele é o solicitante/destinatário (tipo_operacao='COLETA')
+    - Notas fiscais onde ele é o destinatário direto
+    """
+    alvos = [pagador_filtro] if pagador_filtro else pagadores
+    filtro = Q()
+    for p in alvos:
+        if not p:
+            continue
+        p_clean = p.strip()
+        filtro |= Q(frete__pagador_nome__iexact=p_clean)
+        filtro |= Q(frete__remetente__iexact=p_clean)
+        filtro |= Q(frete__pagador_nome__icontains=p_clean)
+        filtro |= Q(frete__remetente__icontains=p_clean)
+        filtro |= Q(tipo_operacao='COLETA', destinatario__icontains=p_clean)
+        filtro |= Q(destinatario__iexact=p_clean)
+        filtro |= Q(destinatario__icontains=p_clean)
+    return filtro
+
+
 # ============================================================
 # API: CARGAS DO CLIENTE (JSON)
 # ============================================================
@@ -55,12 +78,12 @@ def portal_cliente_view(request):
 @apenas_cliente
 def api_cargas_cliente(request):
     """
-    Retorna JSON com todas as cargas (notas fiscais) do cliente logado.
-    Filtra por pagador_nome vinculado ao cliente.
+    Retorna JSON com todas as cargas (notas fiscais e coletas) do cliente logado.
+    Filtra por pagador_nome, remetente e destinatário vinculado ao cliente.
     Sem filtro de filial — mostra cargas de todas as bases.
     
     Query params:
-        - q: busca por NF, CT-e ou destinatário
+        - q: busca por NF, Coleta, CT-e ou destinatário
         - status: 'em_rota', 'entregue', 'ocorrencia', 'todos'
         - data_inicio: YYYY-MM-DD
         - data_fim: YYYY-MM-DD
@@ -90,18 +113,16 @@ def api_cargas_cliente(request):
     page = int(request.GET.get('page', 1))
     per_page = 50
 
-    # Query base: todas as notas vinculadas aos pagadores do cliente
+    # Query base: todas as notas e coletas vinculadas aos pagadores do cliente
+    filtro_cliente = get_filtro_cliente_qs(pagadores, pagador_filtro)
+
     notas_qs = NotaFiscal.objects.filter(
-        frete__pagador_nome__in=pagadores
+        filtro_cliente
     ).select_related(
         'manifesto', 'manifesto__filial', 'frete'
     ).prefetch_related(
         'baixa_info__ocorrencia'
     )
-
-    # Filtro por pagador específico
-    if pagador_filtro:
-        notas_qs = notas_qs.filter(frete__pagador_nome=pagador_filtro)
 
     # Filtro por período
     if data_inicio:
@@ -113,6 +134,7 @@ def api_cargas_cliente(request):
     if q:
         notas_qs = notas_qs.filter(
             Q(numero_nota__icontains=q) |
+            Q(numero_coleta__icontains=q) |
             Q(numero_cte__icontains=q) |
             Q(chave_acesso__icontains=q) |
             Q(destinatario__icontains=q) |
@@ -137,12 +159,8 @@ def api_cargas_cliente(request):
     # Contadores para os cards KPI (sobre o total sem paginação)
     total_notas = notas_qs.count()
 
-    # Para os KPIs, precisamos contar sem o filtro de status
-    notas_kpi = NotaFiscal.objects.filter(
-        frete__pagador_nome__in=pagadores
-    )
-    if pagador_filtro:
-        notas_kpi = notas_kpi.filter(frete__pagador_nome=pagador_filtro)
+    # Para os KPIs, contamos sobre o filtro base do cliente
+    notas_kpi = NotaFiscal.objects.filter(filtro_cliente)
     if data_inicio:
         notas_kpi = notas_kpi.filter(manifesto__data_criacao__date__gte=data_inicio)
     if data_fim:
@@ -150,6 +168,7 @@ def api_cargas_cliente(request):
     if q:
         notas_kpi = notas_kpi.filter(
             Q(numero_nota__icontains=q) |
+            Q(numero_coleta__icontains=q) |
             Q(numero_cte__icontains=q) |
             Q(destinatario__icontains=q)
         )
@@ -172,14 +191,16 @@ def api_cargas_cliente(request):
     cargas = []
     for n in notas_page:
         mf = n.manifesto
+        is_coleta = (n.tipo_operacao == 'COLETA')
+        numero_doc = n.numero_coleta if (is_coleta and n.numero_coleta) else n.numero_nota
 
-        # Data de saída (início do transporte)
+        # Data de saída (início do transporte ou solicitação)
         data_saida = ''
         if mf and mf.data_criacao:
             dt = timezone.localtime(mf.data_criacao)
             data_saida = dt.strftime('%d/%m/%Y %H:%M')
 
-        # Data de entrega/baixa
+        # Data de entrega/coleta/baixa
         data_entrega = ''
         recebedor = ''
         observacao = ''
@@ -209,48 +230,74 @@ def api_cargas_cliente(request):
             if baixa.ocorrencia:
                 ocorrencia_desc = baixa.ocorrencia.descricao or f"Código {baixa.ocorrencia.codigo_tms}"
 
-        # Status amigável para o cliente
+        # Status amigável e contextualmente correto (Coleta vs Entrega)
         st = n.status or 'PENDENTE'
-        if st == 'PENDENTE' and mf and mf.status == 'EM_TRANSPORTE' and not mf.finalizado:
-            status_display = 'Em Rota'
-            status_class = 'primary'
-        elif st == 'PENDENTE' and mf and (mf.status == 'AGUARDANDO'):
-            status_display = 'Aguardando Saída'
-            status_class = 'secondary'
-        elif st == 'BAIXADA':
-            if tipo_baixa == 'ENTREGA':
-                status_display = 'Entregue'
+        if is_coleta:
+            if st == 'PENDENTE' and mf and mf.status == 'EM_TRANSPORTE' and not mf.finalizado:
+                status_display = 'A Coletar'
+                status_class = 'primary'
+            elif st == 'PENDENTE' and mf and (mf.status == 'AGUARDANDO'):
+                status_display = 'Solicitação Recebida'
+                status_class = 'secondary'
+            elif st == 'BAIXADA':
+                status_display = 'Coleta Realizada'
                 status_class = 'success'
+            elif st == 'OCORRENCIA':
+                status_display = 'Ocorrência na Coleta'
+                status_class = 'warning'
             else:
-                status_display = 'Concluída'
-                status_class = 'success'
-        elif st == 'OCORRENCIA':
-            status_display = 'Ocorrência'
-            status_class = 'warning'
+                status_display = 'Pendente'
+                status_class = 'secondary'
         else:
-            status_display = 'Pendente'
-            status_class = 'secondary'
+            if st == 'PENDENTE' and mf and mf.status == 'EM_TRANSPORTE' and not mf.finalizado:
+                status_display = 'Em Rota'
+                status_class = 'primary'
+            elif st == 'PENDENTE' and mf and (mf.status == 'AGUARDANDO'):
+                status_display = 'Aguardando Saída'
+                status_class = 'secondary'
+            elif st == 'BAIXADA':
+                if tipo_baixa == 'ENTREGA':
+                    status_display = 'Entregue'
+                else:
+                    status_display = 'Concluída'
+                status_class = 'success'
+            elif st == 'OCORRENCIA':
+                status_display = 'Ocorrência'
+                status_class = 'warning'
+            else:
+                status_display = 'Pendente'
+                status_class = 'secondary'
 
         # Extrai cidade/UF do endereço
         endereco = n.endereco_entrega or ''
         cidade_uf = ''
         if endereco:
-            # Tenta extrair cidade e UF do final do endereço
             partes = endereco.split(',')
             if len(partes) >= 2:
                 cidade_uf = partes[-1].strip()
             else:
                 cidade_uf = endereco[:50]
 
+        # Identifica pagador/cliente para exibição
+        pagador_exibicao = ''
+        if n.frete and n.frete.pagador_nome:
+            pagador_exibicao = n.frete.pagador_nome
+        elif is_coleta:
+            pagador_exibicao = n.destinatario or ''
+
         cargas.append({
             'id': n.id,
             'numero_nota': n.numero_nota,
+            'numero_coleta': n.numero_coleta or '',
+            'numero_doc': numero_doc,
+            'tipo_operacao': n.tipo_operacao or 'ENTREGA',
+            'is_coleta': is_coleta,
             'numero_cte': n.numero_cte or '',
             'destinatario': n.destinatario or '',
             'endereco': endereco,
             'cidade_uf': cidade_uf,
             'cep': n.cep or '',
-            'pagador': n.frete.pagador_nome if n.frete else '',
+            'pagador': pagador_exibicao,
             'data_saida': data_saida,
             'data_entrega': data_entrega,
             'status': status_display,
@@ -258,6 +305,7 @@ def api_cargas_cliente(request):
             'recebedor': recebedor,
             'observacao': observacao,
             'comprovante_url': comprovante_url,
+            'tem_foto_comprovante': bool(comprovante_url),
             'ocorrencia': ocorrencia_desc,
             'tipo_baixa': tipo_baixa,
         })
@@ -288,15 +336,17 @@ def api_cargas_cliente(request):
 @apenas_cliente
 def api_detalhe_carga(request, nota_id):
     """
-    Retorna JSON com os detalhes completos de uma nota fiscal:
-    - Dados da NF e CT-e
-    - Histórico de ocorrências (timeline de rastreamento)
-    - Comprovante/canhoto e dados do recebedor
+    Retorna JSON com os detalhes completos de uma nota fiscal ou ordem de coleta:
+    - Dados da NF / Coleta e CT-e
+    - Histórico de ocorrências e timeline contextual (Coleta vs Entrega)
+    - Comprovante/canhoto e dados do recebedor/responsável
     """
     cliente = request.user.cliente_perfil
     pagadores = list(
         cliente.vinculos.filter(ativo=True).values_list('pagador_nome', flat=True)
     )
+
+    filtro_cliente = get_filtro_cliente_qs(pagadores)
 
     try:
         nota = NotaFiscal.objects.select_related(
@@ -304,13 +354,14 @@ def api_detalhe_carga(request, nota_id):
         ).prefetch_related(
             'baixa_info__ocorrencia', 'historico'
         ).get(
-            id=nota_id,
-            frete__pagador_nome__in=pagadores
+            Q(id=nota_id) & filtro_cliente
         )
     except NotaFiscal.DoesNotExist:
         return JsonResponse({'erro': 'Carga não encontrada'}, status=404)
 
     mf = nota.manifesto
+    is_coleta = (nota.tipo_operacao == 'COLETA')
+    numero_doc = nota.numero_coleta if (is_coleta and nota.numero_coleta) else nota.numero_nota
 
     # Dados básicos
     data_saida = ''
@@ -341,6 +392,7 @@ def api_detalhe_carga(request, nota_id):
             'documento_recebedor': baixa.documento_recebedor or '',
             'observacao': baixa.observacao or '',
             'comprovante_url': comprovante_url,
+            'tem_foto': bool(comprovante_url),
             'ocorrencia': baixa.ocorrencia.descricao if baixa.ocorrencia else '',
             'ocorrencia_codigo': baixa.ocorrencia.codigo_tms if baixa.ocorrencia else '',
         }
@@ -354,33 +406,59 @@ def api_detalhe_carga(request, nota_id):
             'comentarios': h.comentarios or '',
         })
 
-    # Se não tem histórico TMS, cria timeline básica a partir das datas do manifesto
+    # Se não tem histórico TMS, cria timeline contextual com base no tipo_operacao
     if not historico:
-        if data_saida:
-            historico.append({
-                'codigo': '—',
-                'data': data_saida,
-                'comentarios': 'Carga saiu para entrega',
-            })
-        if data_finalizacao:
-            historico.append({
-                'codigo': '—',
-                'data': data_finalizacao,
-                'comentarios': 'Rota finalizada',
-            })
+        if is_coleta:
+            if data_saida:
+                historico.append({
+                    'codigo': '—',
+                    'data': data_saida,
+                    'comentarios': 'Ordem de coleta em rota de atendimento',
+                })
+            if data_finalizacao:
+                status_txt = 'Coleta realizada com sucesso' if nota.status == 'BAIXADA' else 'Rota de coleta finalizada'
+                historico.append({
+                    'codigo': '—',
+                    'data': data_finalizacao,
+                    'comentarios': status_txt,
+                })
+        else:
+            if data_saida:
+                historico.append({
+                    'codigo': '—',
+                    'data': data_saida,
+                    'comentarios': 'Carga saiu para entrega',
+                })
+            if data_finalizacao:
+                status_txt = 'Entrega concluída com sucesso' if nota.status == 'BAIXADA' else 'Rota finalizada'
+                historico.append({
+                    'codigo': '—',
+                    'data': data_finalizacao,
+                    'comentarios': status_txt,
+                })
+
+    # Identificação do pagador/solicitante para exibição
+    pagador_exibicao = ''
+    if nota.frete and nota.frete.pagador_nome:
+        pagador_exibicao = nota.frete.pagador_nome
+    elif is_coleta:
+        pagador_exibicao = nota.destinatario or ''
 
     return JsonResponse({
         'nota': {
             'id': nota.id,
             'numero_nota': nota.numero_nota,
+            'numero_coleta': nota.numero_coleta or '',
+            'numero_doc': numero_doc,
+            'tipo_operacao': nota.tipo_operacao or 'ENTREGA',
+            'is_coleta': is_coleta,
             'numero_cte': nota.numero_cte or '',
             'chave_acesso': nota.chave_acesso or '',
             'destinatario': nota.destinatario or '',
             'endereco': nota.endereco_entrega or '',
             'cep': nota.cep or '',
             'status': nota.status,
-            'tipo_operacao': nota.tipo_operacao or '',
-            'pagador': nota.frete.pagador_nome if nota.frete else '',
+            'pagador': pagador_exibicao,
         },
         'manifesto': {
             'data_saida': data_saida,
@@ -408,7 +486,7 @@ def api_detalhe_carga(request, nota_id):
 @apenas_cliente
 def api_exportar_excel(request):
     """
-    Exporta relatório Excel com o status de todas as cargas do cliente.
+    Exporta relatório Excel com o status de todas as cargas e coletas do cliente.
     """
     try:
         import openpyxl
@@ -426,16 +504,16 @@ def api_exportar_excel(request):
     data_fim = request.GET.get('data_fim')
     pagador_filtro = request.GET.get('pagador', '')
 
+    filtro_cliente = get_filtro_cliente_qs(pagadores, pagador_filtro)
+
     notas_qs = NotaFiscal.objects.filter(
-        frete__pagador_nome__in=pagadores
+        filtro_cliente
     ).select_related(
         'manifesto', 'frete'
     ).prefetch_related(
         'baixa_info__ocorrencia'
     ).order_by('-manifesto__data_criacao')
 
-    if pagador_filtro:
-        notas_qs = notas_qs.filter(frete__pagador_nome=pagador_filtro)
     if data_inicio:
         notas_qs = notas_qs.filter(manifesto__data_criacao__date__gte=data_inicio)
     if data_fim:
@@ -444,11 +522,11 @@ def api_exportar_excel(request):
     # Cria workbook
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Cargas"
+    ws.title = "Cargas e Coletas"
 
     # Cabeçalho
-    headers = ['NF', 'CT-e', 'Destinatário', 'Endereço', 'CEP', 'Pagador',
-               'Data Saída', 'Data Entrega', 'Status', 'Recebedor', 'Ocorrência', 'Observação']
+    headers = ['Operação', 'Documento', 'Ordem Coleta', 'CT-e', 'Destinatário / Solicitante', 'Endereço', 'CEP', 'Pagador',
+               'Data Saída / Solicitado', 'Data Conclusão', 'Status', 'Recebedor / Responsável', 'Ocorrência', 'Observação']
 
     header_font = Font(bold=True, color='FFFFFF', size=11)
     header_fill = PatternFill(start_color='11111D', end_color='11111D', fill_type='solid')
@@ -470,6 +548,9 @@ def api_exportar_excel(request):
     row = 2
     for n in notas_qs[:5000]:  # Limite de 5000 linhas
         mf = n.manifesto
+        is_coleta = (n.tipo_operacao == 'COLETA')
+        numero_doc = n.numero_coleta if (is_coleta and n.numero_coleta) else n.numero_nota
+
         baixas = list(n.baixa_info.all()) if hasattr(n, 'baixa_info') else []
         baixa = baixas[-1] if baixas else None
 
@@ -477,26 +558,40 @@ def api_exportar_excel(request):
         data_entrega = timezone.localtime(baixa.data_baixa).strftime('%d/%m/%Y %H:%M') if baixa and baixa.data_baixa else ''
 
         st = n.status or 'PENDENTE'
-        if st == 'PENDENTE' and mf and mf.status == 'EM_TRANSPORTE':
-            status_display = 'Em Rota'
-        elif st == 'BAIXADA':
-            status_display = 'Entregue'
-        elif st == 'OCORRENCIA':
-            status_display = 'Ocorrência'
+        if is_coleta:
+            if st == 'PENDENTE' and mf and mf.status == 'EM_TRANSPORTE':
+                status_display = 'A Coletar'
+            elif st == 'BAIXADA':
+                status_display = 'Coleta Realizada'
+            elif st == 'OCORRENCIA':
+                status_display = 'Ocorrência na Coleta'
+            else:
+                status_display = 'Pendente'
         else:
-            status_display = 'Pendente'
+            if st == 'PENDENTE' and mf and mf.status == 'EM_TRANSPORTE':
+                status_display = 'Em Rota'
+            elif st == 'BAIXADA':
+                status_display = 'Entregue'
+            elif st == 'OCORRENCIA':
+                status_display = 'Ocorrência'
+            else:
+                status_display = 'Pendente'
 
         recebedor = baixa.recebedor or '' if baixa else ''
         ocorrencia = baixa.ocorrencia.descricao if baixa and baixa.ocorrencia else ''
         observacao = baixa.observacao or '' if baixa else ''
 
+        pagador_val = n.frete.pagador_nome if n.frete else (n.destinatario if is_coleta else '')
+
         values = [
-            n.numero_nota,
+            'COLETA' if is_coleta else 'ENTREGA',
+            numero_doc,
+            n.numero_coleta or '',
             n.numero_cte or '',
             n.destinatario or '',
             n.endereco_entrega or '',
             n.cep or '',
-            n.frete.pagador_nome if n.frete else '',
+            pagador_val,
             data_saida,
             data_entrega,
             status_display,
@@ -513,11 +608,10 @@ def api_exportar_excel(request):
         row += 1
 
     # Ajusta largura das colunas
-    col_widths = [12, 12, 30, 40, 12, 25, 18, 18, 14, 20, 25, 30]
+    col_widths = [12, 14, 14, 12, 30, 40, 12, 25, 20, 20, 16, 20, 25, 30]
     for col, width in enumerate(col_widths, 1):
         ws.column_dimensions[ws.cell(row=1, column=col).column_letter].width = width
 
-    # Resposta HTTP
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )

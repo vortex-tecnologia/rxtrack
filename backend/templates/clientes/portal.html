@@ -10,14 +10,14 @@
         <div class="kpi-card kpi-em-rota" onclick="filtrarStatus('em_rota')" id="kpi-em-rota">
             <div class="kpi-icon"><i class="bi bi-truck"></i></div>
             <div class="kpi-value" id="val-em-rota">—</div>
-            <div class="kpi-label">Em Rota</div>
+            <div class="kpi-label">Em Rota / A Coletar</div>
         </div>
     </div>
     <div class="col-6 col-lg-3 animate-in" style="animation-delay: 0.1s;">
         <div class="kpi-card kpi-entregue" onclick="filtrarStatus('entregue')" id="kpi-entregue">
             <div class="kpi-icon"><i class="bi bi-check-circle"></i></div>
             <div class="kpi-value" id="val-entregues">—</div>
-            <div class="kpi-label">Entregues</div>
+            <div class="kpi-label">Concluídas</div>
         </div>
     </div>
     <div class="col-6 col-lg-3 animate-in" style="animation-delay: 0.15s;">
@@ -41,12 +41,12 @@
     <!-- Header -->
     <div class="table-header">
         <div>
-            <h6><i class="bi bi-box-seam me-2"></i>Minhas Cargas</h6>
+            <h6><i class="bi bi-box-seam me-2"></i>Minhas Cargas e Coletas</h6>
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap">
             <div class="search-wrapper">
                 <i class="bi bi-search"></i>
-                <input type="text" class="search-input" id="inputBusca" placeholder="Buscar NF, CT-e ou destinatário..." autocomplete="off">
+                <input type="text" class="search-input" id="inputBusca" placeholder="Buscar NF, Coleta, CT-e ou destinatário..." autocomplete="off">
             </div>
             <button class="btn btn-outline-primary btn-sm px-3" onclick="exportarExcel()" title="Exportar relatório Excel">
                 <i class="bi bi-file-earmark-excel me-1"></i>Excel
@@ -80,13 +80,14 @@
         <table class="cli-table">
             <thead>
                 <tr>
-                    <th>NF</th>
+                    <th>Tipo</th>
+                    <th>Documento</th>
                     <th>CT-e</th>
-                    <th>Destinatário</th>
+                    <th>Destinatário / Solicitante</th>
                     <th>Cidade / UF</th>
                     {% if qtd_pagadores > 1 %}<th>Pagador</th>{% endif %}
-                    <th>Saída</th>
-                    <th>Entrega</th>
+                    <th>Saída / Solicitação</th>
+                    <th>Conclusão</th>
                     <th>Status</th>
                     <th style="width: 50px;"></th>
                 </tr>
@@ -107,7 +108,7 @@
     <!-- Empty state -->
     <div class="empty-state" id="emptyState" style="display: none;">
         <i class="bi bi-inbox"></i>
-        <p>Nenhuma carga encontrada para os filtros selecionados.</p>
+        <p>Nenhuma operação encontrada para os filtros selecionados.</p>
     </div>
 
     <!-- Paginação -->
@@ -124,14 +125,14 @@
     </div>
 </div>
 
-<!-- Modal de Detalhes da Carga -->
+<!-- Modal de Detalhes da Carga / Coleta -->
 <div class="modal fade detail-modal" id="modalDetalhe" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
                 <div>
                     <h5 class="modal-title mb-0" id="modalTitulo">
-                        <i class="bi bi-box-seam me-2"></i>Detalhes da Carga
+                        <i class="bi bi-box-seam me-2"></i>Detalhes da Operação
                     </h5>
                     <small class="opacity-75" id="modalSubtitulo"></small>
                 </div>
@@ -160,7 +161,7 @@ let paginaAtual = 1;
 let statusFiltro = 'todos';
 let timerBusca = null;
 
-// ---- CARREGAR CARGAS ----
+// ---- CARREGAR CARGAS & COLETAS VIA AJAX ----
 async function carregarCargas(page = 1) {
     const tbody = document.getElementById('tabelaCargas');
     const loading = document.getElementById('loadingCargas');
@@ -213,14 +214,23 @@ async function carregarCargas(page = 1) {
 
             let pagadorCol = '';
             if (MULTI_PAGADOR) {
-                pagadorCol = `<td><span class="text-truncate d-inline-block" style="max-width: 150px;" title="${c.pagador}">${c.pagador}</span></td>`;
+                pagadorCol = `<td><span class="text-truncate d-inline-block" style="max-width: 150px;" title="${c.pagador}">${c.pagador || '—'}</span></td>`;
+            }
+
+            // Badge de Tipo de Operação
+            let badgeTipo = '';
+            if (c.is_coleta) {
+                badgeTipo = `<span class="badge bg-info-subtle text-info border border-info-subtle" style="font-size: 0.68rem; font-weight: 700;"><i class="bi bi-box-seam me-1"></i>COLETA</span>`;
+            } else {
+                badgeTipo = `<span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.68rem; font-weight: 700;"><i class="bi bi-truck me-1"></i>ENTREGA</span>`;
             }
 
             tr.innerHTML = `
-                <td><strong>${c.numero_nota}</strong></td>
+                <td>${badgeTipo}</td>
+                <td><strong>${c.numero_doc}</strong></td>
                 <td class="text-muted">${c.numero_cte || '—'}</td>
                 <td>
-                    <span class="text-truncate d-inline-block" style="max-width: 200px;" title="${c.destinatario}">
+                    <span class="text-truncate d-inline-block fw-medium" style="max-width: 220px;" title="${c.destinatario}">
                         ${c.destinatario || '—'}
                     </span>
                 </td>
@@ -239,7 +249,7 @@ async function carregarCargas(page = 1) {
         const pagDiv = document.getElementById('paginacao');
         if (pag.total_pages > 1) {
             pagDiv.style.display = 'flex';
-            document.getElementById('pageInfo').textContent = `Página ${pag.page} de ${pag.total_pages} (${pag.total} cargas)`;
+            document.getElementById('pageInfo').textContent = `Página ${pag.page} de ${pag.total_pages} (${pag.total} operações)`;
             document.getElementById('btnPrevPage').disabled = pag.page <= 1;
             document.getElementById('btnNextPage').disabled = pag.page >= pag.total_pages;
             paginaAtual = pag.page;
@@ -250,7 +260,7 @@ async function carregarCargas(page = 1) {
     } catch (err) {
         loading.style.display = 'none';
         console.error('Erro ao carregar cargas:', err);
-        Swal.fire('Erro', 'Não foi possível carregar as cargas. Tente novamente.', 'error');
+        Swal.fire('Erro', 'Não foi possível carregar as operações. Tente novamente.', 'error');
     }
 }
 
@@ -315,7 +325,7 @@ function mudarPagina(delta) {
     carregarCargas(paginaAtual + delta);
 }
 
-// ---- DETALHE DA CARGA (MODAL) ----
+// ---- DETALHE DA CARGA / COLETA (MODAL) ----
 async function abrirDetalhe(notaId) {
     const modal = new bootstrap.Modal(document.getElementById('modalDetalhe'));
     const body = document.getElementById('modalBody');
@@ -338,65 +348,128 @@ async function abrirDetalhe(notaId) {
         const bx = data.baixa;
         const hist = data.historico;
 
-        document.getElementById('modalTitulo').innerHTML = `<i class="bi bi-box-seam me-2"></i>NF ${n.numero_nota}`;
-        document.getElementById('modalSubtitulo').textContent = n.destinatario;
+        // Cabeçalho adaptado: Coleta vs Entrega
+        if (n.is_coleta) {
+            document.getElementById('modalTitulo').innerHTML = `<i class="bi bi-box-seam me-2 text-info"></i>Ordem de Coleta #${n.numero_doc}`;
+            document.getElementById('modalSubtitulo').textContent = `Solicitante / Local: ${n.destinatario || '—'}`;
+        } else {
+            document.getElementById('modalTitulo').innerHTML = `<i class="bi bi-file-earmark-text me-2 text-primary"></i>Nota Fiscal #${n.numero_nota}`;
+            document.getElementById('modalSubtitulo').textContent = `Destinatário: ${n.destinatario || '—'}`;
+        }
 
         let html = '';
 
-        // Seção: Dados da Carga
-        html += `
-        <div class="detail-section">
-            <h6><i class="bi bi-file-earmark-text"></i> Dados da Carga</h6>
-            <div class="detail-row"><span class="label">Nota Fiscal</span><span class="value">${n.numero_nota}</span></div>
-            ${n.numero_cte ? `<div class="detail-row"><span class="label">CT-e</span><span class="value">${n.numero_cte}</span></div>` : ''}
-            <div class="detail-row"><span class="label">Destinatário</span><span class="value">${n.destinatario || '—'}</span></div>
-            <div class="detail-row"><span class="label">Endereço</span><span class="value">${n.endereco || '—'}</span></div>
-            ${n.cep ? `<div class="detail-row"><span class="label">CEP</span><span class="value">${n.cep}</span></div>` : ''}
-            ${fr.volumes ? `<div class="detail-row"><span class="label">Volumes</span><span class="value">${fr.volumes}</span></div>` : ''}
-            ${fr.peso ? `<div class="detail-row"><span class="label">Peso</span><span class="value">${fr.peso} kg</span></div>` : ''}
-            <div class="detail-row"><span class="label">Data de Saída</span><span class="value">${mf.data_saida || '—'}</span></div>
-            ${mf.data_finalizacao ? `<div class="detail-row"><span class="label">Rota Finalizada</span><span class="value">${mf.data_finalizacao}</span></div>` : ''}
-        </div>`;
-
-        // Seção: Comprovante de Entrega
-        if (bx) {
+        // Seção: Dados da Operação
+        if (n.is_coleta) {
             html += `
             <div class="detail-section">
-                <h6><i class="bi bi-camera"></i> Comprovante de Entrega</h6>
-                ${bx.recebedor ? `<div class="detail-row"><span class="label">Recebedor</span><span class="value">${bx.recebedor}</span></div>` : ''}
-                ${bx.documento_recebedor ? `<div class="detail-row"><span class="label">Documento</span><span class="value">${bx.documento_recebedor}</span></div>` : ''}
-                ${bx.data_baixa ? `<div class="detail-row"><span class="label">Data da Entrega</span><span class="value">${bx.data_baixa}</span></div>` : ''}
-                ${bx.observacao ? `<div class="detail-row"><span class="label">Observação</span><span class="value">${bx.observacao}</span></div>` : ''}
-                ${bx.ocorrencia ? `<div class="detail-row"><span class="label">Ocorrência</span><span class="value"><span class="status-badge badge-warning">${bx.ocorrencia}</span></span></div>` : ''}
-            `;
+                <h6><i class="bi bi-box-seam text-info"></i> Dados da Coleta</h6>
+                <div class="detail-row"><span class="label">Tipo de Operação</span><span class="value"><span class="badge bg-info-subtle text-info border border-info-subtle">Coleta</span></span></div>
+                <div class="detail-row"><span class="label">Ordem de Coleta</span><span class="value fw-bold">#${n.numero_doc}</span></div>
+                ${n.numero_cte ? `<div class="detail-row"><span class="label">Conhecimento (CT-e)</span><span class="value">${n.numero_cte}</span></div>` : ''}
+                <div class="detail-row"><span class="label">Local / Solicitante</span><span class="value">${n.destinatario || '—'}</span></div>
+                <div class="detail-row"><span class="label">Endereço da Coleta</span><span class="value">${n.endereco || '—'}</span></div>
+                ${n.cep ? `<div class="detail-row"><span class="label">CEP</span><span class="value">${n.cep}</span></div>` : ''}
+                ${fr.volumes ? `<div class="detail-row"><span class="label">Volumes</span><span class="value">${fr.volumes}</span></div>` : ''}
+                ${fr.peso ? `<div class="detail-row"><span class="label">Peso</span><span class="value">${fr.peso} kg</span></div>` : ''}
+                <div class="detail-row"><span class="label">Data da Solicitação</span><span class="value">${mf.data_saida || '—'}</span></div>
+                ${mf.data_finalizacao ? `<div class="detail-row"><span class="label">Rota Finalizada</span><span class="value">${mf.data_finalizacao}</span></div>` : ''}
+                ${mf.filial ? `<div class="detail-row"><span class="label">Filial Responsável</span><span class="value">${mf.filial}</span></div>` : ''}
+            </div>`;
+        } else {
+            html += `
+            <div class="detail-section">
+                <h6><i class="bi bi-file-earmark-text text-primary"></i> Dados da Entrega</h6>
+                <div class="detail-row"><span class="label">Tipo de Operação</span><span class="value"><span class="badge bg-primary-subtle text-primary border border-primary-subtle">Entrega</span></span></div>
+                <div class="detail-row"><span class="label">Nota Fiscal</span><span class="value fw-bold">#${n.numero_nota}</span></div>
+                ${n.numero_cte ? `<div class="detail-row"><span class="label">CT-e</span><span class="value">${n.numero_cte}</span></div>` : ''}
+                <div class="detail-row"><span class="label">Destinatário</span><span class="value">${n.destinatario || '—'}</span></div>
+                <div class="detail-row"><span class="label">Endereço</span><span class="value">${n.endereco || '—'}</span></div>
+                ${n.cep ? `<div class="detail-row"><span class="label">CEP</span><span class="value">${n.cep}</span></div>` : ''}
+                ${fr.volumes ? `<div class="detail-row"><span class="label">Volumes</span><span class="value">${fr.volumes}</span></div>` : ''}
+                ${fr.peso ? `<div class="detail-row"><span class="label">Peso</span><span class="value">${fr.peso} kg</span></div>` : ''}
+                <div class="detail-row"><span class="label">Data de Saída</span><span class="value">${mf.data_saida || '—'}</span></div>
+                ${mf.data_finalizacao ? `<div class="detail-row"><span class="label">Rota Finalizada</span><span class="value">${mf.data_finalizacao}</span></div>` : ''}
+                ${mf.filial ? `<div class="detail-row"><span class="label">Filial Responsável</span><span class="value">${mf.filial}</span></div>` : ''}
+            </div>`;
+        }
 
-            if (bx.comprovante_url) {
+        // Seção: Comprovante / Registro de Baixa
+        if (bx) {
+            if (n.is_coleta) {
+                // Coleta não possui canhoto fiscal físico
                 html += `
-                <div class="comprovante-container mt-3">
-                    <img src="${bx.comprovante_url}" alt="Comprovante de Entrega" onclick="window.open('${bx.comprovante_url}', '_blank')" title="Clique para ampliar">
-                    <div class="mt-2">
-                        <a href="${bx.comprovante_url}" target="_blank" class="btn btn-sm btn-outline-primary">
-                            <i class="bi bi-download me-1"></i>Baixar Comprovante
-                        </a>
-                    </div>
-                </div>`;
+                <div class="detail-section">
+                    <h6><i class="bi bi-clipboard-check text-success"></i> Registro da Coleta</h6>
+                    <div class="detail-row"><span class="label">Status da Coleta</span><span class="value"><span class="status-badge badge-success">${bx.ocorrencia || 'Coleta Realizada'}</span></span></div>
+                    ${bx.data_baixa ? `<div class="detail-row"><span class="label">Data da Coleta</span><span class="value fw-semibold">${bx.data_baixa}</span></div>` : ''}
+                    ${bx.recebedor ? `<div class="detail-row"><span class="label">Responsável no Local</span><span class="value">${bx.recebedor}</span></div>` : ''}
+                    ${bx.documento_recebedor ? `<div class="detail-row"><span class="label">Documento</span><span class="value">${bx.documento_recebedor}</span></div>` : ''}
+                    ${bx.observacao ? `<div class="detail-row"><span class="label">Observação do Motorista</span><span class="value">${bx.observacao}</span></div>` : ''}
+                `;
+
+                if (bx.comprovante_url) {
+                    html += `
+                    <div class="comprovante-container mt-3">
+                        <img src="${bx.comprovante_url}" alt="Foto da Coleta" onclick="window.open('${bx.comprovante_url}', '_blank')" title="Clique para ampliar">
+                        <div class="mt-2">
+                            <a href="${bx.comprovante_url}" target="_blank" class="btn btn-sm btn-outline-info">
+                                <i class="bi bi-download me-1"></i>Baixar Foto da Coleta
+                            </a>
+                        </div>
+                    </div>`;
+                } else {
+                    html += `
+                    <div class="alert alert-success d-flex align-items-center gap-3 mt-3 py-3 px-3 mb-0 rounded-3">
+                        <i class="bi bi-check-circle-fill text-success fs-3"></i>
+                        <div>
+                            <h6 class="mb-1 text-success fw-bold">Coleta Realizada com Sucesso</h6>
+                            <p class="mb-0 text-muted small">A coleta foi executada e confirmada pelo motorista no local. Coletas operacionais não demandam canhoto fiscal físico.</p>
+                        </div>
+                    </div>`;
+                }
+
+                html += '</div>';
             } else {
+                // Entrega convencional
                 html += `
-                <div class="comprovante-empty mt-3">
-                    <i class="bi bi-image"></i>
-                    <p class="mb-0">Comprovante físico retido para conferência</p>
-                    <small class="text-muted">O canhoto desta entrega está sob custódia operacional.</small>
-                </div>`;
-            }
+                <div class="detail-section">
+                    <h6><i class="bi bi-camera text-primary"></i> Comprovante de Entrega</h6>
+                    ${bx.recebedor ? `<div class="detail-row"><span class="label">Recebedor</span><span class="value">${bx.recebedor}</span></div>` : ''}
+                    ${bx.documento_recebedor ? `<div class="detail-row"><span class="label">Documento</span><span class="value">${bx.documento_recebedor}</span></div>` : ''}
+                    ${bx.data_baixa ? `<div class="detail-row"><span class="label">Data da Entrega</span><span class="value fw-semibold">${bx.data_baixa}</span></div>` : ''}
+                    ${bx.observacao ? `<div class="detail-row"><span class="label">Observação</span><span class="value">${bx.observacao}</span></div>` : ''}
+                    ${bx.ocorrencia ? `<div class="detail-row"><span class="label">Ocorrência</span><span class="value"><span class="status-badge badge-warning">${bx.ocorrencia}</span></span></div>` : ''}
+                `;
 
-            html += '</div>';
+                if (bx.comprovante_url) {
+                    html += `
+                    <div class="comprovante-container mt-3">
+                        <img src="${bx.comprovante_url}" alt="Comprovante de Entrega" onclick="window.open('${bx.comprovante_url}', '_blank')" title="Clique para ampliar">
+                        <div class="mt-2">
+                            <a href="${bx.comprovante_url}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-download me-1"></i>Baixar Comprovante
+                            </a>
+                        </div>
+                    </div>`;
+                } else {
+                    html += `
+                    <div class="comprovante-empty mt-3">
+                        <i class="bi bi-image"></i>
+                        <p class="mb-0">Comprovante físico retido para conferência</p>
+                        <small class="text-muted">O canhoto desta entrega está sob custódia operacional.</small>
+                    </div>`;
+                }
+
+                html += '</div>';
+            }
         }
 
         // Seção: Rastreamento (Timeline)
         if (hist && hist.length > 0) {
             html += `
             <div class="detail-section">
-                <h6><i class="bi bi-geo-alt"></i> Rastreamento</h6>
+                <h6><i class="bi bi-geo-alt text-primary"></i> Linha do Tempo da Operação</h6>
                 <ul class="timeline">`;
 
             hist.forEach((h, i) => {
