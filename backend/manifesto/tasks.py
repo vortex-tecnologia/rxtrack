@@ -430,13 +430,39 @@ def processar_webhook_manifesto_task(self, event_id):
             # - Se for um manifesto novo, inicia como AGUARDANDO.
             status_novo = manifesto_existente.status if manifesto_existente else 'AGUARDANDO'
 
+            # 🏢 RESOLUÇÃO FINAL: filial_operacao via API ESL (Fallback)
+            # Se filial_operacao_obj ainda é None (payload sem dados ou manifesto existente sem base),
+            # consulta a ESL pelo ID interno do manifesto para obter mft_uer_crn_id (base do criador).
+            if not filial_operacao_obj:
+                try:
+                    _adapter = get_tms_adapter()
+                    if _adapter and hasattr(_adapter, 'resolver_numero_visual_manifesto'):
+                        id_consulta = id_tms_final or num_mani_recebido
+                        res_fo = _adapter.resolver_numero_visual_manifesto(id_consulta)
+                        if isinstance(res_fo, dict) and res_fo.get('id_filial_operacao'):
+                            filial_operacao_obj, _ = Filial.objects.get_or_create(
+                                id_filial_tms=str(res_fo['id_filial_operacao']),
+                                defaults={'nome': res_fo.get('nome_filial_operacao') or f"BASE {res_fo['id_filial_operacao']}"}
+                            )
+                            logger.info(f"🏢 [FALLBACK ESL] filial_operacao resolvida via API: {filial_operacao_obj.nome} (TMS ID: {res_fo['id_filial_operacao']})")
+                            if not veiculo_obj and res_fo.get('placa'):
+                                from manifesto.models import Veiculo
+                                veiculo_obj, _ = Veiculo.objects.get_or_create(
+                                    placa=res_fo['placa'], defaults={'tipo': 'OUTRO'}
+                                )
+                except Exception as e:
+                    logger.warning(f"⚠️ [FALLBACK ESL] Erro ao buscar filial_operacao: {e}")
+
             manifesto_defaults = {
                 'motorista': motorista_obj,
                 'filial': filial_obj,
-                'filial_operacao': filial_operacao_obj,
                 'status': status_novo,
                 'manifesto_id_tms': id_tms_final,
             }
+
+            # Só atribui filial_operacao se temos valor (não sobrescreve com None)
+            if filial_operacao_obj:
+                manifesto_defaults['filial_operacao'] = filial_operacao_obj
 
             # Só vincula veículo se veio no payload ou ESL (não sobrescreve com None)
             if veiculo_obj:
@@ -870,10 +896,31 @@ def processar_soap_task(self, evento_id):
                 logger.info(f"👤 [SOAP PRÉ-CADASTRO] Motorista '{motorista_obj.nome_completo}' ({cpf}) sem usuario ativo. Manifesto #{numero_rota} ignorado.")
                 return f"Motorista '{motorista_obj.nome_completo}' sem usuario ativo. Pre-cadastro registrado, manifesto ignorado."
 
+            # 🏢 Resolve filial_operacao via API ESL (o SOAP não traz essa informação no XML)
+            # Usa o número do manifesto como ID para consultar mft_uer_crn_id (base do criador)
+            filial_operacao_soap = None
+            try:
+                _adapter = get_tms_adapter()
+                if _adapter and hasattr(_adapter, 'resolver_numero_visual_manifesto'):
+                    res_fo = _adapter.resolver_numero_visual_manifesto(numero_rota)
+                    if isinstance(res_fo, dict) and res_fo.get('id_filial_operacao'):
+                        filial_operacao_soap, _ = Filial.objects.get_or_create(
+                            id_filial_tms=str(res_fo['id_filial_operacao']),
+                            defaults={'nome': res_fo.get('nome_filial_operacao') or f"BASE {res_fo['id_filial_operacao']}"}
+                        )
+                        logger.info(f"🏢 [SOAP] filial_operacao resolvida via API: {filial_operacao_soap.nome} (TMS ID: {res_fo['id_filial_operacao']})")
+            except Exception as e:
+                logger.warning(f"⚠️ [SOAP] Erro ao buscar filial_operacao via ESL: {e}")
+
             defaults_soap = {
                 'motorista': motorista_obj,
                 'filial': filial_obj,
             }
+            # Só atribui filial_operacao se resolveu (não sobrescreve com None)
+            if filial_operacao_soap:
+                defaults_soap['filial_operacao'] = filial_operacao_soap
+            elif manifesto_obj and manifesto_obj.filial_operacao:
+                pass  # Preserva a filial_operacao que já existe no banco
             if not manifesto_obj:
                 defaults_soap['status'] = 'AGUARDANDO'
 
