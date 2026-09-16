@@ -78,6 +78,23 @@ class VinculoPagador(models.Model):
     ativo = models.BooleanField(default=True, verbose_name="Ativo")
     criado_em = models.DateTimeField(auto_now_add=True, verbose_name="Criado em")
 
+    def save(self, *args, **kwargs):
+        # Auto-preenche pagador_documento se estiver em branco
+        if not self.pagador_documento and self.pagador_nome:
+            try:
+                from manifesto.models import Frete
+                f = Frete.objects.filter(pagador_nome=self.pagador_nome).exclude(pagador_documento__isnull=True).exclude(pagador_documento='').first()
+                if f and f.pagador_documento:
+                    self.pagador_documento = f.pagador_documento
+                else:
+                    from financeiro.models import ClienteBasePagadora
+                    cbp = ClienteBasePagadora.objects.filter(nome=self.pagador_nome).exclude(documento__isnull=True).exclude(documento='').first()
+                    if cbp and cbp.documento:
+                        self.pagador_documento = cbp.documento
+            except Exception:
+                pass
+        super().save(*args, **kwargs)
+
     def __str__(self):
         doc = f" ({self.pagador_documento})" if self.pagador_documento else ""
         return f"{self.usuario_cliente.nome_completo} → {self.pagador_nome}{doc}"
