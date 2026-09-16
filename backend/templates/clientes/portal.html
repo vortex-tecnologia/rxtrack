@@ -225,9 +225,16 @@ async function carregarCargas(page = 1) {
                 badgeTipo = `<span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.68rem; font-weight: 700;"><i class="bi bi-truck me-1"></i>ENTREGA</span>`;
             }
 
+            // Badge de Transferência
+            let badgeTransf = '';
+            if (c.tem_transferencia) {
+                const rota = `${c.filial_origem || 'Origem'} ➔ ${c.filial_atual || 'Destino'}`;
+                badgeTransf = `<span class="badge bg-light text-primary border ms-1" style="font-size: 0.65rem;" title="Transferência: ${rota}"><i class="bi bi-arrow-left-right me-1"></i>Transferência</span>`;
+            }
+
             tr.innerHTML = `
                 <td>${badgeTipo}</td>
-                <td><strong>${c.numero_doc}</strong></td>
+                <td><strong>${c.numero_doc}</strong>${badgeTransf}</td>
                 <td class="text-muted">${c.numero_cte || '—'}</td>
                 <td>
                     <span class="text-truncate d-inline-block fw-medium" style="max-width: 220px;" title="${c.destinatario}">
@@ -325,7 +332,7 @@ function mudarPagina(delta) {
     carregarCargas(paginaAtual + delta);
 }
 
-// ---- DETALHE DA CARGA / COLETA (MODAL) ----
+// ---- DETALHE DA CARGA / COLETA (MODAL COM RASTREAMENTO INTERNO) ----
 async function abrirDetalhe(notaId) {
     const modal = new bootstrap.Modal(document.getElementById('modalDetalhe'));
     const body = document.getElementById('modalBody');
@@ -374,9 +381,19 @@ async function abrirDetalhe(notaId) {
                 ${fr.peso ? `<div class="detail-row"><span class="label">Peso</span><span class="value">${fr.peso} kg</span></div>` : ''}
                 <div class="detail-row"><span class="label">Data da Solicitação</span><span class="value">${mf.data_saida || '—'}</span></div>
                 ${mf.data_finalizacao ? `<div class="detail-row"><span class="label">Rota Finalizada</span><span class="value">${mf.data_finalizacao}</span></div>` : ''}
-                ${mf.filial ? `<div class="detail-row"><span class="label">Filial Responsável</span><span class="value">${mf.filial}</span></div>` : ''}
+                <div class="detail-row"><span class="label">Filial Responsável</span><span class="value">${mf.filial || '—'}</span></div>
             </div>`;
         } else {
+            let filialInfo = '';
+            if (n.tem_transferencia) {
+                filialInfo = `
+                <div class="detail-row"><span class="label">Base de Origem</span><span class="value text-muted">${n.filial_origem || '—'}</span></div>
+                <div class="detail-row"><span class="label">Base Atual / Destino</span><span class="value fw-semibold text-primary"><i class="bi bi-building me-1"></i>${n.filial_atual || mf.filial || '—'}</span></div>
+                `;
+            } else {
+                filialInfo = `<div class="detail-row"><span class="label">Filial Responsável</span><span class="value">${mf.filial || n.filial_atual || '—'}</span></div>`;
+            }
+
             html += `
             <div class="detail-section">
                 <h6><i class="bi bi-file-earmark-text text-primary"></i> Dados da Entrega</h6>
@@ -390,14 +407,14 @@ async function abrirDetalhe(notaId) {
                 ${fr.peso ? `<div class="detail-row"><span class="label">Peso</span><span class="value">${fr.peso} kg</span></div>` : ''}
                 <div class="detail-row"><span class="label">Data de Saída</span><span class="value">${mf.data_saida || '—'}</span></div>
                 ${mf.data_finalizacao ? `<div class="detail-row"><span class="label">Rota Finalizada</span><span class="value">${mf.data_finalizacao}</span></div>` : ''}
-                ${mf.filial ? `<div class="detail-row"><span class="label">Filial Responsável</span><span class="value">${mf.filial}</span></div>` : ''}
+                ${filialInfo}
             </div>`;
         }
 
         // Seção: Comprovante / Registro de Baixa
         if (bx) {
             if (n.is_coleta) {
-                // Coleta não possui canhoto fiscal físico
+                // Coleta
                 html += `
                 <div class="detail-section">
                     <h6><i class="bi bi-clipboard-check text-success"></i> Registro da Coleta</h6>
@@ -432,53 +449,98 @@ async function abrirDetalhe(notaId) {
                 html += '</div>';
             } else {
                 // Entrega convencional
-                html += `
-                <div class="detail-section">
-                    <h6><i class="bi bi-camera text-primary"></i> Comprovante de Entrega</h6>
-                    ${bx.recebedor ? `<div class="detail-row"><span class="label">Recebedor</span><span class="value">${bx.recebedor}</span></div>` : ''}
-                    ${bx.documento_recebedor ? `<div class="detail-row"><span class="label">Documento</span><span class="value">${bx.documento_recebedor}</span></div>` : ''}
-                    ${bx.data_baixa ? `<div class="detail-row"><span class="label">Data da Entrega</span><span class="value fw-semibold">${bx.data_baixa}</span></div>` : ''}
-                    ${bx.observacao ? `<div class="detail-row"><span class="label">Observação</span><span class="value">${bx.observacao}</span></div>` : ''}
-                    ${bx.ocorrencia ? `<div class="detail-row"><span class="label">Ocorrência</span><span class="value"><span class="status-badge badge-warning">${bx.ocorrencia}</span></span></div>` : ''}
-                `;
-
-                if (bx.comprovante_url) {
+                if (bx.tem_comprovante) {
                     html += `
-                    <div class="comprovante-container mt-3">
-                        <img src="${bx.comprovante_url}" alt="Comprovante de Entrega" onclick="window.open('${bx.comprovante_url}', '_blank')" title="Clique para ampliar">
-                        <div class="mt-2">
-                            <a href="${bx.comprovante_url}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-download me-1"></i>Baixar Comprovante
-                            </a>
+                    <div class="detail-section">
+                        <h6><i class="bi bi-camera text-primary"></i> Comprovante de Entrega</h6>
+                        ${bx.recebedor ? `<div class="detail-row"><span class="label">Recebedor</span><span class="value fw-semibold">${bx.recebedor}</span></div>` : ''}
+                        ${bx.documento_recebedor ? `<div class="detail-row"><span class="label">Documento</span><span class="value">${bx.documento_recebedor}</span></div>` : ''}
+                        ${bx.data_baixa ? `<div class="detail-row"><span class="label">Data da Entrega</span><span class="value fw-semibold">${bx.data_baixa}</span></div>` : ''}
+                        ${bx.observacao ? `<div class="detail-row"><span class="label">Observação</span><span class="value">${bx.observacao}</span></div>` : ''}
+                        ${bx.ocorrencia ? `<div class="detail-row"><span class="label">Ocorrência</span><span class="value"><span class="status-badge badge-warning">${bx.ocorrencia}</span></span></div>` : ''}
+                    `;
+
+                    if (bx.comprovante_url) {
+                        html += `
+                        <div class="comprovante-container mt-3">
+                            <img src="${bx.comprovante_url}" alt="Comprovante de Entrega" onclick="window.open('${bx.comprovante_url}', '_blank')" title="Clique para ampliar">
+                            <div class="mt-2">
+                                <a href="${bx.comprovante_url}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-download me-1"></i>Baixar Comprovante
+                                </a>
+                            </div>
+                        </div>`;
+                    } else {
+                        html += `
+                        <div class="comprovante-empty mt-3">
+                            <i class="bi bi-image"></i>
+                            <p class="mb-0">Comprovante físico retido para conferência</p>
+                            <small class="text-muted">O canhoto desta entrega está sob custódia operacional.</small>
+                        </div>`;
+                    }
+
+                    html += '</div>';
+                } else if (bx.situacao === 'em_rota') {
+                    html += `
+                    <div class="detail-section">
+                        <h6><i class="bi bi-camera text-primary"></i> Comprovante de Entrega</h6>
+                        <div class="alert alert-primary d-flex align-items-center gap-3 py-3 px-3 mb-0 rounded-3 border-0 bg-primary-subtle text-primary">
+                            <i class="bi bi-truck fs-3 flex-shrink-0"></i>
+                            <div>
+                                <h6 class="mb-1 fw-bold">Carga em Rota de Entrega</h6>
+                                <p class="mb-0 small text-muted">${bx.mensagem}</p>
+                            </div>
+                        </div>
+                    </div>`;
+                } else if (bx.situacao === 'em_transferencia') {
+                    html += `
+                    <div class="detail-section">
+                        <h6><i class="bi bi-camera text-primary"></i> Comprovante de Entrega</h6>
+                        <div class="alert alert-info d-flex align-items-center gap-3 py-3 px-3 mb-0 rounded-3 border-0 bg-info-subtle text-info">
+                            <i class="bi bi-arrow-left-right fs-3 flex-shrink-0"></i>
+                            <div>
+                                <h6 class="mb-1 fw-bold">Carga em Transferência Operacional</h6>
+                                <p class="mb-0 small text-muted">${bx.mensagem}</p>
+                            </div>
                         </div>
                     </div>`;
                 } else {
                     html += `
-                    <div class="comprovante-empty mt-3">
-                        <i class="bi bi-image"></i>
-                        <p class="mb-0">Comprovante físico retido para conferência</p>
-                        <small class="text-muted">O canhoto desta entrega está sob custódia operacional.</small>
+                    <div class="detail-section">
+                        <h6><i class="bi bi-camera text-primary"></i> Comprovante de Entrega</h6>
+                        <div class="comprovante-empty mt-3">
+                            <i class="bi bi-clock-history"></i>
+                            <p class="mb-0">Comprovante ainda não disponível</p>
+                            <small class="text-muted">${bx.mensagem || 'Aguardando finalização do atendimento pelo motorista.'}</small>
+                        </div>
                     </div>`;
                 }
-
-                html += '</div>';
             }
         }
 
-        // Seção: Rastreamento (Timeline)
+        // Seção: Rastreamento Interno (Timeline Completa)
         if (hist && hist.length > 0) {
             html += `
             <div class="detail-section">
-                <h6><i class="bi bi-geo-alt text-primary"></i> Linha do Tempo da Operação</h6>
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h6 class="mb-0"><i class="bi bi-geo-alt text-primary"></i> Rastreamento Interno e Linha do Tempo</h6>
+                    ${n.tem_transferencia ? '<span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.7rem;"><i class="bi bi-arrow-left-right me-1"></i>Com Transferência Interna</span>' : ''}
+                </div>
                 <ul class="timeline">`;
 
             hist.forEach((h, i) => {
                 html += `
                 <li class="timeline-item">
-                    <div class="timeline-dot">${i === 0 ? '<i class="bi bi-geo-alt-fill" style="font-size: 0.7rem;"></i>' : (i + 1)}</div>
+                    <div class="timeline-dot">
+                        <i class="bi ${h.icone || (i === 0 ? 'bi-geo-alt-fill' : 'bi-circle-fill')}" style="font-size: 0.75rem;"></i>
+                    </div>
                     <div class="timeline-content">
-                        <div class="timeline-date">${h.data || '—'}</div>
-                        <div class="timeline-text">${h.comentarios || 'Evento registrado'}</div>
+                        <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mb-1">
+                            <div class="timeline-date fw-semibold">${h.data || '—'}</div>
+                            ${h.badge ? `<span class="badge bg-${h.badge_class || 'secondary'}-subtle text-${h.badge_class || 'secondary'} border border-${h.badge_class || 'secondary'}-subtle" style="font-size: 0.65rem; font-weight: 700;">${h.badge}</span>` : ''}
+                        </div>
+                        <div class="timeline-text fw-bold text-dark mb-1">${h.titulo || 'Evento registrado'}</div>
+                        ${h.detalhes ? `<p class="text-muted small mb-0" style="font-size: 0.78rem; line-height: 1.4;">${h.detalhes}</p>` : ''}
                     </div>
                 </li>`;
             });
