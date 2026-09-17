@@ -563,7 +563,6 @@ function garantirCardFilial(filialId, filialNome, initialCount = 0) {
             }
         }
     }
-}
 
 // Exporta funções auxiliares para window para acesso global seguro (usadas pelo fullSyncTorre)
 window.garantirCardFilial = garantirCardFilial;
@@ -728,6 +727,7 @@ function atualizarUltimoSinalTorre() {
         }
     });
 }
+window.atualizarUltimoSinalTorre = atualizarUltimoSinalTorre;
 
 // --- FUNÇÕES DO MAPA REAL-TIME ---
 
