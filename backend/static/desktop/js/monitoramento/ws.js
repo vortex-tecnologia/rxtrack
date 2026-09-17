@@ -398,9 +398,6 @@ function conectarWebSocket() {
                                 <i class="fa fa-plane-departure ${(parseInt(d.qtd_despacho || 0) > 0) ? 'op-active' : 'font-grey'}" 
                                    style="${(parseInt(d.qtd_despacho || 0) > 0) ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" 
                                    title="Despachos: ${d.qtd_despacho || 0}" data-bs-toggle="tooltip"></i>
-                                <i class="fa fa-plane-arrival ${(parseInt(d.qtd_retirada || 0) > 0) ? 'op-active' : 'font-grey'}" 
-                                   style="${(parseInt(d.qtd_retirada || 0) > 0) ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" 
-                                   title="Retiradas: ${d.qtd_retirada || 0}" data-bs-toggle="tooltip"></i>
                             </div>
                         </div>
 
@@ -472,7 +469,6 @@ function conectarWebSocket() {
                 <i class="fa fa-dolly-flatbed ${qCol > 0 ? 'op-active' : 'font-grey'}" style="${qCol > 0 ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" title="Coletas: ${qCol}" data-bs-toggle="tooltip"></i>
                 <i class="fa fa-warehouse ${qTra > 0 ? 'op-active' : 'font-grey'}" style="${qTra > 0 ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" title="Transferências: ${qTra}" data-bs-toggle="tooltip"></i>
                 <i class="fa fa-plane-departure ${qDes > 0 ? 'op-active' : 'font-grey'}" style="${qDes > 0 ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" title="Despachos: ${qDes}" data-bs-toggle="tooltip"></i>
-                <i class="fa fa-plane-arrival ${qRet > 0 ? 'op-active' : 'font-grey'}" style="${qRet > 0 ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" title="Retiradas: ${qRet}" data-bs-toggle="tooltip"></i>
             `;
             if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
                 container.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
