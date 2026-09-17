@@ -386,11 +386,21 @@ function conectarWebSocket() {
                         <div class="d-flex align-items-center justify-content-between px-2 py-1 mb-2 rounded-2 operacoes-strip border border-light-subtle">
                             <span class="text-secondary fw-bold text-uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px;">Cargas</span>
                             <div class="d-inline-flex align-items-center gap-2 operacoes-icons" id="operacoes-mft-${d.manifesto_id}">
-                                <i class="fa fa-truck ${(parseInt(d.qtd_entrega || 0) > 0) ? 'op-active' : 'font-grey'}" title="Entregas: ${d.qtd_entrega || 0}" data-bs-toggle="tooltip"></i>
-                                <i class="fa fa-dolly-flatbed ${(parseInt(d.qtd_coleta || 0) > 0) ? 'op-active' : 'font-grey'}" title="Coletas: ${d.qtd_coleta || 0}" data-bs-toggle="tooltip"></i>
-                                <i class="fa fa-warehouse ${(parseInt(d.qtd_transferencia || 0) > 0) ? 'op-active' : 'font-grey'}" title="Transferências: ${d.qtd_transferencia || 0}" data-bs-toggle="tooltip"></i>
-                                <i class="fa fa-plane-departure ${(parseInt(d.qtd_despacho || 0) > 0) ? 'op-active' : 'font-grey'}" title="Despachos: ${d.qtd_despacho || 0}" data-bs-toggle="tooltip"></i>
-                                <i class="fa fa-plane-arrival ${(parseInt(d.qtd_retirada || 0) > 0) ? 'op-active' : 'font-grey'}" title="Retiradas: ${d.qtd_retirada || 0}" data-bs-toggle="tooltip"></i>
+                                <i class="fa fa-truck ${(parseInt(d.qtd_entrega || 0) > 0) ? 'op-active' : 'font-grey'}" 
+                                   style="${(parseInt(d.qtd_entrega || 0) > 0) ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" 
+                                   title="Entregas: ${d.qtd_entrega || 0}" data-bs-toggle="tooltip"></i>
+                                <i class="fa fa-dolly-flatbed ${(parseInt(d.qtd_coleta || 0) > 0) ? 'op-active' : 'font-grey'}" 
+                                   style="${(parseInt(d.qtd_coleta || 0) > 0) ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" 
+                                   title="Coletas: ${d.qtd_coleta || 0}" data-bs-toggle="tooltip"></i>
+                                <i class="fa fa-warehouse ${(parseInt(d.qtd_transferencia || 0) > 0) ? 'op-active' : 'font-grey'}" 
+                                   style="${(parseInt(d.qtd_transferencia || 0) > 0) ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" 
+                                   title="Transferências: ${d.qtd_transferencia || 0}" data-bs-toggle="tooltip"></i>
+                                <i class="fa fa-plane-departure ${(parseInt(d.qtd_despacho || 0) > 0) ? 'op-active' : 'font-grey'}" 
+                                   style="${(parseInt(d.qtd_despacho || 0) > 0) ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" 
+                                   title="Despachos: ${d.qtd_despacho || 0}" data-bs-toggle="tooltip"></i>
+                                <i class="fa fa-plane-arrival ${(parseInt(d.qtd_retirada || 0) > 0) ? 'op-active' : 'font-grey'}" 
+                                   style="${(parseInt(d.qtd_retirada || 0) > 0) ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" 
+                                   title="Retiradas: ${d.qtd_retirada || 0}" data-bs-toggle="tooltip"></i>
                             </div>
                         </div>
 
@@ -458,11 +468,11 @@ function conectarWebSocket() {
             const qRet = parseInt(d.qtd_retirada || 0);
 
             container.innerHTML = `
-                <i class="fa fa-truck ${qEnt > 0 ? 'op-active' : 'font-grey'}" title="Entregas: ${qEnt}" data-bs-toggle="tooltip"></i>
-                <i class="fa fa-dolly-flatbed ${qCol > 0 ? 'op-active' : 'font-grey'}" title="Coletas: ${qCol}" data-bs-toggle="tooltip"></i>
-                <i class="fa fa-warehouse ${qTra > 0 ? 'op-active' : 'font-grey'}" title="Transferências: ${qTra}" data-bs-toggle="tooltip"></i>
-                <i class="fa fa-plane-departure ${qDes > 0 ? 'op-active' : 'font-grey'}" title="Despachos: ${qDes}" data-bs-toggle="tooltip"></i>
-                <i class="fa fa-plane-arrival ${qRet > 0 ? 'op-active' : 'font-grey'}" title="Retiradas: ${qRet}" data-bs-toggle="tooltip"></i>
+                <i class="fa fa-truck ${qEnt > 0 ? 'op-active' : 'font-grey'}" style="${qEnt > 0 ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" title="Entregas: ${qEnt}" data-bs-toggle="tooltip"></i>
+                <i class="fa fa-dolly-flatbed ${qCol > 0 ? 'op-active' : 'font-grey'}" style="${qCol > 0 ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" title="Coletas: ${qCol}" data-bs-toggle="tooltip"></i>
+                <i class="fa fa-warehouse ${qTra > 0 ? 'op-active' : 'font-grey'}" style="${qTra > 0 ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" title="Transferências: ${qTra}" data-bs-toggle="tooltip"></i>
+                <i class="fa fa-plane-departure ${qDes > 0 ? 'op-active' : 'font-grey'}" style="${qDes > 0 ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" title="Despachos: ${qDes}" data-bs-toggle="tooltip"></i>
+                <i class="fa fa-plane-arrival ${qRet > 0 ? 'op-active' : 'font-grey'}" style="${qRet > 0 ? 'color: #0f172a; opacity: 1;' : 'color: #cbd5e1; opacity: 0.4;'}" title="Retiradas: ${qRet}" data-bs-toggle="tooltip"></i>
             `;
             if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
                 container.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));

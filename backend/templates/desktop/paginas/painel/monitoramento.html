@@ -185,20 +185,12 @@
         opacity: 1;
         transform: translateY(0) scale(1);
     }
+}
+
 /* Ícones de Operações da Carga (Estilo ESL) */
 .operacoes-strip {
     background-color: #f8fafc;
     min-height: 28px;
-}
-.font-grey {
-    color: #cbd5e1 !important;
-    opacity: 0.45;
-}
-.op-active {
-    color: #0f172a !important;
-    font-weight: 900 !important;
-    opacity: 1 !important;
-    transform: scale(1.06);
 }
 .operacoes-icons i {
     cursor: pointer;
@@ -206,8 +198,21 @@
     display: inline-block;
     transition: transform 0.15s ease, color 0.15s ease, opacity 0.15s ease;
 }
+.operacoes-icons i.font-grey,
+.font-grey {
+    color: #cbd5e1 !important;
+    opacity: 0.4 !important;
+}
+.operacoes-icons i.op-active,
+.op-active {
+    color: #0f172a !important;
+    font-weight: 900 !important;
+    opacity: 1 !important;
+    transform: scale(1.06);
+}
 .operacoes-icons i:hover {
-    transform: scale(1.3);
+    transform: scale(1.28);
+    opacity: 1 !important;
 }
 </style>
 <div class="container-fluid py-4" style="background-color: #f8f9fa; min-height: 100vh;">
@@ -353,11 +358,21 @@
                     <div class="d-flex align-items-center justify-content-between px-2 py-1 mb-2 rounded-2 operacoes-strip border border-light-subtle">
                         <span class="text-secondary fw-bold text-uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px;">Cargas</span>
                         <div class="d-inline-flex align-items-center gap-2 operacoes-icons" id="operacoes-mft-{{ m.numero_manifesto }}">
-                            <i class="fa fa-truck {% if m.count_entrega > 0 %}op-active{% else %}font-grey{% endif %}" title="Entregas: {{ m.count_entrega }}" data-bs-toggle="tooltip"></i>
-                            <i class="fa fa-dolly-flatbed {% if m.count_coleta > 0 %}op-active{% else %}font-grey{% endif %}" title="Coletas: {{ m.count_coleta }}" data-bs-toggle="tooltip"></i>
-                            <i class="fa fa-warehouse {% if m.count_transferencia > 0 %}op-active{% else %}font-grey{% endif %}" title="Transferências: {{ m.count_transferencia }}" data-bs-toggle="tooltip"></i>
-                            <i class="fa fa-plane-departure {% if m.count_despacho > 0 %}op-active{% else %}font-grey{% endif %}" title="Despachos: {{ m.count_despacho }}" data-bs-toggle="tooltip"></i>
-                            <i class="fa fa-plane-arrival {% if m.count_retirada > 0 %}op-active{% else %}font-grey{% endif %}" title="Retiradas: {{ m.count_retirada }}" data-bs-toggle="tooltip"></i>
+                            <i class="fa fa-truck {% if m.count_entrega > 0 %}op-active{% else %}font-grey{% endif %}" 
+                               style="{% if m.count_entrega > 0 %}color: #0f172a; opacity: 1;{% else %}color: #cbd5e1; opacity: 0.4;{% endif %}"
+                               title="Entregas: {{ m.count_entrega }}" data-bs-toggle="tooltip"></i>
+                            <i class="fa fa-dolly-flatbed {% if m.count_coleta > 0 %}op-active{% else %}font-grey{% endif %}" 
+                               style="{% if m.count_coleta > 0 %}color: #0f172a; opacity: 1;{% else %}color: #cbd5e1; opacity: 0.4;{% endif %}"
+                               title="Coletas: {{ m.count_coleta }}" data-bs-toggle="tooltip"></i>
+                            <i class="fa fa-warehouse {% if m.count_transferencia > 0 %}op-active{% else %}font-grey{% endif %}" 
+                               style="{% if m.count_transferencia > 0 %}color: #0f172a; opacity: 1;{% else %}color: #cbd5e1; opacity: 0.4;{% endif %}"
+                               title="Transferências: {{ m.count_transferencia }}" data-bs-toggle="tooltip"></i>
+                            <i class="fa fa-plane-departure {% if m.count_despacho > 0 %}op-active{% else %}font-grey{% endif %}" 
+                               style="{% if m.count_despacho > 0 %}color: #0f172a; opacity: 1;{% else %}color: #cbd5e1; opacity: 0.4;{% endif %}"
+                               title="Despachos: {{ m.count_despacho }}" data-bs-toggle="tooltip"></i>
+                            <i class="fa fa-plane-arrival {% if m.count_retirada > 0 %}op-active{% else %}font-grey{% endif %}" 
+                               style="{% if m.count_retirada > 0 %}color: #0f172a; opacity: 1;{% else %}color: #cbd5e1; opacity: 0.4;{% endif %}"
+                               title="Retiradas: {{ m.count_retirada }}" data-bs-toggle="tooltip"></i>
                         </div>
                     </div>
 
