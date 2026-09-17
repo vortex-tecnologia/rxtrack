@@ -570,7 +570,6 @@ window.atualizarContadorFilial = atualizarContadorFilial;
 window.criarNovoCardManifesto = criarNovoCardManifesto;
 window.atualizarIconesOperacaoCard = atualizarIconesOperacaoCard;
 window.updateBatteryIcon = updateBatteryIcon;
-window.formatarHoraRegistro = formatarHoraRegistro;
 window.updateLastSeen = updateLastSeen;
 
 // --- LÓGICA DE ÚLTIMO SINAL DA TORRE DE CONTROLE ---
@@ -931,8 +930,9 @@ function atualizarPosicaoMapa(dados) {
 // =========================================================
 // SISTEMA DE PILHA INTELIGENTE DE CARDS POR MOTORISTA (STACK ENGINE)
 // =========================================================
-const stacksExpandidos = new Set();
-let stackReevalTimeout = null;
+var stacksExpandidos = window.stacksExpandidos || new Set();
+window.stacksExpandidos = stacksExpandidos;
+var stackReevalTimeout = null;
 
 function reavaliarStacks() {
     clearTimeout(stackReevalTimeout);
@@ -940,6 +940,7 @@ function reavaliarStacks() {
         agruparCardsPorMotorista();
     }, 60);
 }
+window.reavaliarStacks = reavaliarStacks;
 
 function toggleStackMotorista(motId) {
     if (!motId) return;
@@ -964,6 +965,7 @@ function toggleStackMotorista(motId) {
         }));
     }
 }
+window.toggleStackMotorista = toggleStackMotorista;
 
 function agruparCardsPorMotorista() {
     const grid = document.getElementById('grid-monitoramento');
