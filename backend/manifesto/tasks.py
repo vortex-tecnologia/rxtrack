@@ -375,6 +375,30 @@ def processar_webhook_manifesto_task(self, event_id):
                 Q(numero_manifesto=num_mani_recebido) | Q(manifesto_id_tms=num_mani_recebido)
             ).first()
 
+            # 🔍 Busca Inteligente 2: Match por Notas Fiscais e Motorista
+            # Se o webhook veio com ID interno TMS (ex: 6896677) e não encontrou manifesto direto,
+            # verifica se alguma nota deste payload já pertence a um manifesto ativo deste motorista.
+            itens_payload_pre = payload.get('itens', [])
+            if not manifesto_existente and motorista_obj and itens_payload_pre:
+                chaves_pre = [it.get('chave_item') for it in itens_payload_pre if it.get('chave_item')]
+                nums_pre = [str(it.get('numero_item')) for it in itens_payload_pre if it.get('numero_item')]
+                
+                nota_match = NotaFiscal.objects.filter(
+                    Q(chave_acesso__in=chaves_pre) | Q(numero_nota__in=nums_pre),
+                    manifesto__motorista=motorista_obj,
+                    manifesto__finalizado=False
+                ).select_related('manifesto').first()
+
+                if not nota_match:
+                    nota_match = NotaFiscal.objects.filter(
+                        Q(chave_acesso__in=chaves_pre) | Q(numero_nota__in=nums_pre),
+                        manifesto__motorista=motorista_obj
+                    ).select_related('manifesto').order_by('-manifesto__id').first()
+
+                if nota_match and nota_match.manifesto:
+                    manifesto_existente = nota_match.manifesto
+                    logger.info(f"🎯 [WEBHOOK MATCH INTELIGENTE] Manifesto visual #{manifesto_existente.numero_manifesto} identificado por notas do motorista {motorista_obj.nome_completo} para ID recebido {num_mani_recebido}")
+
             # 3b. Veículo (Novo: cria/vincula se a placa vier no payload)
             veiculo_obj = None
             v_data = payload.get('veiculo', {})
@@ -424,6 +448,14 @@ def processar_webhook_manifesto_task(self, event_id):
                 id_tms_final = mani_data.get('id_tms') or num_mani_recebido
 
             num_mani = num_visual
+
+            # Garante que o ID TMS fique gravado no manifesto existente e limpa eventual duplicata criada pelo ID interno
+            if manifesto_existente:
+                if id_tms_final and manifesto_existente.manifesto_id_tms != id_tms_final:
+                    manifesto_existente.manifesto_id_tms = id_tms_final
+                    manifesto_existente.save(update_fields=['manifesto_id_tms'])
+                if num_visual != num_mani_recebido:
+                    Manifesto.objects.filter(numero_manifesto=num_mani_recebido).exclude(id=manifesto_existente.id).delete()
 
             # 🛡️ TRAVA 1: MANIFESTO CANCELADO NO APP (NÃO REABRE NEM ALTERA HISTÓRICO)
             if manifesto_existente and manifesto_existente.status == 'CANCELADO':
@@ -531,17 +563,29 @@ def processar_webhook_manifesto_task(self, event_id):
                 'manifesto_id_tms': id_tms_final,
             }
 
-            # Atribui quantidades de carga da ESL se vieram
-            info_cargas = res_esl if (res_esl and isinstance(res_esl, dict)) else None
-            if info_cargas:
-                if info_cargas.get('qtd_transferencia') is not None:
-                    manifesto_defaults['qtd_transferencia'] = info_cargas['qtd_transferencia']
-                if info_cargas.get('qtd_entrega') is not None:
-                    manifesto_defaults['qtd_entrega'] = info_cargas['qtd_entrega']
-                if info_cargas.get('qtd_despacho') is not None:
-                    manifesto_defaults['qtd_despacho'] = info_cargas['qtd_despacho']
-                if info_cargas.get('qtd_retirada') is not None:
-                    manifesto_defaults['qtd_retirada'] = info_cargas['qtd_retirada']
+            itens = payload.get('itens', [])
+
+            # 📦 CONTAGEM DAS OPERAÇÕES DE CARGA (PRIORIDADE ABSOLUTA DO WEBHOOK):
+            # O webhook reflete a expedição física real da rota montada no TMS.
+            # Contamos diretamente os itens do payload em vez de confiar nos relatórios analíticos da ESL,
+            # pois a busca na ESL pode trazer ocorrências de trânsito intermediárias (ex: 117/122) que não são transferências na rota.
+            if itens:
+                manifesto_defaults['qtd_entrega'] = sum(1 for it in itens if it.get('tipo', 'ENTREGA') == 'ENTREGA')
+                manifesto_defaults['qtd_transferencia'] = sum(1 for it in itens if it.get('tipo') == 'TRANSFERENCIA')
+                manifesto_defaults['qtd_coleta'] = sum(1 for it in itens if it.get('tipo') == 'COLETA')
+                manifesto_defaults['qtd_despacho'] = sum(1 for it in itens if it.get('tipo') == 'DESPACHO')
+                manifesto_defaults['qtd_retirada'] = sum(1 for it in itens if it.get('tipo') == 'RETIRADA')
+            else:
+                info_cargas = res_esl if (res_esl and isinstance(res_esl, dict)) else None
+                if info_cargas:
+                    if info_cargas.get('qtd_transferencia') is not None:
+                        manifesto_defaults['qtd_transferencia'] = info_cargas['qtd_transferencia']
+                    if info_cargas.get('qtd_entrega') is not None:
+                        manifesto_defaults['qtd_entrega'] = info_cargas['qtd_entrega']
+                    if info_cargas.get('qtd_despacho') is not None:
+                        manifesto_defaults['qtd_despacho'] = info_cargas['qtd_despacho']
+                    if info_cargas.get('qtd_retirada') is not None:
+                        manifesto_defaults['qtd_retirada'] = info_cargas['qtd_retirada']
 
             # Só atribui filial_operacao se temos valor (não sobrescreve com None)
             if filial_operacao_obj:
@@ -640,6 +684,19 @@ def processar_webhook_manifesto_task(self, event_id):
                     # Validação de id_tms: ignora números sequenciais de parada (1, 2, 3...)
                     is_id_frete_valido = bool(id_tms and not (str(id_tms).isdigit() and int(id_tms) < 100))
 
+                    placeholders_dest = {'', 'NÃO INFORMADO', 'NAO INFORMADO', 'DADOS NÃO REPASSADOS PELA ESL'}
+
+                    # tipo_operacao: CRÍTICO — corrige tipo errado (ex: ENTREGA → TRANSFERENCIA)
+                    # Webhook SEMPRE tem autoridade sobre tipo_operacao (dados 100% confiáveis da ESL)
+                    if tipo_item and nota_obj.tipo_operacao != tipo_item:
+                        logger.info(f"🔄 [WEBHOOK CORREÇÃO] NF #{numero_item}: tipo_operacao '{nota_obj.tipo_operacao}' → '{tipo_item}'")
+                        nota_obj.tipo_operacao = tipo_item
+                        campos_update.append('tipo_operacao')
+                    # Marca que o tipo_operacao foi confirmado pelo webhook (trava contra busca manual)
+                    if not nota_obj.tipo_operacao_confirmado_webhook:
+                        nota_obj.tipo_operacao_confirmado_webhook = True
+                        campos_update.append('tipo_operacao_confirmado_webhook')
+
                     if nota_obj.status in ['BAIXADA', 'OCORRENCIA']:
                         # 🔒 Nota já finalizada — apenas atualiza freight_id se faltava
                         if is_id_frete_valido and nota_obj.freight_id_tms != str(id_tms):
@@ -647,16 +704,6 @@ def processar_webhook_manifesto_task(self, event_id):
                             campos_update.append('freight_id_tms')
                     else:
                         # 📋 Nota PENDENTE — verificação COMPLETA de todos os campos
-                        # tipo_operacao: CRÍTICO — corrige tipo errado (ex: ENTREGA → TRANSFERENCIA)
-                        # Webhook SEMPRE tem autoridade sobre tipo_operacao (dados 100% confiáveis da ESL)
-                        if tipo_item and nota_obj.tipo_operacao != tipo_item:
-                            logger.info(f"🔄 [WEBHOOK CORREÇÃO] NF #{numero_item}: tipo_operacao '{nota_obj.tipo_operacao}' → '{tipo_item}'")
-                            nota_obj.tipo_operacao = tipo_item
-                            campos_update.append('tipo_operacao')
-                        # Marca que o tipo_operacao foi confirmado pelo webhook (trava contra busca manual)
-                        if tipo_item and not nota_obj.tipo_operacao_confirmado_webhook:
-                            nota_obj.tipo_operacao_confirmado_webhook = True
-                            campos_update.append('tipo_operacao_confirmado_webhook')
                         # freight_id_tms (apenas IDs válidos do TMS, não sequenciais de parada)
                         if is_id_frete_valido and nota_obj.freight_id_tms != str(id_tms):
                             nota_obj.freight_id_tms = str(id_tms)
@@ -676,13 +723,14 @@ def processar_webhook_manifesto_task(self, event_id):
                             campos_update.append('frete')
                         # Destinatário (webhook sempre tem prioridade — dados vêm do banco ESL)
                         nome_dest_wh = str(dest.get('nome', '')).upper().strip()
-                        if nome_dest_wh and nome_dest_wh != 'NÃO INFORMADO' and nota_obj.destinatario != nome_dest_wh:
-                            nota_obj.destinatario = nome_dest_wh
-                            campos_update.append('destinatario')
+                        if nome_dest_wh and nome_dest_wh not in placeholders_dest:
+                            if nota_obj.destinatario != nome_dest_wh or nota_obj.destinatario in placeholders_dest:
+                                nota_obj.destinatario = nome_dest_wh
+                                campos_update.append('destinatario')
                         # Endereço de entrega (webhook sempre tem prioridade — dados vêm do banco ESL)
-                        if endereco and 'NÃO INFORMADO' not in endereco:
+                        if endereco and 'NÃO INFORMADO' not in endereco and 'CONSULTE' not in endereco:
                             endereco_limpo = endereco.strip()
-                            if nota_obj.endereco_entrega != endereco_limpo:
+                            if nota_obj.endereco_entrega != endereco_limpo or 'CONSULTE' in (nota_obj.endereco_entrega or ''):
                                 nota_obj.endereco_entrega = endereco_limpo
                                 campos_update.append('endereco_entrega')
                                 cep_mudou = True  # Endereço mudou, re-geocodificar
@@ -791,6 +839,20 @@ def processar_webhook_manifesto_task(self, event_id):
                     manifesto_obj.status = 'FINALIZADO'
                     manifesto_obj.finalizado = True
                     manifesto_obj.save(update_fields=['status', 'finalizado'])
+
+            # 📦 Recalcula contagens oficiais de carga diretamente das notas salvas no banco
+            tot_ent = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='ENTREGA').count()
+            tot_tra = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='TRANSFERENCIA').count()
+            tot_col = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='COLETA').count()
+            tot_des = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='DESPACHO').count()
+            tot_ret = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='RETIRADA').count()
+
+            manifesto_obj.qtd_entrega = tot_ent
+            manifesto_obj.qtd_transferencia = tot_tra
+            manifesto_obj.qtd_coleta = tot_col
+            manifesto_obj.qtd_despacho = tot_des
+            manifesto_obj.qtd_retirada = tot_ret
+            manifesto_obj.save(update_fields=['qtd_entrega', 'qtd_transferencia', 'qtd_coleta', 'qtd_despacho', 'qtd_retirada'])
 
             # 5. Criar Log de Auditoria/Visibilidade no Dashboard
             ManifestoBuscaLog.objects.update_or_create(

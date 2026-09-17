@@ -126,12 +126,19 @@ class Command(BaseCommand):
                         mft.filial_operacao = filial_op_obj
                         campos_update.append('filial_operacao')
 
-                # Atualiza contagens de carga
-                mft.qtd_transferencia = int(info_tms.get('transfer_manifest_items_count') or 0)
-                mft.qtd_entrega = int(float(info_tms.get('delivery_subtotal') or 0))
-                mft.qtd_despacho = int(info_tms.get('dispatch_draft_manifest_items_count') or 0)
-                mft.qtd_retirada = int(info_tms.get('pick_manifest_items_count') or 0)
-                campos_update.extend(['qtd_transferencia', 'qtd_entrega', 'qtd_despacho', 'qtd_retirada'])
+                # Atualiza contagens de carga (Prioridade para as notas reais salvas no banco)
+                if mft.notas_fiscais.exists():
+                    mft.qtd_entrega = mft.notas_fiscais.filter(tipo_operacao='ENTREGA').count()
+                    mft.qtd_transferencia = mft.notas_fiscais.filter(tipo_operacao='TRANSFERENCIA').count()
+                    mft.qtd_coleta = mft.notas_fiscais.filter(tipo_operacao='COLETA').count()
+                    mft.qtd_despacho = mft.notas_fiscais.filter(tipo_operacao='DESPACHO').count()
+                    mft.qtd_retirada = mft.notas_fiscais.filter(tipo_operacao='RETIRADA').count()
+                else:
+                    mft.qtd_transferencia = int(info_tms.get('transfer_manifest_items_count') or 0)
+                    mft.qtd_entrega = int(float(info_tms.get('delivery_subtotal') or 0))
+                    mft.qtd_despacho = int(info_tms.get('dispatch_draft_manifest_items_count') or 0)
+                    mft.qtd_retirada = int(info_tms.get('pick_manifest_items_count') or 0)
+                campos_update.extend(['qtd_transferencia', 'qtd_entrega', 'qtd_coleta', 'qtd_despacho', 'qtd_retirada'])
 
                 mft.save(update_fields=campos_update)
 

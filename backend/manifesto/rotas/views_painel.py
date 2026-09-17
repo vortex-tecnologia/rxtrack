@@ -138,6 +138,12 @@ def painel_monitoramento(request):
     hoje = timezone.now().date()
     _higienizar_filiais_duplicadas()
 
+    try:
+        from manifesto.services import sincronizar_manifestos_webhook_divergentes
+        sincronizar_manifestos_webhook_divergentes()
+    except Exception:
+        pass
+
     # 1. Identificar a filial do usuário logado (se houver perfil)
     usuario_filial = None
     if request.user.is_authenticated:
@@ -222,13 +228,20 @@ def painel_monitoramento(request):
                 pass
 
         # C. Contagens oficiais de Carga (ESL Style):
-        c_ent = m.calc_entrega or m.qtd_entrega or 0
-        c_col = m.calc_coleta or 0
-        c_tra = m.calc_transf or m.qtd_transferencia or 0
-        c_des = m.calc_despacho or m.qtd_despacho or 0
-        c_ret = m.calc_retirada or m.qtd_retirada or 0
-        if m.total_nfe > 0 and c_ent == 0 and c_col == 0 and c_tra == 0 and c_des == 0 and c_ret == 0:
-            c_ent = m.total_nfe
+        if m.total_nfe > 0:
+            c_ent = m.calc_entrega or 0
+            c_col = m.calc_coleta or 0
+            c_tra = m.calc_transf or 0
+            c_des = m.calc_despacho or 0
+            c_ret = m.calc_retirada or 0
+            if c_ent == 0 and c_col == 0 and c_tra == 0 and c_des == 0 and c_ret == 0:
+                c_ent = m.total_nfe
+        else:
+            c_ent = m.qtd_entrega or 0
+            c_col = m.qtd_coleta or 0
+            c_tra = m.qtd_transferencia or 0
+            c_des = m.qtd_despacho or 0
+            c_ret = m.qtd_retirada or 0
         m.count_entrega = c_ent
         m.count_coleta = c_col
         m.count_transferencia = c_tra
@@ -298,13 +311,20 @@ def painel_sync(request):
         is_viagem = getattr(m, 'is_viagem', False)
 
         # Contagens de cargas/operações
-        c_ent = m.calc_entrega or m.qtd_entrega or 0
-        c_col = m.calc_coleta or 0
-        c_tra = m.calc_transf or m.qtd_transferencia or 0
-        c_des = m.calc_despacho or m.qtd_despacho or 0
-        c_ret = m.calc_retirada or m.qtd_retirada or 0
-        if m.total_nfe > 0 and c_ent == 0 and c_col == 0 and c_tra == 0 and c_des == 0 and c_ret == 0:
-            c_ent = m.total_nfe
+        if m.total_nfe > 0:
+            c_ent = m.calc_entrega or 0
+            c_col = m.calc_coleta or 0
+            c_tra = m.calc_transf or 0
+            c_des = m.calc_despacho or 0
+            c_ret = m.calc_retirada or 0
+            if c_ent == 0 and c_col == 0 and c_tra == 0 and c_des == 0 and c_ret == 0:
+                c_ent = m.total_nfe
+        else:
+            c_ent = m.qtd_entrega or 0
+            c_col = m.qtd_coleta or 0
+            c_tra = m.qtd_transferencia or 0
+            c_des = m.qtd_despacho or 0
+            c_ret = m.qtd_retirada or 0
 
         resultado.append({
             'manifesto_id': str(m.numero_manifesto),

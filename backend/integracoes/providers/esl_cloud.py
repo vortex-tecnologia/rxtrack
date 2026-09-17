@@ -589,20 +589,29 @@ class ESLCloudAdapter(BaseTMSAdapter):
             if id_filial_operacao_tms:
                 filial_operacao_obj = _resolver_filial_operacao_tms(id_filial_operacao_tms)
 
+            mft_existente = Manifesto.objects.filter(numero_manifesto=numero_visual).first()
+            tem_notas_confirmadas_wh = False
+            if mft_existente:
+                tem_notas_confirmadas_wh = mft_existente.notas_fiscais.filter(tipo_operacao_confirmado_webhook=True).exists()
+
+            defaults_manifesto = {
+                'motorista': motorista, 
+                'filial': filial_obj,
+                'filial_operacao': filial_operacao_obj,
+                'status': 'EM_TRANSPORTE',
+                'status_tms': status_tms if status_tms in ('pending', 'in_transit') else 'in_transit',
+                'manifesto_id_tms': info_tms.get('id'), 
+                'veiculo': veiculo_obj,
+            }
+            # Se já existem notas confirmadas via Webhook, NÃO sobrescreve as contagens com números analíticos da ESL
+            if not tem_notas_confirmadas_wh:
+                defaults_manifesto['qtd_transferencia'] = int(info_tms.get('transfer_manifest_items_count', 0))
+                defaults_manifesto['qtd_entrega'] = int(info_tms.get('dispatch_draft_manifest_items_count', 0))
+                defaults_manifesto['qtd_retirada'] = int(info_tms.get('pick_manifest_items_count', 0))
+
             manifesto_obj, _ = Manifesto.objects.update_or_create(
                 numero_manifesto=numero_visual,
-                defaults={
-                    'motorista': motorista, 
-                    'filial': filial_obj,
-                    'filial_operacao': filial_operacao_obj,
-                    'status': 'EM_TRANSPORTE',
-                    'status_tms': status_tms if status_tms in ('pending', 'in_transit') else 'in_transit',
-                    'manifesto_id_tms': info_tms.get('id'), 
-                    'veiculo': veiculo_obj,
-                    'qtd_transferencia': int(info_tms.get('transfer_manifest_items_count', 0)),
-                    'qtd_entrega': int(info_tms.get('dispatch_draft_manifest_items_count', 0)),
-                    'qtd_retirada': int(info_tms.get('pick_manifest_items_count', 0)),
-                }
+                defaults=defaults_manifesto
             )
             
             log.status = 'ENRIQUECENDO'
@@ -983,6 +992,20 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 manifesto_obj.status = 'FINALIZADO'
                 manifesto_obj.finalizado = True
                 manifesto_obj.save(update_fields=['status', 'finalizado'])
+
+            # 📦 Recalcula contagens oficiais de carga diretamente das notas salvas no banco
+            tot_ent = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='ENTREGA').count()
+            tot_tra = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='TRANSFERENCIA').count()
+            tot_col = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='COLETA').count()
+            tot_des = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='DESPACHO').count()
+            tot_ret = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='RETIRADA').count()
+
+            manifesto_obj.qtd_entrega = tot_ent
+            manifesto_obj.qtd_transferencia = tot_tra
+            manifesto_obj.qtd_coleta = tot_col
+            manifesto_obj.qtd_despacho = tot_des
+            manifesto_obj.qtd_retirada = tot_ret
+            manifesto_obj.save(update_fields=['qtd_entrega', 'qtd_transferencia', 'qtd_coleta', 'qtd_despacho', 'qtd_retirada'])
 
             if manifesto_obj.finalizado or manifesto_obj.status == 'FINALIZADO':
                 log.status = 'ERRO'

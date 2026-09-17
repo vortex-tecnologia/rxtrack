@@ -749,6 +749,13 @@ def detalhes_manifesto_modal_view(request, manifesto_id):
     if not manifesto:
         return HttpResponse("<div class='modal-body text-center p-4 text-danger fw-bold'>Manifesto não encontrado.</div>", status=404)
 
+    # 🔄 Auto-healing: Sincroniza dados com o webhook caso haja divergência (TRANSFERENCIA indevida ou DADOS NÃO REPASSADOS)
+    try:
+        from manifesto.services import sincronizar_manifesto_individual_webhook
+        sincronizar_manifesto_individual_webhook(manifesto)
+    except Exception:
+        pass
+
     notas = NotaFiscal.objects.filter(manifesto=manifesto).select_related('manifesto').prefetch_related('baixa_info', 'baixa_info__ocorrencia')
     
     total_notas = notas.count()

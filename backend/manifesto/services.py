@@ -55,20 +55,27 @@ def enviar_painel(manifesto):
 
     # Contagens de cargas/operações (ESL Style)
     from django.db.models import Count, Q
-    counts_op = manifesto.notas_fiscais.aggregate(
-        c_ent=Count('id', filter=Q(tipo_operacao='ENTREGA')),
-        c_col=Count('id', filter=Q(tipo_operacao='COLETA')),
-        c_tra=Count('id', filter=Q(tipo_operacao='TRANSFERENCIA')),
-        c_des=Count('id', filter=Q(tipo_operacao='DESPACHO')),
-        c_ret=Count('id', filter=Q(tipo_operacao='RETIRADA')),
-    )
-    qtd_ent = counts_op['c_ent'] or manifesto.qtd_entrega or 0
-    qtd_col = counts_op['c_col'] or 0
-    qtd_tra = counts_op['c_tra'] or manifesto.qtd_transferencia or 0
-    qtd_des = counts_op['c_des'] or manifesto.qtd_despacho or 0
-    qtd_ret = counts_op['c_ret'] or manifesto.qtd_retirada or 0
-    if total > 0 and qtd_ent == 0 and qtd_col == 0 and qtd_tra == 0 and qtd_des == 0 and qtd_ret == 0:
-        qtd_ent = total
+    if total > 0:
+        counts_op = manifesto.notas_fiscais.aggregate(
+            c_ent=Count('id', filter=Q(tipo_operacao='ENTREGA')),
+            c_col=Count('id', filter=Q(tipo_operacao='COLETA')),
+            c_tra=Count('id', filter=Q(tipo_operacao='TRANSFERENCIA')),
+            c_des=Count('id', filter=Q(tipo_operacao='DESPACHO')),
+            c_ret=Count('id', filter=Q(tipo_operacao='RETIRADA')),
+        )
+        qtd_ent = counts_op['c_ent'] or 0
+        qtd_col = counts_op['c_col'] or 0
+        qtd_tra = counts_op['c_tra'] or 0
+        qtd_des = counts_op['c_des'] or 0
+        qtd_ret = counts_op['c_ret'] or 0
+        if qtd_ent == 0 and qtd_col == 0 and qtd_tra == 0 and qtd_des == 0 and qtd_ret == 0:
+            qtd_ent = total
+    else:
+        qtd_ent = manifesto.qtd_entrega or 0
+        qtd_col = manifesto.qtd_coleta or 0
+        qtd_tra = manifesto.qtd_transferencia or 0
+        qtd_des = manifesto.qtd_despacho or 0
+        qtd_ret = manifesto.qtd_retirada or 0
 
     payload = {
         "type": "atualizar_painel",
@@ -351,4 +358,152 @@ def tentar_autofinalizar_manifesto(manifesto_ou_id, km_final=None):
     except Exception as e_final:
         logger.error(f"Erro crítico ao auto-finalizar manifesto #{manifesto.id}: {e_final}")
         return False, f"Erro ao auto-finalizar: {str(e_final)}"
+
+
+def sincronizar_manifesto_individual_webhook(manifesto):
+    """
+    Garante que os dados do webhook (que possuem PRIORIDADE ABSOLUTA sobre relatórios/ocorrências da ESL)
+    estejam aplicados ao manifesto e suas notas fiscais.
+    Corrige notas com 'TRANSFERENCIA' indevida e destinatário 'DADOS NÃO REPASSADOS PELA ESL'.
+    Recalcula as contagens oficiais de carga e limpa duplicatas do ID interno.
+    """
+    try:
+        from manifesto.models import WebhookEventoManifestoESL, NotaFiscal, Manifesto
+        import logging
+        log = logging.getLogger(__name__)
+
+        notas = list(manifesto.notas_fiscais.all())
+        placeholders_dest = {'', 'NÃO INFORMADO', 'NAO INFORMADO', 'DADOS NÃO REPASSADOS PELA ESL'}
+        placeholders_end = {'', 'NÃO INFORMADO', 'NAO INFORMADO', 'CONSULTE O DOCUMENTO FÍSICO', 'ENDEREÇO NÃO INFORMADO'}
+
+        precisa_ajuste = any(
+            n.tipo_operacao == 'TRANSFERENCIA' or
+            n.destinatario in placeholders_dest or
+            any(p in (n.endereco_entrega or '') for p in ['CONSULTE', 'DADOS NÃO REPASSADOS'])
+            for n in notas
+        )
+        if not precisa_ajuste and (manifesto.qtd_transferencia or 0) > 0:
+            precisa_ajuste = True
+
+        if not precisa_ajuste:
+            return False
+
+        evento = None
+        # 1. Por número do manifesto visual
+        evento = WebhookEventoManifestoESL.objects.filter(
+            numero_manifesto=manifesto.numero_manifesto
+        ).order_by('-id').first()
+
+        # 2. Por ID TMS do manifesto
+        if not evento and manifesto.manifesto_id_tms:
+            evento = WebhookEventoManifestoESL.objects.filter(
+                numero_manifesto=manifesto.manifesto_id_tms
+            ).order_by('-id').first()
+
+        # 3. Por chaves de acesso ou números de notas do manifesto nos últimos eventos
+        if not evento and notas:
+            chaves = {n.chave_acesso for n in notas if n.chave_acesso}
+            nums = {str(n.numero_nota) for n in notas if n.numero_nota}
+            ultimos_eventos = WebhookEventoManifestoESL.objects.order_by('-id')[:80]
+            for ev in ultimos_eventos:
+                p_itens = (ev.payload or {}).get('itens', [])
+                if any(it.get('chave_item') in chaves or str(it.get('numero_item')) in nums for it in p_itens):
+                    evento = ev
+                    break
+
+        if not evento or not evento.payload:
+            return False
+
+        payload = evento.payload
+        itens = payload.get('itens', [])
+        if not itens:
+            return False
+
+        # Vincula o ID TMS se era diferente
+        ev_num_mani = str(evento.numero_manifesto or '').strip()
+        if ev_num_mani and ev_num_mani != str(manifesto.numero_manifesto):
+            if manifesto.manifesto_id_tms != ev_num_mani:
+                manifesto.manifesto_id_tms = ev_num_mani
+                manifesto.save(update_fields=['manifesto_id_tms'])
+            # Remove eventual manifesto fantasma duplicado criado pelo ID interno
+            Manifesto.objects.filter(numero_manifesto=ev_num_mani).exclude(id=manifesto.id).delete()
+
+        mapa_por_chave = {it.get('chave_item'): it for it in itens if it.get('chave_item')}
+        mapa_por_num = {str(it.get('numero_item')): it for it in itens if it.get('numero_item')}
+
+        modificou = False
+        for n in notas:
+            it = mapa_por_chave.get(n.chave_acesso) or mapa_por_num.get(str(n.numero_nota))
+            if not it:
+                continue
+
+            campos_up = []
+            tipo_item = it.get('tipo', 'ENTREGA')
+            if tipo_item and n.tipo_operacao != tipo_item:
+                n.tipo_operacao = tipo_item
+                campos_up.append('tipo_operacao')
+            if not n.tipo_operacao_confirmado_webhook:
+                n.tipo_operacao_confirmado_webhook = True
+                campos_up.append('tipo_operacao_confirmado_webhook')
+
+            dest = it.get('destinatario', {})
+            nome_dest = str(dest.get('nome', '')).upper().strip()
+            if nome_dest and nome_dest not in placeholders_dest:
+                if n.destinatario != nome_dest or n.destinatario in placeholders_dest:
+                    n.destinatario = nome_dest
+                    campos_up.append('destinatario')
+
+            endereco = f"{dest.get('logradouro', '')}, {dest.get('numero', '')} - {dest.get('bairro', '')} ({dest.get('cidade', '')}/{dest.get('uf', '')})".upper().strip()
+            if endereco and 'NÃO INFORMADO' not in endereco and 'CONSULTE' not in endereco:
+                if n.endereco_entrega != endereco or 'CONSULTE' in (n.endereco_entrega or ''):
+                    n.endereco_entrega = endereco
+                    campos_up.append('endereco_entrega')
+
+            if campos_up:
+                n.save(update_fields=campos_up)
+                modificou = True
+
+        # Recalcula contagens oficiais de carga diretamente das notas reais do banco
+        tot_ent = manifesto.notas_fiscais.filter(tipo_operacao='ENTREGA').count()
+        tot_tra = manifesto.notas_fiscais.filter(tipo_operacao='TRANSFERENCIA').count()
+        tot_col = manifesto.notas_fiscais.filter(tipo_operacao='COLETA').count()
+        tot_des = manifesto.notas_fiscais.filter(tipo_operacao='DESPACHO').count()
+        tot_ret = manifesto.notas_fiscais.filter(tipo_operacao='RETIRADA').count()
+
+        if (manifesto.qtd_entrega != tot_ent or manifesto.qtd_transferencia != tot_tra or
+            manifesto.qtd_coleta != tot_col or manifesto.qtd_despacho != tot_des or manifesto.qtd_retirada != tot_ret):
+            manifesto.qtd_entrega = tot_ent
+            manifesto.qtd_transferencia = tot_tra
+            manifesto.qtd_coleta = tot_col
+            manifesto.qtd_despacho = tot_des
+            manifesto.qtd_retirada = tot_ret
+            manifesto.save(update_fields=['qtd_entrega', 'qtd_transferencia', 'qtd_coleta', 'qtd_despacho', 'qtd_retirada'])
+            modificou = True
+
+        if modificou:
+            log.info(f"✨ [AUTO-HEAL WEBHOOK] Manifesto #{manifesto.numero_manifesto} sincronizado com sucesso! Entregas: {tot_ent}, Transferências: {tot_tra}")
+            try:
+                enviar_painel(manifesto)
+            except Exception:
+                pass
+        return modificou
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"⚠️ Erro ao sincronizar manifesto individual com webhook: {e}")
+        return False
+
+
+def sincronizar_manifestos_webhook_divergentes():
+    """
+    Executa a sincronização em todos os manifestos ativos para garantir integridade entre painel e webhooks.
+    """
+    try:
+        from manifesto.models import Manifesto
+        ativos = Manifesto.objects.filter(status__in=['AGUARDANDO', 'EM_TRANSPORTE'])
+        for m in ativos:
+            sincronizar_manifesto_individual_webhook(m)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"⚠️ Erro ao sincronizar manifestos divergentes: {e}")
 
