@@ -9,32 +9,103 @@ def merge_filial_sp_duplicada(apps, schema_editor):
     Manifesto = apps.get_model('manifesto', 'Manifesto')
     Motorista = apps.get_model('usuarios', 'Motorista')
 
-    sp_oficial = Filial.objects.filter(nome__iexact='QUICK SAO PAULO').first()
-    if not sp_oficial:
-        sp_oficial = Filial.objects.filter(id_filial_tms='237978').first()
+    FILIAIS_OFICIAIS = [
+        {
+            'nome': 'RD EXPRESSO',
+            'id_filial_tms': '237988',
+            'cnpj': '14977687000124',
+            'dups_query': (
+                Q(nome__icontains='RD EXPRESSO TRANSPORTES') |
+                Q(id_filial_tms='14977687000124') |
+                (Q(nome__icontains='RD EXPRESSO') & ~Q(nome='RD EXPRESSO'))
+            )
+        },
+        {
+            'nome': 'QUICK SAO PAULO',
+            'id_filial_tms': '237978',
+            'cnpj': '14539546000120',
+            'dups_query': (
+                Q(nome__icontains='QUICK DELIVERY SAO PAULO') |
+                Q(id_filial_tms='14539546000120') |
+                (Q(nome__icontains='SAO PAULO') & ~Q(nome='QUICK SAO PAULO'))
+            )
+        },
+        {
+            'nome': 'QUICK BRASILIA',
+            'id_filial_tms': '237973',
+            'cnpj': '08296144000149,08296144000734',
+            'dups_query': (
+                Q(nome__icontains='QUICK DELIVERY BRASILIA') |
+                Q(id_filial_tms__in=['08296144000149', '08296144000734']) |
+                (Q(nome__icontains='BRASILIA') & ~Q(nome='QUICK BRASILIA'))
+            )
+        },
+        {
+            'nome': 'QUICK GOIANIA',
+            'id_filial_tms': '237974',
+            'cnpj': None,
+            'dups_query': (
+                (Q(nome__icontains='GOIANIA') & ~Q(nome='QUICK GOIANIA'))
+            )
+        },
+    ]
 
-    if sp_oficial:
+    for conf in FILIAIS_OFICIAIS:
+        nome_oficial = conf['nome']
+        id_tms_oficial = conf['id_filial_tms']
+        cnpj_oficial = conf['cnpj']
+        dups_query = conf['dups_query']
+
+        # Encontra a oficial
+        oficial = Filial.objects.filter(nome__iexact=nome_oficial).first()
+        if not oficial and id_tms_oficial:
+            oficial = Filial.objects.filter(id_filial_tms=id_tms_oficial).first()
+        if not oficial and cnpj_oficial:
+            cnpjs_lista = [c.strip() for c in cnpj_oficial.split(',') if c.strip()]
+            for c in cnpjs_lista:
+                oficial = Filial.objects.filter(cnpj__icontains=c).first()
+                if oficial:
+                    break
+
+        if not oficial:
+            continue
+
         campos = []
-        if sp_oficial.id_filial_tms != '237978':
-            sp_oficial.id_filial_tms = '237978'
+        if oficial.nome != nome_oficial:
+            oficial.nome = nome_oficial
+            campos.append('nome')
+        if id_tms_oficial and oficial.id_filial_tms != id_tms_oficial:
+            oficial.id_filial_tms = id_tms_oficial
             campos.append('id_filial_tms')
-        if not sp_oficial.cnpj or '14539546000120' not in sp_oficial.cnpj:
-            sp_oficial.cnpj = '14539546000120'
-            campos.append('cnpj')
-        if not sp_oficial.operacao_ativa:
-            sp_oficial.operacao_ativa = True
+        if cnpj_oficial:
+            if not oficial.cnpj or cnpj_oficial not in oficial.cnpj:
+                oficial.cnpj = cnpj_oficial
+                campos.append('cnpj')
+        if not oficial.operacao_ativa:
+            oficial.operacao_ativa = True
             campos.append('operacao_ativa')
         if campos:
-            sp_oficial.save(update_fields=campos)
+            oficial.save(update_fields=campos)
 
-        dups = Filial.objects.filter(
-            Q(nome__icontains='QUICK DELIVERY SAO PAULO') | Q(id_filial_tms='14539546000120')
-        ).exclude(id=sp_oficial.id)
+        # Encontra e remove duplicatas re-vinculando manifestos e motoristas
+        duplicatas = Filial.objects.filter(dups_query).exclude(id=oficial.id)
+        for d in duplicatas:
+            update_oficial = []
+            for attr in ['cidade', 'uf', 'cep', 'logradouro', 'numero', 'bairro', 'latitude', 'longitude', 'whatsapp_operacional', 'whatsapp_sac']:
+                if not getattr(oficial, attr) and getattr(d, attr):
+                    setattr(oficial, attr, getattr(d, attr))
+                    update_oficial.append(attr)
+            if update_oficial:
+                oficial.save(update_fields=update_oficial)
 
-        for d in dups:
-            Manifesto.objects.filter(filial=d).update(filial=sp_oficial)
-            Manifesto.objects.filter(filial_operacao=d).update(filial_operacao=sp_oficial)
-            Motorista.objects.filter(filial=d).update(filial=sp_oficial)
+            Manifesto.objects.filter(filial=d).update(filial=oficial)
+            Manifesto.objects.filter(filial_operacao=d).update(filial_operacao=oficial)
+            Motorista.objects.filter(filial=d).update(filial=oficial)
+            try:
+                LogRebusca = apps.get_model('sac_mobile', 'LogRebuscaFilial')
+                LogRebusca.objects.filter(filial=d).update(filial=oficial)
+            except Exception:
+                pass
             d.delete()
 
 

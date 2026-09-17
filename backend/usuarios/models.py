@@ -384,7 +384,34 @@ class Filial(models.Model):
         """
         Ao salvar, se o endereço foi preenchido/alterado e lat/lng estão vazios,
         tenta geocodificar automaticamente usando o geocoding.py existente.
+        Também assegura a separação estrita de CNPJ vs ID ESL: se id_filial_tms
+        receber um CNPJ de 14 dígitos, transfere para o campo cnpj e associa
+        o ID interno oficial da ESL.
         """
+        import re
+
+        # Higienização de CNPJ vs ID ESL:
+        if self.id_filial_tms:
+            tms_digits = re.sub(r'\D', '', str(self.id_filial_tms))
+            if len(tms_digits) == 14:
+                if not self.cnpj:
+                    self.cnpj = tms_digits
+                elif tms_digits not in self.cnpj:
+                    self.cnpj = f"{self.cnpj}, {tms_digits}"
+
+                MAPA_IDS_OFICIAIS = {
+                    '14977687000124': '237988',  # RD Expresso
+                    '14539546000120': '237978',  # Quick São Paulo
+                    '08296144000149': '237973',  # Quick Brasília
+                    '08296144000734': '237973',  # Quick Brasília
+                }
+                self.id_filial_tms = MAPA_IDS_OFICIAIS.get(tms_digits, None)
+                if kwargs.get('update_fields'):
+                    fields = set(kwargs['update_fields'])
+                    fields.add('id_filial_tms')
+                    fields.add('cnpj')
+                    kwargs['update_fields'] = list(fields)
+
         # Detecta se deve tentar geocodificar (endereço presente mas sem coordenadas)
         tem_endereco = bool(self.cep or (self.logradouro and self.cidade))
         sem_coordenadas = not self.latitude or not self.longitude
@@ -397,6 +424,11 @@ class Filial(models.Model):
                 if lat and lng:
                     self.latitude = lat
                     self.longitude = lng
+                    if kwargs.get('update_fields'):
+                        fields = set(kwargs['update_fields'])
+                        fields.add('latitude')
+                        fields.add('longitude')
+                        kwargs['update_fields'] = list(fields)
             except Exception:
                 pass  # Nunca bloqueia o save por falha de geocodificação
         

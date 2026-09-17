@@ -142,66 +142,97 @@ def enviar_comprovante_esl_task(self, baixa_id):
     return "TMS Desativado."
 
 
-def _buscar_ou_criar_filial_unificada(codigo_ou_cnpj, nome_filial, cidade=None, uf=None, cep=None, logradouro=None, bairro=None):
+def _buscar_ou_criar_filial_unificada(codigo_ou_cnpj, nome_filial=None, cidade=None, uf=None, cep=None, logradouro=None, bairro=None, cnpj=None, id_tms=None):
     """
-    Busca ou cria Filial unificando por CNPJ (suporta múltiplos CNPJs separados por vírgula),
-    ID da ESL (id_filial_tms) e Razão Social/Nome.
+    Busca ou cria Filial unificando com separação ESTRITA entre:
+    - CNPJ (14 dígitos): analisado EXCLUSIVAMENTE na coluna 'cnpj'
+    - ID da ESL (< 10 dígitos numéricos): analisado EXCLUSIVAMENTE na coluna 'id_filial_tms'
+    - Razão Social / Nome: mapeado para as filiais oficiais ('RD EXPRESSO', 'QUICK SAO PAULO', 'QUICK BRASILIA', 'QUICK GOIANIA')
+    
+    NUNCA pesquisa ou armazena CNPJ em id_filial_tms e NUNCA cria filiais duplicadas.
     """
     from usuarios.models import Filial
     import re
 
-    doc_limpo = re.sub(r'\D', '', str(codigo_ou_cnpj or ''))
-    nome_limpo = str(nome_filial or '').upper().strip()
     s_cod = str(codigo_ou_cnpj or '').strip()
+    doc_limpo = re.sub(r'\D', '', s_cod)
+    nome_limpo = str(nome_filial or '').upper().strip()
 
-    # Mapeamento conhecido para unificação imediata
-    MAPA_CONHECIDO = {
+    # Prioriza CNPJ ou ID explícitos se informados
+    cnpj_limpo = re.sub(r'\D', '', str(cnpj or '')) if cnpj else ''
+    id_tms_str = str(id_tms or '').strip() if id_tms else ''
+    id_tms_digits = re.sub(r'\D', '', id_tms_str)
+
+    # Identificação categórica: CNPJ (14 dígitos) vs ID da base na ESL (< 10 dígitos)
+    valor_cnpj = cnpj_limpo if len(cnpj_limpo) == 14 else (doc_limpo if len(doc_limpo) == 14 else None)
+    is_cnpj = bool(valor_cnpj)
+
+    valor_id_esl = None
+    if id_tms_digits and 0 < len(id_tms_digits) < 10:
+        valor_id_esl = id_tms_digits
+    elif not is_cnpj and doc_limpo and 0 < len(doc_limpo) < 10 and doc_limpo.isdigit():
+        valor_id_esl = doc_limpo
+    is_id_esl = bool(valor_id_esl)
+
+    # Mapeamento oficial de filiais conhecidas
+    MAPA_CNPJ_OFICIAL = {
+        '14977687000124': 'RD EXPRESSO',
         '14539546000120': 'QUICK SAO PAULO',
-        '237978': 'QUICK SAO PAULO',
         '08296144000149': 'QUICK BRASILIA',
         '08296144000734': 'QUICK BRASILIA',
-        '237973': 'QUICK BRASILIA',
-        '14977687000124': 'RD EXPRESSO',
+    }
+
+    MAPA_ID_ESL_OFICIAL = {
         '237988': 'RD EXPRESSO',
+        '237978': 'QUICK SAO PAULO',
+        '237973': 'QUICK BRASILIA',
         '237974': 'QUICK GOIANIA',
     }
 
     filial_obj = None
 
-    # 0. Busca por ID/CNPJ no mapa conhecido
-    chave_busca = doc_limpo if (doc_limpo and len(doc_limpo) == 14) else s_cod
-    nome_alvo = MAPA_CONHECIDO.get(chave_busca)
-    if nome_alvo:
-        filial_obj = Filial.objects.filter(nome__iexact=nome_alvo).first()
-        if filial_obj:
-            return filial_obj
+    # 1. BUSCA POR CNPJ (se tiver 14 dígitos numéricos) -> ANALISA NA COLUNA CNPJ
+    if is_cnpj:
+        # 1a. Verifica no mapa de CNPJs conhecidos
+        nome_oficial = MAPA_CNPJ_OFICIAL.get(valor_cnpj)
+        if nome_oficial:
+            filial_obj = Filial.objects.filter(nome__iexact=nome_oficial).first()
 
-    # 1. Busca por CNPJ (suporta múltiplos CNPJs no mesmo campo)
-    if doc_limpo and len(doc_limpo) == 14:
-        filial_obj = Filial.objects.filter(cnpj__icontains=doc_limpo).first()
+        # 1b. Busca na coluna 'cnpj'
+        if not filial_obj:
+            filial_obj = Filial.objects.filter(cnpj__icontains=valor_cnpj).first()
+
+        # 1c. Busca em filiais com múltiplos CNPJs gravados separados por vírgula
         if not filial_obj:
             for f in Filial.objects.exclude(cnpj__isnull=True).exclude(cnpj=''):
                 cnpjs_salvos = [re.sub(r'\D', '', c) for c in re.split(r'[,;/\s]+', f.cnpj or '') if c.strip()]
-                if doc_limpo in cnpjs_salvos:
+                if valor_cnpj in cnpjs_salvos:
                     filial_obj = f
                     break
 
-    # 2. Busca por ID da ESL (id_filial_tms)
-    if not filial_obj and s_cod:
-        filial_obj = Filial.objects.filter(id_filial_tms=s_cod).first()
+    # 2. BUSCA POR ID DA ESL (se tiver < 10 dígitos numéricos) -> ANALISA NA COLUNA ID_FILIAL_TMS
+    elif is_id_esl:
+        # 2a. Verifica no mapa de IDs ESL conhecidos
+        nome_oficial = MAPA_ID_ESL_OFICIAL.get(valor_id_esl)
+        if nome_oficial:
+            filial_obj = Filial.objects.filter(nome__iexact=nome_oficial).first()
 
-    # 3. Busca por palavras-chave essenciais no Nome / Razão Social
+        # 2b. Busca na coluna 'id_filial_tms'
+        if not filial_obj:
+            filial_obj = Filial.objects.filter(id_filial_tms=valor_id_esl).first()
+
+    # 3. BUSCA POR PALAVRAS-CHAVE ESSENCIAIS NO NOME (evita duplicatas com razão social longa da ESL)
     if not filial_obj:
-        if 'SAO PAULO' in nome_limpo or 'SÃO PAULO' in nome_limpo:
-            filial_obj = Filial.objects.filter(nome__icontains='SAO PAULO').first()
+        if 'RD EXPRESSO' in nome_limpo or 'EXPRESSO' in nome_limpo:
+            filial_obj = Filial.objects.filter(nome__iexact='RD EXPRESSO').first() or Filial.objects.filter(nome__icontains='RD EXPRESSO').order_by('-id').first()
+        elif 'SAO PAULO' in nome_limpo or 'SÃO PAULO' in nome_limpo:
+            filial_obj = Filial.objects.filter(nome__iexact='QUICK SAO PAULO').first() or Filial.objects.filter(nome__icontains='SAO PAULO').order_by('-id').first()
         elif 'BRASILIA' in nome_limpo or 'BRASÍLIA' in nome_limpo:
-            filial_obj = Filial.objects.filter(nome__icontains='BRASILIA').first()
+            filial_obj = Filial.objects.filter(nome__iexact='QUICK BRASILIA').first() or Filial.objects.filter(nome__icontains='BRASILIA').order_by('-id').first()
         elif 'GOIANIA' in nome_limpo or 'GOIÂNIA' in nome_limpo:
-            filial_obj = Filial.objects.filter(nome__icontains='GOIANIA').first()
-        elif 'RD EXPRESSO' in nome_limpo or 'EXPRESSO' in nome_limpo:
-            filial_obj = Filial.objects.filter(nome__icontains='RD EXPRESSO').first()
+            filial_obj = Filial.objects.filter(nome__iexact='QUICK GOIANIA').first() or Filial.objects.filter(nome__icontains='GOIANIA').order_by('-id').first()
 
-    # 4. Busca por Nome / Razão Social
+    # 4. BUSCA POR NOME EXATO OU CONTIDO
     if not filial_obj and nome_limpo:
         filial_obj = Filial.objects.filter(nome__iexact=nome_limpo).first()
         if not filial_obj:
@@ -210,34 +241,38 @@ def _buscar_ou_criar_filial_unificada(codigo_ou_cnpj, nome_filial, cidade=None, 
                     filial_obj = f
                     break
 
-    # Se encontrou, atualiza dados cadastrais que faltavam sem sobrescrever id oficial
+    # Se encontrou, atualiza dados cadastrais que faltavam de forma estrita
     if filial_obj:
         campos_update = []
-        if doc_limpo and len(doc_limpo) == 14:
+        # Se veio CNPJ de 14 dígitos, garante que está na coluna cnpj (e NUNCA no id_filial_tms)
+        if is_cnpj:
             cnpjs_atuais = [re.sub(r'\D', '', c) for c in re.split(r'[,;/\s]+', filial_obj.cnpj or '') if c.strip()]
-            if doc_limpo not in cnpjs_atuais:
+            if valor_cnpj not in cnpjs_atuais:
                 if filial_obj.cnpj and filial_obj.cnpj.strip():
-                    filial_obj.cnpj = f"{filial_obj.cnpj.strip()}, {doc_limpo}"
+                    filial_obj.cnpj = f"{filial_obj.cnpj.strip()}, {valor_cnpj}"
                 else:
-                    filial_obj.cnpj = doc_limpo
+                    filial_obj.cnpj = valor_cnpj
                 campos_update.append('cnpj')
-        elif doc_limpo and len(doc_limpo) != 14 and not filial_obj.id_filial_tms:
-            filial_obj.id_filial_tms = s_cod
+        # Se veio ID ESL (< 10 dígitos), preenche id_filial_tms se estiver vazio
+        elif is_id_esl and not filial_obj.id_filial_tms:
+            filial_obj.id_filial_tms = valor_id_esl
             campos_update.append('id_filial_tms')
 
         if campos_update:
             filial_obj.save(update_fields=campos_update)
         return filial_obj
 
-    # 5. Não encontrou: cria nova Filial
+    # 5. NÃO ENCONTROU: Cria nova Filial separando estritamente CNPJ e ID ESL
     defaults = {
         'nome': nome_limpo or f"FILIAL {codigo_ou_cnpj}",
         'operacao_ativa': True
     }
-    if doc_limpo and len(doc_limpo) == 14:
-        defaults['cnpj'] = doc_limpo
-    elif s_cod:
-        defaults['id_filial_tms'] = s_cod
+    if is_cnpj:
+        defaults['cnpj'] = valor_cnpj
+        # id_filial_tms fica None! Nunca armazena CNPJ em id_filial_tms
+    elif is_id_esl:
+        defaults['id_filial_tms'] = valor_id_esl
+        # cnpj fica None! Nunca armazena ID ESL em cnpj
 
     if cidade: defaults['cidade'] = cidade
     if uf: defaults['uf'] = uf
@@ -252,67 +287,12 @@ def _buscar_ou_criar_filial_unificada(codigo_ou_cnpj, nome_filial, cidade=None, 
 def _resolver_filial_operacao_tms(id_filial_tms, nome_sugerido=None):
     """
     Resolve a Filial de Operação física (base real do usuário que criou o manifesto na ESL)
-    garantindo vínculo correto e permanente com 'RD EXPRESSO', 'QUICK BRASILIA', 'QUICK SAO PAULO', etc.
-    NUNCA cria filiais duplicadas se já existir filial pelo ID ESL, CNPJ ou Nome.
+    garantindo vínculo correto e permanente com 'RD EXPRESSO', 'QUICK BRASILIA', 'QUICK SAO PAULO', 'QUICK GOIANIA'.
+    NUNCA cria filiais duplicadas.
     """
-    from usuarios.models import Filial
-    import re
     if not id_filial_tms and not nome_sugerido:
         return None
-    s_id = str(id_filial_tms or '').strip()
-    doc_limpo = re.sub(r'\D', '', s_id)
-    nome_limpo = str(nome_sugerido or '').upper().strip()
-
-    MAPA_FILIAIS_TMS = {
-        '237988': 'RD EXPRESSO',
-        '237973': 'QUICK BRASILIA',
-        '237978': 'QUICK SAO PAULO',
-        '237974': 'QUICK GOIANIA',
-        '14539546000120': 'QUICK SAO PAULO',
-        '08296144000149': 'QUICK BRASILIA',
-        '08296144000734': 'QUICK BRASILIA',
-        '14977687000124': 'RD EXPRESSO',
-    }
-
-    # 1. Checa no mapa oficial de IDs e CNPJs
-    nome_oficial = MAPA_FILIAIS_TMS.get(s_id) or (MAPA_FILIAIS_TMS.get(doc_limpo) if len(doc_limpo) == 14 else None)
-    if nome_oficial:
-        filial_obj = Filial.objects.filter(nome__iexact=nome_oficial).first()
-        if filial_obj:
-            return filial_obj
-
-    # 2. Busca por CNPJ (caso o ID passado seja um CNPJ)
-    if doc_limpo and len(doc_limpo) == 14:
-        filial_obj = Filial.objects.filter(cnpj__icontains=doc_limpo).first()
-        if filial_obj:
-            return filial_obj
-
-    # 3. Busca direta por id_filial_tms
-    if s_id:
-        filial_obj = Filial.objects.filter(id_filial_tms=s_id).first()
-        if filial_obj:
-            return filial_obj
-
-    # 4. Busca por palavras-chave essenciais
-    if 'SAO PAULO' in nome_limpo or 'SÃO PAULO' in nome_limpo:
-        filial_obj = Filial.objects.filter(nome__icontains='SAO PAULO').first()
-        if filial_obj:
-            return filial_obj
-    elif 'BRASILIA' in nome_limpo or 'BRASÍLIA' in nome_limpo:
-        filial_obj = Filial.objects.filter(nome__icontains='BRASILIA').first()
-        if filial_obj:
-            return filial_obj
-    elif 'GOIANIA' in nome_limpo or 'GOIÂNIA' in nome_limpo:
-        filial_obj = Filial.objects.filter(nome__icontains='GOIANIA').first()
-        if filial_obj:
-            return filial_obj
-    elif 'RD EXPRESSO' in nome_limpo or 'EXPRESSO' in nome_limpo:
-        filial_obj = Filial.objects.filter(nome__icontains='RD EXPRESSO').first()
-        if filial_obj:
-            return filial_obj
-
-    # 5. Delega para a busca unificada antes de criar qualquer registro novo
-    return _buscar_ou_criar_filial_unificada(s_id, nome_sugerido)
+    return _buscar_ou_criar_filial_unificada(codigo_ou_cnpj=id_filial_tms, nome_filial=nome_sugerido)
 
 
 @shared_task(bind=True, max_retries=3)
@@ -342,8 +322,13 @@ def processar_webhook_manifesto_task(self, event_id):
             cnpj_filial = f_data.get('cnpj')
             id_f_tms = f_data.get('id_tms') or f_data.get('Codigo')
             filial_nome = str(f_data.get('nome') or f_data.get('Razao') or 'FILIAL WEBHOOK').upper().strip()
-            # Prioriza CNPJ para busca (mais confiável que id_tms)
-            filial_obj = _buscar_ou_criar_filial_unificada(cnpj_filial or id_f_tms, filial_nome)
+            # Prioriza CNPJ para busca na coluna cnpj e ID na coluna id_filial_tms
+            filial_obj = _buscar_ou_criar_filial_unificada(
+                codigo_ou_cnpj=cnpj_filial or id_f_tms,
+                nome_filial=filial_nome,
+                cnpj=cnpj_filial,
+                id_tms=id_f_tms
+            )
 
             # 1b. Filial de Operação / Base de Atuação Física (de onde o caminhão realmente sai)
             filial_operacao_obj = None
@@ -351,18 +336,8 @@ def processar_webhook_manifesto_task(self, event_id):
             id_f_op_tms = f_op_data.get('id_tms') or f_op_data.get('@codigo')
             nome_f_op = f_op_data.get('nome') or f_op_data.get('Nome')
 
-            if id_f_op_tms:
+            if id_f_op_tms or nome_f_op:
                 filial_operacao_obj = _resolver_filial_operacao_tms(id_f_op_tms, nome_f_op)
-            elif nome_f_op:
-                filial_operacao_obj = _buscar_ou_criar_filial_unificada(
-                    id_f_op_tms,
-                    nome_f_op,
-                    cidade=f_op_data.get('cidade'),
-                    uf=f_op_data.get('uf'),
-                    cep=f_op_data.get('cep'),
-                    logradouro=f_op_data.get('logradouro') or f_op_data.get('Rua'),
-                    bairro=f_op_data.get('bairro')
-                )
 
             # 2. Motorista (Cadastro Automático de Perfil — aceita cpf, Usuario, usuario, documento)
             m_data = payload.get('motorista', {}) or payload.get('Motorista', {})
