@@ -244,7 +244,23 @@ function conectarWebSocket() {
         }
     };
 
-    function garantirCardFilial(filialId, filialNome, initialCount = 0) {
+    socket.onclose = function () {
+        console.log("WS desconectado. Reconectando em 5s...");
+        const status = document.getElementById('status-ws');
+        if (status) {
+            status.classList.replace('bg-success', 'bg-danger');
+            status.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>DESCONECTADO';
+        }
+        setTimeout(conectarWebSocket, 5000);
+    };
+
+    socket.onerror = function (error) {
+        console.error("❌ Erro WS:", error);
+    };
+}
+
+// --- FUNÇÕES DE RENDERIZAÇÃO E ATUALIZAÇÃO DA GRADE (ESCOPO GLOBAL) ---
+function garantirCardFilial(filialId, filialNome, initialCount = 0) {
         if (!filialId) return;
         const sId = String(filialId);
         let btn = document.getElementById(`btn-filial-${sId}`);
@@ -547,21 +563,16 @@ function conectarWebSocket() {
             }
         }
     }
-
-    socket.onclose = function () {
-        console.log("WS desconectado. Reconectando em 5s...");
-        const status = document.getElementById('status-ws');
-        if (status) {
-            status.classList.replace('bg-success', 'bg-danger');
-            status.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>DESCONECTADO';
-        }
-        setTimeout(conectarWebSocket, 5000);
-    };
-
-    socket.onerror = function (error) {
-        console.error("❌ Erro WS:", error);
-    };
 }
+
+// Exporta funções auxiliares para window para acesso global seguro (usadas pelo fullSyncTorre)
+window.garantirCardFilial = garantirCardFilial;
+window.atualizarContadorFilial = atualizarContadorFilial;
+window.criarNovoCardManifesto = criarNovoCardManifesto;
+window.atualizarIconesOperacaoCard = atualizarIconesOperacaoCard;
+window.updateBatteryIcon = updateBatteryIcon;
+window.formatarHoraRegistro = formatarHoraRegistro;
+window.updateLastSeen = updateLastSeen;
 
 // --- LÓGICA DE ÚLTIMO SINAL DA TORRE DE CONTROLE ---
 function formatTimeDiff(ms) {
