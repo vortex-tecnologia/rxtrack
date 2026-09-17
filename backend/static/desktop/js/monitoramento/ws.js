@@ -373,7 +373,7 @@ function conectarWebSocket() {
                                    style="cursor: help; animation: pulse 2s infinite;"></i>` : ''}
                             </div>
 
-                            <div id="sinal-torre-${d.manifesto_id}" class="last-seen-torre" 
+                            <div id="sinal-torre-${d.manifesto_id}" class="last-seen-torre flex-shrink-0" style="white-space: nowrap;"
                                  data-status="${d.status || 'AGUARDANDO'}"
                                  data-iso="${d.ultimo_acesso_iso || ''}"
                                  data-criacao="${d.data_criacao_iso || ''}"
@@ -650,11 +650,11 @@ function atualizarUltimoSinalTorre() {
         const statusManifesto = elSinal.getAttribute('data-status') || (card.getAttribute('data-status'));
         if (statusManifesto === 'AGUARDANDO') {
             elSinal.innerHTML = `
-                <div style="border: 1px solid #ffc107; background-color: rgba(255, 193, 7, 0.15); border-radius: 20px; padding: 2px 10px; display: inline-block; min-width: 80px; text-align: center;">
-                    <i class="fas fa-hourglass-half" style="color: #b78103; font-size: 9px; vertical-align: middle; margin-right: 4px;"></i>
-                    <span style="color: #856404; font-weight: bold; font-size: 11px;">AGUARDANDO</span>
+                <div style="border: 1px solid #ffc107; background-color: rgba(255, 193, 7, 0.15); border-radius: 20px; padding: 3px 10px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; text-align: center;">
+                    <i class="fas fa-hourglass-half" style="color: #b78103; font-size: 10px;"></i>
+                    <span style="color: #856404; font-weight: bold; font-size: 11px; white-space: nowrap;">AGUARDANDO</span>
                 </div>
-                <div style="font-size: 11px; color: #6c757d; margin-top: 4px; text-align: center; font-weight: 500;">
+                <div style="font-size: 11px; color: #6c757d; margin-top: 4px; text-align: center; font-weight: 500; white-space: nowrap;">
                     Não iniciado
                 </div>
             `;
@@ -665,10 +665,10 @@ function atualizarUltimoSinalTorre() {
         const isoDate = elSinal.getAttribute('data-iso');
         if (!isoDate || isoDate.trim() === '') {
             elSinal.innerHTML = `
-                <div style="border: 1px solid #ccc; background-color: #f8f9fa; border-radius: 20px; padding: 2px 10px; display: inline-block; min-width: 80px; text-align: center;">
-                    <span style="color: #6c757d; font-weight: bold; font-size: 13px;">--:--</span>
+                <div style="border: 1px solid #ccc; background-color: #f8f9fa; border-radius: 20px; padding: 3px 10px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 80px; white-space: nowrap; text-align: center;">
+                    <span style="color: #6c757d; font-weight: bold; font-size: 13px; white-space: nowrap;">--:--</span>
                 </div>
-                <div style="font-size: 11px; color: #6c757d; margin-top: 4px; text-align: center;">
+                <div style="font-size: 11px; color: #6c757d; margin-top: 4px; text-align: center; white-space: nowrap;">
                     Sem sinal
                 </div>
             `;
@@ -702,11 +702,11 @@ function atualizarUltimoSinalTorre() {
             const textDiff = diffMs < 0 ? 'Sinal agora' : formatTimeDiff(diffMs);
 
             elSinal.innerHTML = `
-                <div style="border: 1px solid ${textColor}; background-color: ${bgColor}; border-radius: 20px; padding: 2px 10px; display: inline-block; min-width: 80px; text-align: center;">
-                    <i class="fas fa-circle" style="color: ${textColor}; font-size: 8px; vertical-align: middle; margin-right: 4px;"></i>
-                    <span style="color: ${textColor}; font-weight: bold; font-size: 13px;">${timeStr}</span>
+                <div style="border: 1px solid ${textColor}; background-color: ${bgColor}; border-radius: 20px; padding: 3px 10px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 80px; white-space: nowrap; text-align: center;">
+                    <i class="fas fa-circle" style="color: ${textColor}; font-size: 8px;"></i>
+                    <span style="color: ${textColor}; font-weight: bold; font-size: 13px; white-space: nowrap;">${timeStr}</span>
                 </div>
-                <div style="font-size: 11px; color: #6c757d; margin-top: 4px; text-align: center;">
+                <div style="font-size: 11px; color: #6c757d; margin-top: 4px; text-align: center; white-space: nowrap;">
                     ${textDiff}
                 </div>
             `;
