@@ -219,6 +219,46 @@ def _buscar_ou_criar_filial_unificada(codigo_ou_cnpj, nome_filial, cidade=None, 
     return filial_obj
 
 
+def _resolver_filial_operacao_tms(id_filial_tms, nome_sugerido=None):
+    """
+    Resolve a Filial de Operação física (base real do usuário que criou o manifesto na ESL)
+    garantindo vínculo correto e permanente com 'RD EXPRESSO', 'QUICK BRASILIA', etc.
+    """
+    from usuarios.models import Filial
+    if not id_filial_tms:
+        return None
+    s_id = str(id_filial_tms).strip()
+
+    MAPA_FILIAIS_TMS = {
+        '237988': 'RD EXPRESSO',
+        '237973': 'QUICK BRASILIA',
+        '237978': 'QUICK SAO PAULO',
+        '237974': 'QUICK GOIANIA',
+    }
+    nome_oficial = MAPA_FILIAIS_TMS.get(s_id) or (str(nome_sugerido).strip().upper() if nome_sugerido else None)
+
+    # 1. Busca direta por id_filial_tms
+    filial_obj = Filial.objects.filter(id_filial_tms=s_id).first()
+
+    # 2. Busca por nome oficial conhecido da base
+    if not filial_obj and nome_oficial:
+        filial_obj = Filial.objects.filter(nome__iexact=nome_oficial).first()
+        if not filial_obj:
+            filial_obj = Filial.objects.filter(nome__icontains=nome_oficial).first()
+        if filial_obj and not filial_obj.id_filial_tms:
+            filial_obj.id_filial_tms = s_id
+            filial_obj.save(update_fields=['id_filial_tms'])
+
+    # 3. Cria se não existir
+    if not filial_obj:
+        filial_obj = Filial.objects.create(
+            id_filial_tms=s_id,
+            nome=nome_oficial or f"BASE {s_id}",
+            operacao_ativa=True
+        )
+    return filial_obj
+
+
 @shared_task(bind=True, max_retries=3)
 def processar_webhook_manifesto_task(self, event_id):
     """
@@ -255,7 +295,9 @@ def processar_webhook_manifesto_task(self, event_id):
             id_f_op_tms = f_op_data.get('id_tms') or f_op_data.get('@codigo')
             nome_f_op = f_op_data.get('nome') or f_op_data.get('Nome')
 
-            if id_f_op_tms or nome_f_op:
+            if id_f_op_tms:
+                filial_operacao_obj = _resolver_filial_operacao_tms(id_f_op_tms, nome_f_op)
+            elif nome_f_op:
                 filial_operacao_obj = _buscar_ou_criar_filial_unificada(
                     id_f_op_tms,
                     nome_f_op,
@@ -313,44 +355,42 @@ def processar_webhook_manifesto_task(self, event_id):
                     defaults={'tipo': 'OUTRO'}
                 )
 
-            if manifesto_existente:
-                # ✅ JÁ EXISTE NO BANCO: Usa o número visual que já temos (NÃO precisa bater na ESL!)
+            # 🔍 SEMPRE consulta a ESL para enriquecer/garantir dados oficiais (Visual, Base de Operação, Placa e Cargas)
+            adapter = get_tms_adapter()
+            res_esl = None
+            if adapter and hasattr(adapter, 'resolver_numero_visual_manifesto'):
+                try:
+                    res_esl = adapter.resolver_numero_visual_manifesto(num_mani_recebido)
+                except Exception as e:
+                    logger.warning(f"⚠️ Erro ao tentar resolver dados na ESL para {num_mani_recebido}: {e}")
+
+            if isinstance(res_esl, dict):
+                num_visual = res_esl.get('sequence_code') or (manifesto_existente.numero_manifesto if manifesto_existente else num_mani_recebido)
+                id_tms_final = res_esl.get('id_tms') or num_mani_recebido
+                
+                # Resolve com precisão a base de operação real (usuário que emitiu na ESL)
+                if res_esl.get('id_filial_operacao'):
+                    filial_op_resolvida = _resolver_filial_operacao_tms(
+                        res_esl.get('id_filial_operacao'),
+                        res_esl.get('nome_filial_operacao')
+                    )
+                    if filial_op_resolvida:
+                        filial_operacao_obj = filial_op_resolvida
+
+                if not veiculo_obj and res_esl.get('placa'):
+                    from manifesto.models import Veiculo
+                    veiculo_obj, _ = Veiculo.objects.get_or_create(
+                        placa=res_esl.get('placa'),
+                        defaults={'tipo': 'OUTRO'}
+                    )
+            elif manifesto_existente:
                 num_visual = manifesto_existente.numero_manifesto
                 id_tms_final = manifesto_existente.manifesto_id_tms or mani_data.get('id_tms') or num_mani_recebido
-                if manifesto_existente.filial_operacao:
+                if not filial_operacao_obj and manifesto_existente.filial_operacao:
                     filial_operacao_obj = manifesto_existente.filial_operacao
-                logger.info(f"⚡ [WEBHOOK] Manifesto {num_visual} já cadastrado no banco. Atualizando rota sem consulta na ESL.")
             else:
-                # 🔍 NÃO EXISTE NO BANCO: Consulta a ESL para ver se é ID interno e descobrir o sequence_code (número visual)
-                adapter = get_tms_adapter()
-                res_esl = None
-                if adapter and hasattr(adapter, 'resolver_numero_visual_manifesto'):
-                    try:
-                        res_esl = adapter.resolver_numero_visual_manifesto(num_mani_recebido)
-                    except Exception as e:
-                        logger.warning(f"⚠️ Erro ao tentar resolver número visual na ESL para {num_mani_recebido}: {e}")
-
-                if isinstance(res_esl, dict):
-                    num_visual = res_esl.get('sequence_code') or num_mani_recebido
-                    id_tms_final = num_mani_recebido
-                    # Enriquece filial_operacao e veículo a partir da ESL se não vieram no payload
-                    if not filial_operacao_obj and res_esl.get('id_filial_operacao'):
-                        filial_operacao_obj, _ = Filial.objects.get_or_create(
-                            id_filial_tms=str(res_esl.get('id_filial_operacao')),
-                            defaults={'nome': res_esl.get('nome_filial_operacao') or f"BASE {res_esl.get('id_filial_operacao')}"}
-                        )
-                    if not veiculo_obj and res_esl.get('placa'):
-                        from manifesto.models import Veiculo
-                        veiculo_obj, _ = Veiculo.objects.get_or_create(
-                            placa=res_esl.get('placa'),
-                            defaults={'tipo': 'OUTRO'}
-                        )
-                elif res_esl:
-                    num_visual = str(res_esl).strip()
-                    id_tms_final = num_mani_recebido
-                else:
-                    num_visual = num_mani_recebido
-                    id_tms_final = mani_data.get('id_tms') or num_mani_recebido
+                num_visual = num_mani_recebido
+                id_tms_final = mani_data.get('id_tms') or num_mani_recebido
 
             num_mani = num_visual
 
@@ -440,9 +480,9 @@ def processar_webhook_manifesto_task(self, event_id):
                         id_consulta = id_tms_final or num_mani_recebido
                         res_fo = _adapter.resolver_numero_visual_manifesto(id_consulta)
                         if isinstance(res_fo, dict) and res_fo.get('id_filial_operacao'):
-                            filial_operacao_obj, _ = Filial.objects.get_or_create(
-                                id_filial_tms=str(res_fo['id_filial_operacao']),
-                                defaults={'nome': res_fo.get('nome_filial_operacao') or f"BASE {res_fo['id_filial_operacao']}"}
+                            filial_operacao_obj = _resolver_filial_operacao_tms(
+                                res_fo['id_filial_operacao'],
+                                res_fo.get('nome_filial_operacao')
                             )
                             logger.info(f"🏢 [FALLBACK ESL] filial_operacao resolvida via API: {filial_operacao_obj.nome} (TMS ID: {res_fo['id_filial_operacao']})")
                             if not veiculo_obj and res_fo.get('placa'):
@@ -459,6 +499,18 @@ def processar_webhook_manifesto_task(self, event_id):
                 'status': status_novo,
                 'manifesto_id_tms': id_tms_final,
             }
+
+            # Atribui quantidades de carga da ESL se vieram
+            info_cargas = res_esl if (res_esl and isinstance(res_esl, dict)) else None
+            if info_cargas:
+                if info_cargas.get('qtd_transferencia') is not None:
+                    manifesto_defaults['qtd_transferencia'] = info_cargas['qtd_transferencia']
+                if info_cargas.get('qtd_entrega') is not None:
+                    manifesto_defaults['qtd_entrega'] = info_cargas['qtd_entrega']
+                if info_cargas.get('qtd_despacho') is not None:
+                    manifesto_defaults['qtd_despacho'] = info_cargas['qtd_despacho']
+                if info_cargas.get('qtd_retirada') is not None:
+                    manifesto_defaults['qtd_retirada'] = info_cargas['qtd_retirada']
 
             # Só atribui filial_operacao se temos valor (não sobrescreve com None)
             if filial_operacao_obj:
@@ -904,9 +956,9 @@ def processar_soap_task(self, evento_id):
                 if _adapter and hasattr(_adapter, 'resolver_numero_visual_manifesto'):
                     res_fo = _adapter.resolver_numero_visual_manifesto(numero_rota)
                     if isinstance(res_fo, dict) and res_fo.get('id_filial_operacao'):
-                        filial_operacao_soap, _ = Filial.objects.get_or_create(
-                            id_filial_tms=str(res_fo['id_filial_operacao']),
-                            defaults={'nome': res_fo.get('nome_filial_operacao') or f"BASE {res_fo['id_filial_operacao']}"}
+                        filial_operacao_soap = _resolver_filial_operacao_tms(
+                            res_fo['id_filial_operacao'],
+                            res_fo.get('nome_filial_operacao')
                         )
                         logger.info(f"🏢 [SOAP] filial_operacao resolvida via API: {filial_operacao_soap.nome} (TMS ID: {res_fo['id_filial_operacao']})")
             except Exception as e:

@@ -425,23 +425,68 @@ class ESLCloudAdapter(BaseTMSAdapter):
             }
 
             res = requests.get(url_valida, headers=headers_geral, data=json.dumps(payload_busca), timeout=15)
-            if res.status_code == 200:
-                dados = res.json()
-                if dados and len(dados) > 0:
-                    info = dados[0]
-                    seq = info.get('mft_sequence_code') or info.get('sequence_code')
-                    if seq:
-                        id_op = str(info.get('mft_uer_crn_id')).strip() if info.get('mft_uer_crn_id') else None
-                        nome_op = str(info.get('mft_uer_name', '')).strip().upper() if info.get('mft_uer_name') else None
-                        placa = str(info.get('mft_vie_license_plate', '')).strip().upper().replace(' ', '').replace('-', '') if info.get('mft_vie_license_plate') else None
+            dados = res.json() if res.status_code == 200 else []
 
-                        logger.info(f"🔍 [RESOLVER_VISUAL] ID {id_tms} resolvido: Visual #{seq}, Base Op: {nome_op or 'N/A'}")
-                        return {
-                            'sequence_code': str(seq).strip(),
-                            'id_filial_operacao': id_op,
-                            'nome_filial_operacao': nome_op,
-                            'placa': placa
+            # Fallback: Se não encontrou por ID interno, tenta buscar por sequence_code (número visual)
+            if not dados and str(id_tms).isdigit():
+                payload_seq = {
+                    "search": {
+                        "manifests": {
+                            "sequence_code": int(id_tms),
+                            "service_date": "2024-01-01 - 2050-12-31"
                         }
+                    },
+                    "page": "1", "per": "5"
+                }
+                res_seq = requests.get(url_valida, headers=headers_geral, data=json.dumps(payload_seq), timeout=15)
+                if res_seq.status_code == 200:
+                    dados = res_seq.json()
+
+            if dados and len(dados) > 0:
+                info = dados[0]
+                seq = info.get('mft_sequence_code') or info.get('sequence_code')
+                id_interno_retornado = str(info.get('id') or id_tms).strip()
+                if seq:
+                    id_op = str(info.get('mft_uer_crn_id')).strip() if info.get('mft_uer_crn_id') else None
+                    
+                    # Mapeamento oficial dos IDs das bases/filiais no TMS ESL
+                    MAPA_FILIAIS_TMS = {
+                        '237988': 'RD EXPRESSO',
+                        '237973': 'QUICK BRASILIA',
+                        '237978': 'QUICK SAO PAULO',
+                        '237974': 'QUICK GOIANIA',
+                    }
+                    nome_op = MAPA_FILIAIS_TMS.get(id_op)
+                    if not nome_op and id_op and id_op == str(info.get('mft_crn_id')):
+                        nome_op = str(info.get('mft_crn_psn_nickname') or '').strip().upper()
+                    if not nome_op and id_op:
+                        nome_op = f"BASE {id_op}"
+
+                    placa = str(info.get('mft_vie_license_plate', '')).strip().upper().replace(' ', '').replace('-', '') if info.get('mft_vie_license_plate') else None
+
+                    # Extrai contagens de operações de carga do relatório TMS
+                    qtd_ent = int(float(info.get('delivery_subtotal') or 0))
+                    qtd_transf = int(info.get('transfer_manifest_items_count') or 0)
+                    qtd_col = int(info.get('pick_manifest_items_count') or 0)
+                    qtd_desp = int(info.get('dispatch_draft_manifest_items_count') or 0)
+                    qtd_ret = 0
+
+                    logger.info(f"🔍 [RESOLVER_VISUAL] ID {id_tms} resolvido: Visual #{seq}, ID TMS: {id_interno_retornado}, Base Op: {nome_op or 'N/A'} (ID: {id_op}), Placa: {placa or 'N/A'}")
+                    return {
+                        'sequence_code': str(seq).strip(),
+                        'id_tms': id_interno_retornado,
+                        'id_filial_operacao': id_op,
+                        'nome_filial_operacao': nome_op,
+                        'id_filial_fiscal': str(info.get('mft_crn_id', '')).strip() or None,
+                        'nome_filial_fiscal': str(info.get('mft_crn_psn_nickname', '')).strip().upper() or None,
+                        'placa': placa,
+                        'qtd_entrega': qtd_ent,
+                        'qtd_transferencia': qtd_transf,
+                        'qtd_coleta': qtd_col,
+                        'qtd_despacho': qtd_desp,
+                        'qtd_retirada': qtd_ret,
+                        'status_tms': str(info.get('status', '')).strip().lower() or None,
+                    }
         except Exception as e:
             logger.warning(f"⚠️ [RESOLVER_VISUAL] Erro ao consultar ESL para ID {id_tms}: {e}")
         return None

@@ -113,10 +113,33 @@ class Command(BaseCommand):
                             defaults={'tipo': 'CAVALO'}
                         )
 
-                # Atualiza no manifesto
+                campos_update = ['status_tms', 'veiculo']
                 mft.status_tms = status_tms_real
                 mft.veiculo = veiculo_obj
-                mft.save(update_fields=['status_tms', 'veiculo'])
+
+                # Atualiza filial_operacao (base física do criador na ESL)
+                from manifesto.tasks import _resolver_filial_operacao_tms
+                id_filial_op_tms = str(info_tms.get('mft_uer_crn_id', '')).strip()
+                if id_filial_op_tms:
+                    filial_op_obj = _resolver_filial_operacao_tms(id_filial_op_tms)
+                    if filial_op_obj and mft.filial_operacao != filial_op_obj:
+                        mft.filial_operacao = filial_op_obj
+                        campos_update.append('filial_operacao')
+
+                # Atualiza contagens de carga
+                mft.qtd_transferencia = int(info_tms.get('transfer_manifest_items_count') or 0)
+                mft.qtd_entrega = int(float(info_tms.get('delivery_subtotal') or 0))
+                mft.qtd_despacho = int(info_tms.get('dispatch_draft_manifest_items_count') or 0)
+                mft.qtd_retirada = int(info_tms.get('pick_manifest_items_count') or 0)
+                campos_update.extend(['qtd_transferencia', 'qtd_entrega', 'qtd_despacho', 'qtd_retirada'])
+
+                mft.save(update_fields=campos_update)
+
+                try:
+                    from manifesto.services import enviar_painel
+                    enviar_painel(mft)
+                except Exception:
+                    pass
 
                 placa_str = veiculo_obj.placa if veiculo_obj else "Sem Placa"
                 status_color = self.style.SUCCESS if status_tms_real == 'in_transit' else (self.style.WARNING if status_tms_real == 'pending' else self.style.ERROR)

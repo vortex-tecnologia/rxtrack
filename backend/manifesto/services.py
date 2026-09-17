@@ -53,6 +53,23 @@ def enviar_painel(manifesto):
             filial_operacao__isnull=True, filial__isnull=True, status__in=['AGUARDANDO', 'EM_TRANSPORTE']
         ).count()
 
+    # Contagens de cargas/operações (ESL Style)
+    from django.db.models import Count, Q
+    counts_op = manifesto.notas_fiscais.aggregate(
+        c_ent=Count('id', filter=Q(tipo_operacao='ENTREGA')),
+        c_col=Count('id', filter=Q(tipo_operacao='COLETA')),
+        c_tra=Count('id', filter=Q(tipo_operacao='TRANSFERENCIA')),
+        c_des=Count('id', filter=Q(tipo_operacao='DESPACHO')),
+        c_ret=Count('id', filter=Q(tipo_operacao='RETIRADA')),
+    )
+    qtd_ent = counts_op['c_ent'] or manifesto.qtd_entrega or 0
+    qtd_col = counts_op['c_col'] or 0
+    qtd_tra = counts_op['c_tra'] or manifesto.qtd_transferencia or 0
+    qtd_des = counts_op['c_des'] or manifesto.qtd_despacho or 0
+    qtd_ret = counts_op['c_ret'] or manifesto.qtd_retirada or 0
+    if total > 0 and qtd_ent == 0 and qtd_col == 0 and qtd_tra == 0 and qtd_des == 0 and qtd_ret == 0:
+        qtd_ent = total
+
     payload = {
         "type": "atualizar_painel",
         "data": {
@@ -81,7 +98,12 @@ def enviar_painel(manifesto):
             "is_antigo": getattr(manifesto, 'is_antigo', False),
             "dias_criado": getattr(manifesto, 'dias_criado', 0),
             "is_viagem": getattr(manifesto, 'is_viagem', False),
-            "uf_destino_viagem": getattr(manifesto, 'uf_destino_viagem', '') or ''
+            "uf_destino_viagem": getattr(manifesto, 'uf_destino_viagem', '') or '',
+            "qtd_entrega": qtd_ent,
+            "qtd_coleta": qtd_col,
+            "qtd_transferencia": qtd_tra,
+            "qtd_despacho": qtd_des,
+            "qtd_retirada": qtd_ret,
         }
     }
     

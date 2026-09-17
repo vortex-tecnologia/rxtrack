@@ -59,7 +59,12 @@ def painel_monitoramento(request):
     ).annotate(
         total_nfe=Count('notas_fiscais', distinct=True),
         baixadas=Count('notas_fiscais', filter=Q(notas_fiscais__status__in=['BAIXADA', 'OCORRENCIA']), distinct=True),
-        total_ilegivel=Count('notas_fiscais__baixa_info', filter=Q(notas_fiscais__baixa_info__solicitar_nova_foto=True), distinct=True)
+        total_ilegivel=Count('notas_fiscais__baixa_info', filter=Q(notas_fiscais__baixa_info__solicitar_nova_foto=True), distinct=True),
+        calc_entrega=Count('notas_fiscais', filter=Q(notas_fiscais__tipo_operacao='ENTREGA'), distinct=True),
+        calc_coleta=Count('notas_fiscais', filter=Q(notas_fiscais__tipo_operacao='COLETA'), distinct=True),
+        calc_transf=Count('notas_fiscais', filter=Q(notas_fiscais__tipo_operacao='TRANSFERENCIA'), distinct=True),
+        calc_despacho=Count('notas_fiscais', filter=Q(notas_fiscais__tipo_operacao='DESPACHO'), distinct=True),
+        calc_retirada=Count('notas_fiscais', filter=Q(notas_fiscais__tipo_operacao='RETIRADA'), distinct=True),
     ).order_by('status', 'filial', 'motorista__user__first_name')
 
     # 4.1 Processamento proativo no Backend:
@@ -87,6 +92,21 @@ def painel_monitoramento(request):
                     continue  # Foi finalizado com sucesso! Sai da grade de viagens ativas
             except Exception:
                 pass
+
+        # C. Contagens oficiais de Carga (ESL Style):
+        c_ent = m.calc_entrega or m.qtd_entrega or 0
+        c_col = m.calc_coleta or 0
+        c_tra = m.calc_transf or m.qtd_transferencia or 0
+        c_des = m.calc_despacho or m.qtd_despacho or 0
+        c_ret = m.calc_retirada or m.qtd_retirada or 0
+        if m.total_nfe > 0 and c_ent == 0 and c_col == 0 and c_tra == 0 and c_des == 0 and c_ret == 0:
+            c_ent = m.total_nfe
+        m.count_entrega = c_ent
+        m.count_coleta = c_col
+        m.count_transferencia = c_tra
+        m.count_despacho = c_des
+        m.count_retirada = c_ret
+
         manifestos_ativos.append(m)
     manifestos = manifestos_ativos
 
@@ -124,7 +144,12 @@ def painel_sync(request):
     ).annotate(
         total_nfe=Count('notas_fiscais', distinct=True),
         baixadas=Count('notas_fiscais', filter=Q(notas_fiscais__status__in=['BAIXADA', 'OCORRENCIA']), distinct=True),
-        total_ilegivel=Count('notas_fiscais__baixa_info', filter=Q(notas_fiscais__baixa_info__solicitar_nova_foto=True), distinct=True)
+        total_ilegivel=Count('notas_fiscais__baixa_info', filter=Q(notas_fiscais__baixa_info__solicitar_nova_foto=True), distinct=True),
+        calc_entrega=Count('notas_fiscais', filter=Q(notas_fiscais__tipo_operacao='ENTREGA'), distinct=True),
+        calc_coleta=Count('notas_fiscais', filter=Q(notas_fiscais__tipo_operacao='COLETA'), distinct=True),
+        calc_transf=Count('notas_fiscais', filter=Q(notas_fiscais__tipo_operacao='TRANSFERENCIA'), distinct=True),
+        calc_despacho=Count('notas_fiscais', filter=Q(notas_fiscais__tipo_operacao='DESPACHO'), distinct=True),
+        calc_retirada=Count('notas_fiscais', filter=Q(notas_fiscais__tipo_operacao='RETIRADA'), distinct=True),
     )
 
     resultado = []
@@ -143,6 +168,15 @@ def painel_sync(request):
         # Calcula se é antigo (>12h para alerta, >24h para vermelho)
         horas_criado = (timezone.now() - m.data_criacao).total_seconds() / 3600 if m.data_criacao else 0
         is_viagem = getattr(m, 'is_viagem', False)
+
+        # Contagens de cargas/operações
+        c_ent = m.calc_entrega or m.qtd_entrega or 0
+        c_col = m.calc_coleta or 0
+        c_tra = m.calc_transf or m.qtd_transferencia or 0
+        c_des = m.calc_despacho or m.qtd_despacho or 0
+        c_ret = m.calc_retirada or m.qtd_retirada or 0
+        if m.total_nfe > 0 and c_ent == 0 and c_col == 0 and c_tra == 0 and c_des == 0 and c_ret == 0:
+            c_ent = m.total_nfe
 
         resultado.append({
             'manifesto_id': str(m.numero_manifesto),
@@ -167,6 +201,11 @@ def painel_sync(request):
             'dias_criado': int(horas_criado / 24),
             'is_viagem': is_viagem,
             'uf_destino_viagem': getattr(m, 'uf_destino_viagem', '') or '',
+            'qtd_entrega': c_ent,
+            'qtd_coleta': c_col,
+            'qtd_transferencia': c_tra,
+            'qtd_despacho': c_des,
+            'qtd_retirada': c_ret,
         })
 
     # Contagem de ativos por filial
