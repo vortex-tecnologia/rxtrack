@@ -579,29 +579,15 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 nome_filial_tms = nome_filial_tms.strip().upper()
                 
             id_filial_tms = info_tms.get('mft_crn_id')
-            
-            filial_obj, created = Filial.objects.get_or_create(nome=nome_filial_tms)
-            
-            if id_filial_tms and (created or not filial_obj.id_filial_tms):
-                filial_obj.id_filial_tms = str(id_filial_tms)
-                filial_obj.save(update_fields=['id_filial_tms'])
+            from manifesto.tasks import _buscar_ou_criar_filial_unificada, _resolver_filial_operacao_tms
+            filial_obj = _buscar_ou_criar_filial_unificada(id_filial_tms, nome_filial_tms)
 
             # --- FILIAL DE OPERAÇÃO (base física de onde o caminhão sai) ---
             # Determinada pelo mft_uer_crn_id (filial do emissor do manifesto na ESL)
             filial_operacao_obj = None
             id_filial_operacao_tms = info_tms.get('mft_uer_crn_id')
             if id_filial_operacao_tms:
-                filial_operacao_obj = Filial.objects.filter(
-                    id_filial_tms=str(id_filial_operacao_tms)
-                ).first()
-                if not filial_operacao_obj:
-                    # Cria filial com nome do operador como referência temporária
-                    nome_emissor = info_tms.get('mft_uer_name', '').strip().upper()
-                    filial_operacao_obj, _ = Filial.objects.get_or_create(
-                        id_filial_tms=str(id_filial_operacao_tms),
-                        defaults={'nome': nome_emissor or f'BASE {id_filial_operacao_tms}'}
-                    )
-                    logger.info(f"🏢 Nova filial de operação criada: {filial_operacao_obj.nome} (TMS ID: {id_filial_operacao_tms})")
+                filial_operacao_obj = _resolver_filial_operacao_tms(id_filial_operacao_tms)
 
             manifesto_obj, _ = Manifesto.objects.update_or_create(
                 numero_manifesto=numero_visual,

@@ -6,10 +6,51 @@ from usuarios.models import Filial, Motorista
 from django.db.models import Count, Q
 
 
+def _higienizar_filiais_duplicadas():
+    """
+    Higieniza automaticamente filiais criadas indevidamente com razão social longa do TMS
+    (ex: QUICK DELIVERY SAO PAULO ENTREGAS RAPIDAS DE ENCOMENDAS LTDA ou CNPJ no id_filial_tms),
+    re-vinculando manifestos e motoristas na filial oficial cadastrada e removendo a duplicata.
+    """
+    try:
+        from usuarios.models import Filial, Motorista
+        from manifesto.models import Manifesto
+
+        # Filial Oficial de São Paulo
+        sp_oficial = Filial.objects.filter(nome__iexact='QUICK SAO PAULO').first()
+        if not sp_oficial:
+            sp_oficial = Filial.objects.filter(id_filial_tms='237978').first()
+
+        if sp_oficial:
+            campos = []
+            if sp_oficial.id_filial_tms != '237978':
+                sp_oficial.id_filial_tms = '237978'
+                campos.append('id_filial_tms')
+            if not sp_oficial.cnpj or '14539546000120' not in sp_oficial.cnpj:
+                sp_oficial.cnpj = '14539546000120'
+                campos.append('cnpj')
+            if campos:
+                sp_oficial.save(update_fields=campos)
+
+            # Encontra duplicatas
+            dups = Filial.objects.filter(
+                Q(nome__icontains='QUICK DELIVERY SAO PAULO') | Q(id_filial_tms='14539546000120')
+            ).exclude(id=sp_oficial.id)
+
+            for d in dups:
+                Manifesto.objects.filter(filial=d).update(filial=sp_oficial)
+                Manifesto.objects.filter(filial_operacao=d).update(filial_operacao=sp_oficial)
+                Motorista.objects.filter(filial=d).update(filial=sp_oficial)
+                d.delete()
+    except Exception:
+        pass
+
+
 @login_required(login_url='/login/')
 def painel_monitoramento(request):
     hoje = timezone.now().date()
-    
+    _higienizar_filiais_duplicadas()
+
     # 1. Identificar a filial do usuário logado (se houver perfil)
     usuario_filial = None
     if request.user.is_authenticated:
@@ -25,7 +66,7 @@ def painel_monitoramento(request):
     from datetime import timedelta
     limite_48h = timezone.now() - timedelta(hours=48)
 
-    filiais_qs = Filial.objects.all().order_by('nome')
+    filiais_qs = Filial.objects.filter(operacao_ativa=True).order_by('nome')
     filiais_data = []
     for f in filiais_qs:
         total_ativos = Manifesto.objects.filter(

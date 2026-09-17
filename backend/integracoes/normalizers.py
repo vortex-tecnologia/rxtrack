@@ -92,12 +92,28 @@ def _resolver_nome_filial(razao_social: str) -> str:
     """
     Converte razão social longa do TMS para o nome amigável da filial.
     Faz match contra as filiais já cadastradas no banco de dados.
-    Ex: 'QUICK DELIVERY BRASILIA ENTREGAS RAPIDAS DE ENCOMENDAS LTDA' → 'QUICK BRASILIA'
+    Ex: 'QUICK DELIVERY SAO PAULO ENTREGAS RAPIDAS DE ENCOMENDAS LTDA' → 'QUICK SAO PAULO'
+        'QUICK DELIVERY BRASILIA ENTREGAS RAPIDAS DE ENCOMENDAS LTDA' → 'QUICK BRASILIA'
         'RD EXPRESSO TRANSPORTES - EIRELI' → 'RD EXPRESSO'
     """
     razao = razao_social.upper().strip()
     if not razao:
         return 'FILIAL TMS'
+
+    # 1. Mapeamento imediato por palavras-chave essenciais das bases conhecidas
+    MAPA_CONHECIDO = {
+        'SAO PAULO': 'QUICK SAO PAULO',
+        'SÃO PAULO': 'QUICK SAO PAULO',
+        'BRASILIA': 'QUICK BRASILIA',
+        'BRASÍLIA': 'QUICK BRASILIA',
+        'GOIANIA': 'QUICK GOIANIA',
+        'GOIÂNIA': 'QUICK GOIANIA',
+        'RD EXPRESSO': 'RD EXPRESSO',
+    }
+    for termo, nome_oficial in MAPA_CONHECIDO.items():
+        if termo in razao:
+            logger.info(f"🏢 [RESOLVER_FILIAL] Razão '{razao}' resolvida via mapa para: '{nome_oficial}'")
+            return nome_oficial
 
     try:
         from usuarios.models import Filial
