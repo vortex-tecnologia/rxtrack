@@ -450,12 +450,30 @@ def processar_webhook_manifesto_task(self, event_id):
             num_mani = num_visual
 
             # Garante que o ID TMS fique gravado no manifesto existente e limpa eventual duplicata criada pelo ID interno
+            if id_tms_final and id_tms_final != num_visual:
+                dups_tms = Manifesto.objects.filter(numero_manifesto=id_tms_final)
+                if dups_tms.exists():
+                    if manifesto_existente and str(manifesto_existente.numero_manifesto) == str(id_tms_final):
+                        m_oficial = Manifesto.objects.filter(numero_manifesto=num_visual).exclude(id=manifesto_existente.id).first()
+                        if m_oficial:
+                            logger.info(f"🗑️ [DEDUPLICAÇÃO] Excluindo manifesto duplicado #{id_tms_final} pois o visual #{num_visual} já existe.")
+                            manifesto_existente.delete()
+                            manifesto_existente = m_oficial
+                        else:
+                            logger.info(f"🏷️ [RENOMEAÇÃO] Atualizando manifesto #{id_tms_final} -> #{num_visual} (ID TMS: {id_tms_final})")
+                            manifesto_existente.numero_manifesto = num_visual
+                            manifesto_existente.manifesto_id_tms = id_tms_final
+                            manifesto_existente.save(update_fields=['numero_manifesto', 'manifesto_id_tms'])
+                    else:
+                        logger.info(f"🗑️ [DEDUPLICAÇÃO] Removendo manifesto fantasma #{id_tms_final} criado com ID interno TMS.")
+                        dups_tms.exclude(numero_manifesto=num_visual).delete()
+
             if manifesto_existente:
                 if id_tms_final and manifesto_existente.manifesto_id_tms != id_tms_final:
                     manifesto_existente.manifesto_id_tms = id_tms_final
                     manifesto_existente.save(update_fields=['manifesto_id_tms'])
                 if num_visual != num_mani_recebido:
-                    Manifesto.objects.filter(numero_manifesto=num_mani_recebido).exclude(id=manifesto_existente.id).delete()
+                    Manifesto.objects.filter(numero_manifesto=num_mani_recebido).exclude(numero_manifesto=num_visual).delete()
 
             # 🛡️ TRAVA 1: MANIFESTO CANCELADO NO APP (NÃO REABRE NEM ALTERA HISTÓRICO)
             if manifesto_existente and manifesto_existente.status == 'CANCELADO':
@@ -601,6 +619,12 @@ def processar_webhook_manifesto_task(self, event_id):
                 numero_manifesto=num_visual,
                 defaults=manifesto_defaults
             )
+
+            # 🛡️ Remove definitivamente qualquer duplicata remanescente criada com o ID interno
+            if id_tms_final and id_tms_final != num_visual:
+                Manifesto.objects.filter(numero_manifesto=id_tms_final).exclude(id=manifesto_obj.id).delete()
+            if num_visual != num_mani_recebido:
+                Manifesto.objects.filter(numero_manifesto=num_mani_recebido).exclude(id=manifesto_obj.id).delete()
 
             itens = payload.get('itens', [])
             count_notas = 0
