@@ -237,11 +237,11 @@ def painel_monitoramento(request):
             if c_ent == 0 and c_col == 0 and c_tra == 0 and c_des == 0 and c_ret == 0:
                 c_ent = m.total_nfe
         else:
-            c_ent = m.qtd_entrega or 0
-            c_col = m.qtd_coleta or 0
-            c_tra = m.qtd_transferencia or 0
-            c_des = m.qtd_despacho or 0
-            c_ret = m.qtd_retirada or 0
+            c_ent = getattr(m, 'qtd_entrega', 0) or 0
+            c_col = getattr(m, 'qtd_coleta', 0) or 0
+            c_tra = getattr(m, 'qtd_transferencia', 0) or 0
+            c_des = getattr(m, 'qtd_despacho', 0) or 0
+            c_ret = getattr(m, 'qtd_retirada', 0) or 0
         m.count_entrega = c_ent
         m.count_coleta = c_col
         m.count_transferencia = c_tra
@@ -320,11 +320,11 @@ def painel_sync(request):
             if c_ent == 0 and c_col == 0 and c_tra == 0 and c_des == 0 and c_ret == 0:
                 c_ent = m.total_nfe
         else:
-            c_ent = m.qtd_entrega or 0
-            c_col = m.qtd_coleta or 0
-            c_tra = m.qtd_transferencia or 0
-            c_des = m.qtd_despacho or 0
-            c_ret = m.qtd_retirada or 0
+            c_ent = getattr(m, 'qtd_entrega', 0) or 0
+            c_col = getattr(m, 'qtd_coleta', 0) or 0
+            c_tra = getattr(m, 'qtd_transferencia', 0) or 0
+            c_des = getattr(m, 'qtd_despacho', 0) or 0
+            c_ret = getattr(m, 'qtd_retirada', 0) or 0
 
         resultado.append({
             'manifesto_id': str(m.numero_manifesto),

@@ -250,6 +250,7 @@ class Manifesto(models.Model):
     qtd_despacho = models.IntegerField(default=0, verbose_name="Qtd Despacho", null=True, blank=True)
     qtd_entrega = models.IntegerField(default=0, verbose_name="Qtd Entrega", null=True, blank=True)
     qtd_retirada = models.IntegerField(default=0, verbose_name="Qtd Retirada", null=True, blank=True)
+    qtd_coleta = models.IntegerField(default=0, verbose_name="Qtd Coleta", null=True, blank=True)
 
     km_inicial = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     km_final = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)

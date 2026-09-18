@@ -582,6 +582,8 @@ def processar_webhook_manifesto_task(self, event_id):
                         manifesto_defaults['qtd_transferencia'] = info_cargas['qtd_transferencia']
                     if info_cargas.get('qtd_entrega') is not None:
                         manifesto_defaults['qtd_entrega'] = info_cargas['qtd_entrega']
+                    if info_cargas.get('qtd_coleta') is not None:
+                        manifesto_defaults['qtd_coleta'] = info_cargas['qtd_coleta']
                     if info_cargas.get('qtd_despacho') is not None:
                         manifesto_defaults['qtd_despacho'] = info_cargas['qtd_despacho']
                     if info_cargas.get('qtd_retirada') is not None:
@@ -867,8 +869,16 @@ def processar_webhook_manifesto_task(self, event_id):
 
             # Marca evento como processado
             event.status = 'PROCESSADO'
+            event.erro = None
             event.processed_at = timezone.now()
             event.save()
+
+            # 🛠️ Auto-resolve qualquer erro anterior deste manifesto na Torre de Controle
+            try:
+                from operacional.services import resolver_erro_automatico
+                resolver_erro_automatico(manifesto_numero=num_mani, filial=filial_obj)
+            except Exception as auto_err:
+                logger.debug(f"ℹ️ Erro ao tentar auto-resolver logs de erro para MFT {num_mani}: {auto_err}")
 
             # 📲 DISPARO INSTANTÂNEO DE NOTIFICAÇÃO PUSH (FCM) PARA O MOTORISTA (APK)
             try:
