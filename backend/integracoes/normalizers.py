@@ -174,10 +174,9 @@ def normalizar_json_tms(payload: dict) -> dict:
     veiculo = {'placa': placa} if placa else None
 
     # ─── BASE DE OPERAÇÃO / ATUAÇÃO (Física) ───
-    base = rota.get('Base') if isinstance(rota, dict) else {}
-    base_origem = base.get('Origem') if isinstance(base, dict) else {}
+    base_origem = rota.get('Base', {}).get('Origem', {})
     filial_operacao = None
-    if isinstance(base_origem, dict) and base_origem:
+    if base_origem:
         nome_base = base_origem.get('Nome') or f"BASE {base_origem.get('Cidade', '')}"
         filial_operacao = {
             'id_tms': str(base_origem.get('@codigo', '')).strip() or None,
@@ -190,26 +189,18 @@ def normalizar_json_tms(payload: dict) -> dict:
         }
 
     # ─── PARADAS → ITENS ───
-    paradas_container = rota.get('Paradas') if isinstance(rota, dict) else {}
-    if isinstance(paradas_container, dict):
-        paradas_raw = paradas_container.get('Parada') or []
-    elif isinstance(paradas_container, list):
-        paradas_raw = paradas_container
-    else:
-        paradas_raw = []
-
+    paradas_container = rota.get('Paradas', {})
+    paradas_raw = paradas_container.get('Parada', [])
+    
     # Garante que seja lista (TMS pode enviar objeto único se houver só 1 parada)
     if isinstance(paradas_raw, dict):
         paradas_raw = [paradas_raw]
-    elif not isinstance(paradas_raw, list):
-        paradas_raw = []
 
     itens = []
     for parada in paradas_raw:
-        if isinstance(parada, dict):
-            item = _normalizar_parada(parada)
-            if item:
-                itens.append(item)
+        item = _normalizar_parada(parada)
+        if item:
+            itens.append(item)
 
     resultado = {
         'filial': filial,
@@ -258,9 +249,7 @@ def _normalizar_parada(parada: dict) -> dict | None:
         id_tms = id_parada_seq if tipo == 'COLETA' else None
 
         # ─── DOCUMENTO (NF-e / CT-e) ───
-        doc = parada.get('Documento') if isinstance(parada, dict) else {}
-        if not isinstance(doc, dict):
-            doc = {}
+        doc = parada.get('Documento', {})
         numero_item = str(doc.get('Numero', '')).strip()
         chave_nota = str(doc.get('ChaveNota', '')).strip() or None
         
@@ -270,9 +259,7 @@ def _normalizar_parada(parada: dict) -> dict | None:
             return None
 
         # ─── CLIENTE (Destinatário) ───
-        cliente = parada.get('Cliente') if isinstance(parada, dict) else {}
-        if not isinstance(cliente, dict):
-            cliente = {}
+        cliente = parada.get('Cliente', {})
         
         # Monta endereço completo
         endereco_parts = [
@@ -294,9 +281,7 @@ def _normalizar_parada(parada: dict) -> dict | None:
         }
 
         # ─── DADOS DE FRETE (NOVOS — antes não eram mapeados) ───
-        embarcador = doc.get('Embarcador') if isinstance(doc, dict) else {}
-        if not isinstance(embarcador, dict):
-            embarcador = {}
+        embarcador = doc.get('Embarcador', {})
 
         item = {
             'tipo': tipo,
