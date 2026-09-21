@@ -13,3 +13,6 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 
 # Descobre tasks automaticamente nos apps instalados
 app.autodiscover_tasks()
+
+# Registra módulos de tasks com nomes não-padrão (que o autodiscover_tasks não encontra sozinho)
+app.autodiscover_tasks(['manifesto'], related_name='tasks_auto_recovery')
