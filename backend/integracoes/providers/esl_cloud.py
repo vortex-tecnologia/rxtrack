@@ -929,8 +929,9 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     
                     if total_coletas > 0:
                         qtd_coletas = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='COLETA').count()
+                        manifesto_obj.qtd_coleta = qtd_coletas
                         manifesto_obj.qtd_retirada = qtd_coletas
-                        manifesto_obj.save(update_fields=['qtd_retirada'])
+                        manifesto_obj.save(update_fields=['qtd_coleta', 'qtd_retirada'])
                         
                 logger.info(f"Coletas para {numero_visual}: {total_coletas} encontradas e salvas.")
             except Exception as e:
@@ -1079,8 +1080,9 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 
                 if total_adicionadas > 0:
                     qtd_coletas = NotaFiscal.objects.filter(manifesto=manifesto_obj, tipo_operacao='COLETA').count()
+                    manifesto_obj.qtd_coleta = qtd_coletas
                     manifesto_obj.qtd_retirada = qtd_coletas
-                    manifesto_obj.save(update_fields=['qtd_retirada'])
+                    manifesto_obj.save(update_fields=['qtd_coleta', 'qtd_retirada'])
                     
                 enviar_painel(manifesto_obj)
                 return f"Adicionadas {total_adicionadas} coletas ao manifesto {numero_visual}"

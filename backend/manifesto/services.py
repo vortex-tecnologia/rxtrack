@@ -71,11 +71,11 @@ def enviar_painel(manifesto):
         if qtd_ent == 0 and qtd_col == 0 and qtd_tra == 0 and qtd_des == 0 and qtd_ret == 0:
             qtd_ent = total
     else:
-        qtd_ent = manifesto.qtd_entrega or 0
-        qtd_col = manifesto.qtd_coleta or 0
-        qtd_tra = manifesto.qtd_transferencia or 0
-        qtd_des = manifesto.qtd_despacho or 0
-        qtd_ret = manifesto.qtd_retirada or 0
+        qtd_ent = getattr(manifesto, 'qtd_entrega', 0) or 0
+        qtd_col = getattr(manifesto, 'qtd_coleta', 0) or 0
+        qtd_tra = getattr(manifesto, 'qtd_transferencia', 0) or 0
+        qtd_des = getattr(manifesto, 'qtd_despacho', 0) or 0
+        qtd_ret = getattr(manifesto, 'qtd_retirada', 0) or 0
 
     payload = {
         "type": "atualizar_painel",
@@ -470,8 +470,8 @@ def sincronizar_manifesto_individual_webhook(manifesto):
         tot_des = manifesto.notas_fiscais.filter(tipo_operacao='DESPACHO').count()
         tot_ret = manifesto.notas_fiscais.filter(tipo_operacao='RETIRADA').count()
 
-        if (manifesto.qtd_entrega != tot_ent or manifesto.qtd_transferencia != tot_tra or
-            manifesto.qtd_coleta != tot_col or manifesto.qtd_despacho != tot_des or manifesto.qtd_retirada != tot_ret):
+        if (getattr(manifesto, 'qtd_entrega', 0) != tot_ent or getattr(manifesto, 'qtd_transferencia', 0) != tot_tra or
+            getattr(manifesto, 'qtd_coleta', 0) != tot_col or getattr(manifesto, 'qtd_despacho', 0) != tot_des or getattr(manifesto, 'qtd_retirada', 0) != tot_ret):
             manifesto.qtd_entrega = tot_ent
             manifesto.qtd_transferencia = tot_tra
             manifesto.qtd_coleta = tot_col
