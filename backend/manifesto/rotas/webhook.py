@@ -1,4 +1,4 @@
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
@@ -84,6 +84,7 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes,
 @api_view(['GET', 'POST'])
 @authentication_classes([])            # 👈 REMOVE auth padrão
 @permission_classes([AllowAny])        # 👈 PERMITE GET público
+@throttle_classes([])                  # 👈 Desativa throttling DRF para não bloquear rajadas do TMS
 def webhook_tms(request):
 
     # 📘 DOCUMENTAÇÃO (GET SEM TOKEN)
@@ -209,8 +210,8 @@ def webhook_tms(request):
             payload_processar = normalizar_json_tms(payload)
             origem_evento = 'TMS_JSON'
             tipo_evento = 'tms_uploadroute'
-        except (ValueError, KeyError) as e:
-            logger.error(f"❌ Erro ao normalizar JSON TMS: {e}")
+        except Exception as e:
+            logger.error(f"❌ Erro ao normalizar JSON TMS: {e}", exc_info=True)
             return Response({"detail": f"Erro na estrutura do JSON: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
     else:
         payload_processar = payload
@@ -218,17 +219,21 @@ def webhook_tms(request):
     # ───────────────────────────────────────────────────
     # 📩 3. CRIAÇÃO DO EVENTO E DISPARO CELERY
     # ───────────────────────────────────────────────────
-    numero_manifesto = payload_processar.get("manifesto", {}).get("numero")
+    try:
+        numero_manifesto = str(payload_processar.get("manifesto", {}).get("numero") or '').strip()
 
-    event = WebhookEventoManifestoESL.objects.create(
-        origem=origem_evento,
-        tipo=tipo_evento,
-        numero_manifesto=numero_manifesto,
-        payload=payload_processar
-    )
+        event = WebhookEventoManifestoESL.objects.create(
+            origem=origem_evento,
+            tipo=tipo_evento,
+            numero_manifesto=numero_manifesto,
+            payload=payload_processar
+        )
 
-    from manifesto.tasks import processar_webhook_manifesto_task
-    processar_webhook_manifesto_task.delay(event.id)
+        from manifesto.tasks import processar_webhook_manifesto_task
+        processar_webhook_manifesto_task.delay(event.id)
+    except Exception as e:
+        logger.exception(f"❌ Erro ao criar/enfileirar evento do webhook: {e}")
+        return Response({"detail": f"Erro ao processar manifesto no servidor: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
     response_data = {
         "ok": True,
