@@ -715,8 +715,10 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function initMap() {
-    const centroLat = {{ centro_lat|default:"-22.9" }};
-    const centroLng = {{ centro_lng|default:"-43.2" }};
+    const rawLat = '{{ centro_lat|default:"-22.9" }}';
+    const rawLng = '{{ centro_lng|default:"-43.2" }}';
+    const centroLat = parseFloat(rawLat.replace(',', '.')) || -22.9;
+    const centroLng = parseFloat(rawLng.replace(',', '.')) || -43.2;
 
     mapaInstance = L.map('mapaMonitoramento', {
         zoomControl: false,
@@ -759,15 +761,19 @@ function renderVehiclesOnMap(veiculos) {
 
     // Marcador da filial ativa
     const filialSelect = document.getElementById('filialSelect');
-    const selectedOption = filialSelect.options[filialSelect.selectedIndex];
-    const filialLat = parseFloat(selectedOption.dataset.lat);
-    const filialLng = parseFloat(selectedOption.dataset.lng);
+    if (filialSelect && filialSelect.selectedIndex >= 0) {
+        const selectedOption = filialSelect.options[filialSelect.selectedIndex];
+        if (selectedOption && selectedOption.dataset.lat && selectedOption.dataset.lng) {
+            const filialLat = parseFloat(selectedOption.dataset.lat.replace(',', '.'));
+            const filialLng = parseFloat(selectedOption.dataset.lng.replace(',', '.'));
 
-    if (!isNaN(filialLat) && !isNaN(filialLng) && filialLat !== 0) {
-        const filialMarker = L.marker([filialLat, filialLng], { icon: getFilialIcon() })
-            .bindPopup(`<b>${selectedOption.textContent.trim()}</b><br><small>Base / Filial</small>`);
-        markersLayer.addLayer(filialMarker);
-        bounds.push([filialLat, filialLng]);
+            if (!isNaN(filialLat) && !isNaN(filialLng) && filialLat !== 0) {
+                const filialMarker = L.marker([filialLat, filialLng], { icon: getFilialIcon() })
+                    .bindPopup(`<b>${selectedOption.textContent.trim()}</b><br><small>Base / Filial</small>`);
+                markersLayer.addLayer(filialMarker);
+                bounds.push([filialLat, filialLng]);
+            }
+        }
     }
 
     // Marcadores dos veículos
@@ -1211,9 +1217,9 @@ function onFilialChange(filialId) {
 
     // Centralizar mapa na filial
     const opt = document.querySelector(`#filialSelect option[value="${filialId}"]`);
-    if (opt) {
-        const lat = parseFloat(opt.dataset.lat);
-        const lng = parseFloat(opt.dataset.lng);
+    if (opt && opt.dataset.lat && opt.dataset.lng) {
+        const lat = parseFloat(opt.dataset.lat.replace(',', '.'));
+        const lng = parseFloat(opt.dataset.lng.replace(',', '.'));
         if (!isNaN(lat) && !isNaN(lng) && lat !== 0) {
             mapaInstance.setView([lat, lng], 12);
         }
@@ -1232,8 +1238,8 @@ function onFilialChange(filialId) {
 // ===== UTILIDADES =====
 function isValidCoord(lat, lng) {
     if (lat == null || lng == null) return false;
-    lat = parseFloat(lat);
-    lng = parseFloat(lng);
+    lat = parseFloat(lat.toString().replace(',', '.'));
+    lng = parseFloat(lng.toString().replace(',', '.'));
     if (isNaN(lat) || isNaN(lng)) return false;
     if (lat === 0 && lng === 0) return false;
     return lat >= -34.0 && lat <= 5.5 && lng >= -74.0 && lng <= -34.0;

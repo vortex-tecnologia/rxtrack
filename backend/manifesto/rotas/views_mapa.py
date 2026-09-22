@@ -52,11 +52,13 @@ def mapa_monitoramento(request):
     filiais_qs = Filial.objects.filter(operacao_ativa=True).order_by('nome')
     filiais_data = []
     for f in filiais_qs:
+        lat_val = str(f.latitude).replace(',', '.') if f.latitude else ''
+        lng_val = str(f.longitude).replace(',', '.') if f.longitude else ''
         filiais_data.append({
             'id': f.id,
             'nome': f.nome,
-            'lat': float(f.latitude) if f.latitude else None,
-            'lng': float(f.longitude) if f.longitude else None,
+            'lat': lat_val,
+            'lng': lng_val,
         })
 
     # Filial ativa inicial
@@ -71,8 +73,8 @@ def mapa_monitoramento(request):
         filial_ativa_id = filiais_data[0]['id']
 
     # Lat/lng da filial ativa para centralizar o mapa
-    centro_lat = -22.9
-    centro_lng = -43.2
+    centro_lat = "-22.9"
+    centro_lng = "-43.2"
     for f in filiais_data:
         if f['id'] == filial_ativa_id and f['lat'] and f['lng']:
             centro_lat = f['lat']
@@ -84,8 +86,8 @@ def mapa_monitoramento(request):
         'usuario_nome': request.user.get_full_name() or request.user.username,
         'filiais': filiais_data,
         'filial_ativa_id': filial_ativa_id,
-        'centro_lat': centro_lat,
-        'centro_lng': centro_lng,
+        'centro_lat': str(centro_lat).replace(',', '.'),
+        'centro_lng': str(centro_lng).replace(',', '.'),
     }
     return render(request, 'desktop/paginas/painel/mapa_monitoramento.html', context)
 
