@@ -20,6 +20,7 @@ from manifesto.rotas.sincronizarmanifesto import SincronizarManifestoView
 from manifesto.rotas.webhook import webhook_tms
 from manifesto.rotas.listagemocorrencias import ListarOcorrenciasView
 from manifesto.rotas.views_painel import painel_monitoramento, painel_sync
+from manifesto.rotas.views_mapa import mapa_monitoramento, api_mapa_veiculos, api_mapa_rota_manifesto
 from manifesto.rotas.tracking import TrackingHeartbeatView
 from manifesto.rotas.verificar_status_tms import VerificarStatusTmsView, EncerrarManifestoFechadoTmsView
 
@@ -47,5 +48,10 @@ urlpatterns = [
     path('manifesto/app/tracking-heartbeat/', TrackingHeartbeatView.as_view(), name='app_tracking_heartbeat'),
     path('manifesto/verificar-status-tms/', VerificarStatusTmsView.as_view(), name='verificar_status_tms'),
     path('manifesto/encerrar-fechado-tms/', EncerrarManifestoFechadoTmsView.as_view(), name='encerrar_fechado_tms'),
+
+    # Mapa de Monitoramento em Tempo Real
+    path('mapa-monitoramento/', mapa_monitoramento, name='mapa_monitoramento'),
+    path('mapa/veiculos/', api_mapa_veiculos, name='api_mapa_veiculos'),
+    path('mapa/rota/<str:manifesto_id>/', api_mapa_rota_manifesto, name='api_mapa_rota_manifesto'),
 ]
 

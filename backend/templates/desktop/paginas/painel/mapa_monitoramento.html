@@ -1,0 +1,1243 @@
+{% extends "desktop/base.html" %}
+{% load static %}
+
+{% block title %}{{ titulo }}{% endblock %}
+{% block usuario %}{{ usuario_nome }}{% endblock %}
+
+{% block content %}
+<style>
+/* ========================================================================
+   MAPA DE MONITORAMENTO — FULLSCREEN LAYOUT
+   ======================================================================== */
+:root {
+    --mapa-sidebar-width: 380px;
+    --mapa-header-height: 0px;
+}
+
+/* Remove padding do container pai do base.html */
+#main-content > .container-fluid {
+    padding: 0 !important;
+}
+
+.mapa-wrapper {
+    position: relative;
+    width: 100%;
+    height: calc(100vh - 58px);
+    overflow: hidden;
+    background: #1a1a2e;
+}
+
+#mapaMonitoramento {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+}
+
+/* ===== SIDEBAR FLUTUANTE (Google Maps style) ===== */
+.mapa-sidebar {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    bottom: 16px;
+    width: var(--mapa-sidebar-width);
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08);
+    z-index: 500;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+}
+
+.mapa-sidebar.collapsed {
+    transform: translateX(calc(-1 * var(--mapa-sidebar-width) - 32px));
+    opacity: 0;
+    pointer-events: none;
+}
+
+.sidebar-toggle-btn {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 600;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: #fff;
+    border: none;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #333;
+    font-size: 1.2rem;
+}
+
+.sidebar-toggle-btn:hover {
+    background: #f0f0f0;
+    transform: scale(1.05);
+}
+
+.sidebar-toggle-btn.hidden-when-open {
+    display: none;
+}
+
+/* Header da sidebar */
+.sidebar-header {
+    padding: 16px 20px 12px;
+    background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+    color: #fff;
+    flex-shrink: 0;
+}
+
+.sidebar-header h6 {
+    margin: 0;
+    font-weight: 700;
+    font-size: 0.95rem;
+    letter-spacing: 0.3px;
+}
+
+.sidebar-header .subtitle {
+    font-size: 0.72rem;
+    opacity: 0.85;
+    margin-top: 2px;
+}
+
+/* Seletor de filial */
+.filial-selector {
+    padding: 10px 16px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    flex-shrink: 0;
+}
+
+.filial-select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    background: #fff;
+    color: #333;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.filial-select:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13,110,253,0.15);
+}
+
+/* Corpo da sidebar — lista de manifestos */
+.sidebar-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+    scrollbar-width: thin;
+}
+
+.sidebar-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar-body::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+/* Card de manifesto na sidebar */
+.manifesto-sidebar-item {
+    padding: 12px 16px;
+    margin: 2px 8px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid transparent;
+    position: relative;
+}
+
+.manifesto-sidebar-item:hover {
+    background: #f0f4ff;
+    border-color: #c7d9ff;
+}
+
+.manifesto-sidebar-item.active {
+    background: linear-gradient(135deg, #eff4ff 0%, #dbeafe 100%);
+    border-color: #0d6efd;
+    box-shadow: 0 2px 8px rgba(13,110,253,0.12);
+}
+
+.manifesto-sidebar-item .msi-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.manifesto-sidebar-item .msi-motorista {
+    font-weight: 700;
+    font-size: 0.82rem;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+}
+
+.manifesto-sidebar-item .msi-manifesto-num {
+    font-size: 0.68rem;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.manifesto-sidebar-item .msi-placa {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.65rem;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.manifesto-sidebar-item .msi-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.manifesto-sidebar-item .msi-progress-bar {
+    flex: 1;
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.manifesto-sidebar-item .msi-progress-bar-inner {
+    height: 100%;
+    background: linear-gradient(90deg, #10b981, #059669);
+    border-radius: 4px;
+    transition: width 0.4s ease;
+}
+
+.manifesto-sidebar-item .msi-progress-text {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #059669;
+    white-space: nowrap;
+}
+
+.manifesto-sidebar-item .msi-signal {
+    font-size: 0.65rem;
+    color: #94a3b8;
+    margin-top: 2px;
+}
+
+.manifesto-sidebar-item .msi-vehicle-icon {
+    font-size: 1rem;
+    margin-right: 4px;
+}
+
+/* Indicador sem sinal GPS */
+.msi-no-gps {
+    font-size: 0.62rem;
+    color: #ef4444;
+    font-weight: 600;
+}
+
+/* ===== DETALHES DA ROTA (Estágio 2) ===== */
+.sidebar-route-details {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+}
+
+.sidebar-route-details.visible {
+    display: flex;
+}
+
+.sidebar-manifesto-list {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.sidebar-manifesto-list.hidden {
+    display: none;
+}
+
+.route-header {
+    padding: 14px 16px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e9ecef;
+    flex-shrink: 0;
+}
+
+.route-back-btn {
+    background: none;
+    border: none;
+    color: #0d6efd;
+    font-weight: 600;
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 4px 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.2s;
+}
+
+.route-back-btn:hover {
+    color: #0a58ca;
+}
+
+.route-info-card {
+    padding: 12px 16px;
+    background: #fff;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.route-motorista-name {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: #1e293b;
+}
+
+.route-manifesto-badge {
+    font-size: 0.7rem;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.route-progress-block {
+    padding: 10px 16px;
+    background: #f0fdf4;
+    border-bottom: 1px solid #d1fae5;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.route-progress-circle {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: conic-gradient(#10b981 var(--progress), #e5e7eb var(--progress));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.route-progress-circle-inner {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 0.72rem;
+    color: #059669;
+}
+
+.route-eta-block {
+    padding: 10px 16px;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border-bottom: 1px solid #bfdbfe;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.route-eta-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: #0d6efd;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.route-eta-text {
+    font-size: 0.78rem;
+    color: #1e40af;
+    font-weight: 600;
+}
+
+.route-eta-value {
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: #1e3a8a;
+}
+
+.route-eta-disclaimer {
+    font-size: 0.6rem;
+    color: #93c5fd;
+    font-weight: 500;
+}
+
+/* Lista de entregas */
+.route-deliveries-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+    scrollbar-width: thin;
+}
+
+.route-deliveries-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+.route-section-title {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 10px 16px 4px;
+    color: #64748b;
+}
+
+.route-delivery-item {
+    padding: 8px 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    border-bottom: 1px solid #f8f8f8;
+    transition: background 0.15s;
+}
+
+.route-delivery-item:hover {
+    background: #fafafa;
+}
+
+.route-delivery-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    margin-top: 2px;
+}
+
+.route-delivery-icon.done {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.route-delivery-icon.pending {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.route-delivery-icon.ocorrencia {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.route-delivery-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.route-delivery-nota {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #334155;
+}
+
+.route-delivery-dest {
+    font-size: 0.68rem;
+    color: #64748b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.route-delivery-time {
+    font-size: 0.62rem;
+    color: #10b981;
+    font-weight: 600;
+}
+
+/* ===== ÍCONES DE VEÍCULO NO MAPA ===== */
+.vehicle-marker-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 3px solid #fff;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.25);
+    color: #fff;
+    font-size: 16px;
+    transition: transform 0.2s;
+}
+
+.vehicle-marker-icon.moto {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    width: 34px;
+    height: 34px;
+}
+
+.vehicle-marker-icon.carro {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    width: 36px;
+    height: 36px;
+}
+
+.vehicle-marker-icon.caminhao {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    width: 40px;
+    height: 40px;
+}
+
+.vehicle-marker-icon.current-driver {
+    background: linear-gradient(135deg, #10b981, #059669);
+    width: 42px;
+    height: 42px;
+    animation: markerPulse 2s infinite;
+}
+
+@keyframes markerPulse {
+    0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.5), 0 3px 12px rgba(0,0,0,0.25); }
+    70% { box-shadow: 0 0 0 12px rgba(16,185,129,0), 0 3px 12px rgba(0,0,0,0.25); }
+    100% { box-shadow: 0 0 0 0 rgba(16,185,129,0), 0 3px 12px rgba(0,0,0,0.25); }
+}
+
+/* Filial marker */
+.filial-marker-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    border: 3px solid #fff;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 16px;
+}
+
+/* Empty state */
+.sidebar-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: #94a3b8;
+}
+
+.sidebar-empty i {
+    font-size: 3rem;
+    opacity: 0.4;
+    display: block;
+    margin-bottom: 12px;
+}
+
+/* ===== Responsivo ===== */
+@media (max-width: 768px) {
+    .mapa-sidebar {
+        width: calc(100vw - 32px);
+        max-width: 380px;
+    }
+}
+</style>
+
+<div class="mapa-wrapper">
+    <!-- Sidebar Toggle (visível quando sidebar está colapsada) -->
+    <button class="sidebar-toggle-btn" id="sidebarToggleBtn" onclick="toggleMapSidebar()" title="Abrir painel lateral" style="display: none;">
+        <i class="bi bi-chevron-right"></i>
+    </button>
+
+    <!-- Sidebar Flutuante -->
+    <div class="mapa-sidebar" id="mapaSidebar">
+        <!-- Header -->
+        <div class="sidebar-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6><i class="bi bi-map me-2"></i>Monitoramento ao Vivo</h6>
+                    <div class="subtitle" id="sidebarSubtitle">Carregando veículos...</div>
+                </div>
+                <button class="btn btn-sm btn-light text-dark border-0 rounded-pill px-2 py-1" onclick="toggleMapSidebar()" title="Recolher painel" style="font-size: 0.75rem;">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Seletor de Filial -->
+        <div class="filial-selector">
+            <select class="filial-select" id="filialSelect" onchange="onFilialChange(this.value)">
+                {% for f in filiais %}
+                <option value="{{ f.id }}" {% if f.id == filial_ativa_id %}selected{% endif %} 
+                        data-lat="{{ f.lat|default:'' }}" data-lng="{{ f.lng|default:'' }}">
+                    {{ f.nome }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Conteúdo: Lista de Manifestos (Estágio 1) -->
+        <div class="sidebar-manifesto-list" id="sidebarManifestoList">
+            <div class="sidebar-body" id="sidebarBody">
+                <div class="sidebar-empty">
+                    <i class="bi bi-truck"></i>
+                    <p class="fw-bold">Carregando veículos...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Conteúdo: Detalhes da Rota (Estágio 2) -->
+        <div class="sidebar-route-details" id="sidebarRouteDetails">
+            <div class="route-header">
+                <button class="route-back-btn" onclick="voltarListaManifestos()">
+                    <i class="bi bi-arrow-left"></i> Voltar à lista
+                </button>
+            </div>
+            <div id="routeDetailsContent">
+                <!-- Preenchido dinamicamente -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Mapa Leaflet -->
+    <div id="mapaMonitoramento"></div>
+</div>
+
+<script>
+// =====================================================================
+//  MAPA DE MONITORAMENTO — JAVASCRIPT COMPLETO
+// =====================================================================
+
+// ===== ESTADO GLOBAL =====
+let mapaInstance = null;
+let markersLayer = null;
+let routeLayerGroup = null;
+let currentFilialId = '{{ filial_ativa_id|default:"" }}';
+let selectedManifestoId = null;
+let veiculosData = [];
+let refreshInterval = null;
+const OSRM_BASE = 'https://router.project-osrm.org';
+
+// ===== ÍCONES =====
+function getVehicleIcon(tipo, isCurrentDriver = false) {
+    const iconMap = {
+        'MOTO':       { class: 'moto',     icon: 'fa-solid fa-motorcycle', size: [34, 34] },
+        'CARRO':      { class: 'carro',    icon: 'bi bi-car-front-fill',   size: [36, 36] },
+        'VAN':        { class: 'carro',    icon: 'bi bi-car-front-fill',   size: [36, 36] },
+        'UTILITARIO': { class: 'carro',    icon: 'bi bi-car-front-fill',   size: [36, 36] },
+        'TRUCK':      { class: 'caminhao', icon: 'bi bi-truck',           size: [40, 40] },
+        'CAVALO':     { class: 'caminhao', icon: 'bi bi-truck',           size: [40, 40] },
+        'CARRETA':    { class: 'caminhao', icon: 'bi bi-truck',           size: [40, 40] },
+        'OUTRO':      { class: 'carro',    icon: 'bi bi-truck',           size: [36, 36] },
+    };
+
+    const cfg = iconMap[tipo] || iconMap['OUTRO'];
+    const cssClass = isCurrentDriver ? 'current-driver' : cfg.class;
+    const iconHtml = `<div class="vehicle-marker-icon ${cssClass}"><i class="${cfg.icon}"></i></div>`;
+    const sz = isCurrentDriver ? [42, 42] : cfg.size;
+
+    return L.divIcon({
+        html: iconHtml,
+        className: 'custom-vehicle-marker',
+        iconSize: sz,
+        iconAnchor: [sz[0]/2, sz[1]/2],
+        popupAnchor: [0, -sz[1]/2],
+    });
+}
+
+function getFilialIcon() {
+    return L.divIcon({
+        html: '<div class="filial-marker-icon"><i class="bi bi-building-fill"></i></div>',
+        className: 'custom-filial-marker',
+        iconSize: [38, 38],
+        iconAnchor: [19, 19],
+        popupAnchor: [0, -19],
+    });
+}
+
+function getDeliveryIcon(status) {
+    if (status === 'OCORRENCIA') {
+        return L.divIcon({
+            html: '<div style="width:24px;height:24px;border-radius:50%;background:#fee2e2;border:2px solid #dc2626;display:flex;align-items:center;justify-content:center;"><i class="bi bi-exclamation-triangle-fill" style="font-size:11px;color:#dc2626;"></i></div>',
+            className: 'delivery-marker',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+        });
+    } else if (status === 'BAIXADA') {
+        return L.divIcon({
+            html: '<div style="width:24px;height:24px;border-radius:50%;background:#dcfce7;border:2px solid #16a34a;display:flex;align-items:center;justify-content:center;"><i class="bi bi-check-lg" style="font-size:12px;color:#16a34a;font-weight:bold;"></i></div>',
+            className: 'delivery-marker',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+        });
+    } else {
+        return L.divIcon({
+            html: '<div style="width:24px;height:24px;border-radius:50%;background:#fef3c7;border:2px solid #d97706;display:flex;align-items:center;justify-content:center;"><i class="bi bi-box-seam" style="font-size:11px;color:#d97706;"></i></div>',
+            className: 'delivery-marker',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+        });
+    }
+}
+
+// ===== INICIALIZAÇÃO =====
+document.addEventListener('DOMContentLoaded', function() {
+    initMap();
+    loadVehicles();
+    // Auto-refresh a cada 30s
+    refreshInterval = setInterval(() => {
+        if (selectedManifestoId) {
+            loadRouteDetails(selectedManifestoId);
+        } else {
+            loadVehicles();
+        }
+    }, 30000);
+});
+
+function initMap() {
+    const centroLat = {{ centro_lat|default:"-22.9" }};
+    const centroLng = {{ centro_lng|default:"-43.2" }};
+
+    mapaInstance = L.map('mapaMonitoramento', {
+        zoomControl: false,
+    }).setView([centroLat, centroLng], 12);
+
+    // Tile layer — ESRI World Street Map
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri',
+        maxZoom: 19,
+    }).addTo(mapaInstance);
+
+    // Zoom control no canto direito
+    L.control.zoom({ position: 'bottomright' }).addTo(mapaInstance);
+
+    markersLayer = L.layerGroup().addTo(mapaInstance);
+    routeLayerGroup = L.layerGroup().addTo(mapaInstance);
+}
+
+// ===== ESTÁGIO 1: VISÃO GERAL DE VEÍCULOS =====
+function loadVehicles() {
+    const url = `/api/mapa/veiculos/?filial=${currentFilialId}`;
+
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            veiculosData = data.veiculos || [];
+            renderVehiclesOnMap(veiculosData);
+            renderManifestoList(veiculosData);
+        })
+        .catch(err => {
+            console.error('Erro ao carregar veículos:', err);
+        });
+}
+
+function renderVehiclesOnMap(veiculos) {
+    markersLayer.clearLayers();
+    routeLayerGroup.clearLayers();
+
+    const bounds = [];
+
+    // Marcador da filial ativa
+    const filialSelect = document.getElementById('filialSelect');
+    const selectedOption = filialSelect.options[filialSelect.selectedIndex];
+    const filialLat = parseFloat(selectedOption.dataset.lat);
+    const filialLng = parseFloat(selectedOption.dataset.lng);
+
+    if (!isNaN(filialLat) && !isNaN(filialLng) && filialLat !== 0) {
+        const filialMarker = L.marker([filialLat, filialLng], { icon: getFilialIcon() })
+            .bindPopup(`<b>${selectedOption.textContent.trim()}</b><br><small>Base / Filial</small>`);
+        markersLayer.addLayer(filialMarker);
+        bounds.push([filialLat, filialLng]);
+    }
+
+    // Marcadores dos veículos
+    veiculos.forEach(v => {
+        if (v.lat == null || v.lng == null) return;
+
+        const marker = L.marker([v.lat, v.lng], { icon: getVehicleIcon(v.tipo_veiculo) })
+            .bindPopup(`
+                <div style="min-width:180px;">
+                    <b>${v.motorista}</b><br>
+                    <small class="text-muted">#${v.manifesto_id} ${v.placa ? '• ' + v.placa : ''}</small><br>
+                    <div style="margin-top:4px;">
+                        <span style="color:#059669;font-weight:700;">${v.baixadas}/${v.total_nfe}</span> entregas
+                        ${v.ultimo_acesso ? '<br><small>⏱️ Último sinal: ' + v.ultimo_acesso + '</small>' : ''}
+                        ${v.bateria ? '<br><small>🔋 ' + v.bateria + '%</small>' : ''}
+                    </div>
+                </div>
+            `)
+            .bindTooltip(v.motorista, { direction: 'top', offset: [0, -20] });
+
+        marker.on('click', () => {
+            selectManifesto(v.manifesto_id);
+        });
+
+        markersLayer.addLayer(marker);
+        bounds.push([v.lat, v.lng]);
+    });
+
+    // Ajustar zoom para mostrar todos
+    if (bounds.length > 1) {
+        mapaInstance.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 });
+    } else if (bounds.length === 1) {
+        mapaInstance.setView(bounds[0], 13);
+    }
+}
+
+function renderManifestoList(veiculos) {
+    const body = document.getElementById('sidebarBody');
+    const subtitle = document.getElementById('sidebarSubtitle');
+
+    const comGps = veiculos.filter(v => v.lat != null);
+    subtitle.textContent = `${veiculos.length} veículo(s) ativo(s) • ${comGps.length} com GPS`;
+
+    if (veiculos.length === 0) {
+        body.innerHTML = `
+            <div class="sidebar-empty">
+                <i class="bi bi-truck"></i>
+                <p class="fw-bold mb-1">Nenhum veículo ativo</p>
+                <small>Os veículos aparecerão aqui quando houver manifestos em transporte.</small>
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+    veiculos.forEach(v => {
+        const percent = v.total_nfe > 0 ? Math.round((v.baixadas / v.total_nfe) * 100) : 0;
+        const vehicleEmoji = getVehicleEmoji(v.tipo_veiculo);
+        const gpsStatus = v.lat != null
+            ? `<span class="msi-signal"><i class="bi bi-broadcast me-1 text-success"></i>${v.ultimo_acesso || 'Ativo'}</span>`
+            : `<span class="msi-no-gps"><i class="bi bi-exclamation-circle me-1"></i>Sem GPS</span>`;
+
+        html += `
+            <div class="manifesto-sidebar-item ${selectedManifestoId === v.manifesto_id ? 'active' : ''}" 
+                 onclick="selectManifesto('${v.manifesto_id}')">
+                <div class="msi-header">
+                    <div style="display:flex;align-items:center;gap:6px;min-width:0;">
+                        <span class="msi-vehicle-icon">${vehicleEmoji}</span>
+                        <span class="msi-motorista" title="${v.motorista}">${v.motorista}</span>
+                    </div>
+                    <span class="msi-manifesto-num">#${v.manifesto_id}</span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:3px;">
+                    ${v.placa ? `<span class="msi-placa"><i class="bi bi-credit-card-2-front"></i>${v.placa}</span>` : '<span></span>'}
+                    ${gpsStatus}
+                </div>
+                <div class="msi-progress-row">
+                    <div class="msi-progress-bar">
+                        <div class="msi-progress-bar-inner" style="width: ${percent}%"></div>
+                    </div>
+                    <span class="msi-progress-text">${v.baixadas}/${v.total_nfe}</span>
+                </div>
+            </div>
+        `;
+    });
+
+    body.innerHTML = html;
+}
+
+function getVehicleEmoji(tipo) {
+    const map = {
+        'MOTO': '🏍️', 'CARRO': '🚗', 'VAN': '🚐', 'UTILITARIO': '🚗',
+        'TRUCK': '🚛', 'CAVALO': '🚛', 'CARRETA': '🚛', 'OUTRO': '🚚'
+    };
+    return map[tipo] || '🚚';
+}
+
+// ===== ESTÁGIO 2: ROTA DO MANIFESTO =====
+function selectManifesto(manifestoId) {
+    selectedManifestoId = manifestoId;
+
+    // Mostrar detalhes, ocultar lista
+    document.getElementById('sidebarManifestoList').classList.add('hidden');
+    document.getElementById('sidebarRouteDetails').classList.add('visible');
+
+    // Loading
+    document.getElementById('routeDetailsContent').innerHTML = `
+        <div class="text-center p-4">
+            <div class="spinner-border text-primary" role="status" style="width:2rem;height:2rem;"></div>
+            <p class="mt-2 text-muted fw-bold small">Carregando rota...</p>
+        </div>
+    `;
+
+    loadRouteDetails(manifestoId);
+}
+
+function loadRouteDetails(manifestoId) {
+    fetch(`/api/mapa/rota/${manifestoId}/`)
+        .then(r => r.json())
+        .then(data => {
+            renderRouteOnMap(data);
+            renderRouteDetailsSidebar(data);
+        })
+        .catch(err => {
+            console.error('Erro ao carregar rota:', err);
+            document.getElementById('routeDetailsContent').innerHTML = `
+                <div class="text-center p-4">
+                    <i class="bi bi-exclamation-triangle text-danger" style="font-size:2rem;"></i>
+                    <p class="mt-2 fw-bold">Erro ao carregar rota</p>
+                </div>
+            `;
+        });
+}
+
+function renderRouteOnMap(data) {
+    markersLayer.clearLayers();
+    routeLayerGroup.clearLayers();
+
+    const bounds = [];
+    const filial = data.filial;
+
+    // Marcador da filial
+    if (filial && filial.lat && filial.lng) {
+        const fm = L.marker([filial.lat, filial.lng], { icon: getFilialIcon() })
+            .bindPopup(`<b>${filial.nome}</b><br><small>Base</small>`);
+        markersLayer.addLayer(fm);
+        bounds.push([filial.lat, filial.lng]);
+    }
+
+    // Pontos para rota sólida (base → entregas realizadas → posição atual)
+    const pontosRealizados = [];
+    if (filial && filial.lat && filial.lng) {
+        pontosRealizados.push([filial.lat, filial.lng]);
+    }
+
+    // Marcadores de entregas realizadas
+    data.entregas_realizadas.forEach(e => {
+        if (e.lat == null || e.lng == null) return;
+        if (!isValidCoord(e.lat, e.lng)) return;
+
+        const icon = getDeliveryIcon(e.status);
+        const m = L.marker([e.lat, e.lng], { icon })
+            .bindPopup(`
+                <b>NF ${e.nota}</b><br>
+                <small>${e.destinatario}</small><br>
+                <small style="color:#059669;">✅ ${e.horario}</small>
+            `);
+        markersLayer.addLayer(m);
+        pontosRealizados.push([e.lat, e.lng]);
+        bounds.push([e.lat, e.lng]);
+    });
+
+    // Posição atual do motorista
+    let posAtual = null;
+    if (data.posicao_atual && isValidCoord(data.posicao_atual.lat, data.posicao_atual.lng)) {
+        posAtual = [data.posicao_atual.lat, data.posicao_atual.lng];
+        pontosRealizados.push(posAtual);
+
+        const driverIcon = getVehicleIcon(data.tipo_veiculo, true);
+        const dm = L.marker(posAtual, { icon: driverIcon })
+            .bindPopup(`
+                <b>${data.motorista}</b><br>
+                <small>Posição atual</small><br>
+                ${data.posicao_atual.last_seen ? '<small>⏱️ ' + data.posicao_atual.last_seen + '</small><br>' : ''}
+                ${data.posicao_atual.battery ? '<small>🔋 ' + data.posicao_atual.battery + '%</small>' : ''}
+            `)
+            .bindTooltip('📍 Posição Atual', { direction: 'top', offset: [0, -25], permanent: true, className: 'driver-tooltip' });
+        markersLayer.addLayer(dm);
+        bounds.push(posAtual);
+    }
+
+    // Pontos para rota pontilhada (posição atual → entregas pendentes)
+    const pontosPendentes = [];
+    if (posAtual) {
+        pontosPendentes.push(posAtual);
+    }
+
+    data.entregas_pendentes.forEach(e => {
+        if (e.lat == null || e.lng == null) return;
+        if (!isValidCoord(e.lat, e.lng)) return;
+
+        const icon = getDeliveryIcon('PENDENTE');
+        const m = L.marker([e.lat, e.lng], { icon })
+            .bindPopup(`
+                <b>NF ${e.nota}</b><br>
+                <small>${e.destinatario}</small><br>
+                <small>${e.endereco}</small><br>
+                <small style="color:#d97706;">📦 Pendente</small>
+            `);
+        markersLayer.addLayer(m);
+        pontosPendentes.push([e.lat, e.lng]);
+        bounds.push([e.lat, e.lng]);
+    });
+
+    // Desenhar rotas via OSRM
+    if (pontosRealizados.length > 1) {
+        drawOSRMRoute(pontosRealizados, {
+            color: '#0d6efd',
+            weight: 5,
+            opacity: 0.9,
+            dashArray: null,
+        });
+    }
+
+    if (pontosPendentes.length > 1) {
+        drawOSRMRoute(pontosPendentes, {
+            color: '#94a3b8',
+            weight: 4,
+            opacity: 0.7,
+            dashArray: '10, 8',
+        }, (duration) => {
+            // Atualizar ETA na sidebar
+            updateETA(duration);
+        });
+    }
+
+    // Ajustar zoom
+    if (bounds.length > 1) {
+        mapaInstance.fitBounds(bounds, { padding: [80, 80], maxZoom: 15 });
+    } else if (bounds.length === 1) {
+        mapaInstance.setView(bounds[0], 14);
+    }
+}
+
+function drawOSRMRoute(points, style, onDuration) {
+    // Limitar waypoints para OSRM público (máximo ~12)
+    let waypoints = points;
+    if (points.length > 12) {
+        const step = Math.ceil(points.length / 10);
+        waypoints = [points[0]];
+        for (let i = 1; i < points.length - 1; i += step) {
+            waypoints.push(points[i]);
+        }
+        waypoints.push(points[points.length - 1]);
+    }
+
+    const coords = waypoints.map(p => `${p[1]},${p[0]}`).join(';');
+    const url = `${OSRM_BASE}/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    fetch(url, { signal: controller.signal })
+        .then(r => {
+            clearTimeout(timeout);
+            if (!r.ok) throw new Error('OSRM error');
+            return r.json();
+        })
+        .then(result => {
+            if (result.routes && result.routes.length > 0) {
+                const route = result.routes[0];
+                const routeCoords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+                const polyline = L.polyline(routeCoords, {
+                    color: style.color,
+                    weight: style.weight,
+                    opacity: style.opacity,
+                    dashArray: style.dashArray,
+                    lineJoin: 'round',
+                    lineCap: 'round',
+                });
+                routeLayerGroup.addLayer(polyline);
+
+                if (onDuration && route.duration) {
+                    onDuration(route.duration);
+                }
+            } else {
+                drawFallbackLine(points, style);
+            }
+        })
+        .catch(() => {
+            clearTimeout(timeout);
+            drawFallbackLine(points, style);
+        });
+}
+
+function drawFallbackLine(points, style) {
+    const polyline = L.polyline(points, {
+        color: style.color,
+        weight: style.weight,
+        opacity: style.opacity * 0.7,
+        dashArray: style.dashArray || '8, 8',
+        lineJoin: 'round',
+    });
+    routeLayerGroup.addLayer(polyline);
+}
+
+function updateETA(durationSeconds) {
+    const etaEl = document.getElementById('routeETAValue');
+    if (!etaEl) return;
+
+    if (durationSeconds < 60) {
+        etaEl.textContent = '< 1 min';
+    } else if (durationSeconds < 3600) {
+        etaEl.textContent = `~${Math.round(durationSeconds / 60)} min`;
+    } else {
+        const hours = Math.floor(durationSeconds / 3600);
+        const mins = Math.round((durationSeconds % 3600) / 60);
+        etaEl.textContent = `~${hours}h ${mins}min`;
+    }
+}
+
+function renderRouteDetailsSidebar(data) {
+    const percent = data.total_nfe > 0 ? Math.round((data.total_baixadas / data.total_nfe) * 100) : 0;
+    const vehicleEmoji = getVehicleEmoji(data.tipo_veiculo);
+
+    let html = `
+        <div class="route-info-card">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:1.5rem;">${vehicleEmoji}</span>
+                <div>
+                    <div class="route-motorista-name">${data.motorista}</div>
+                    <div class="route-manifesto-badge">#${data.manifesto_id} ${data.placa ? '• ' + data.placa : ''}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="route-progress-block">
+            <div class="route-progress-circle" style="--progress: ${percent * 3.6}deg">
+                <div class="route-progress-circle-inner">${percent}%</div>
+            </div>
+            <div>
+                <div style="font-weight:700;font-size:0.85rem;color:#065f46;">${data.total_baixadas} de ${data.total_nfe}</div>
+                <div style="font-size:0.72rem;color:#6b7280;">entregas realizadas</div>
+                ${data.total_pendentes > 0 ? `<div style="font-size:0.68rem;color:#d97706;font-weight:600;margin-top:2px;">${data.total_pendentes} pendente(s)</div>` : ''}
+            </div>
+        </div>
+
+        <div class="route-eta-block">
+            <div class="route-eta-icon"><i class="bi bi-clock-history"></i></div>
+            <div>
+                <div class="route-eta-text">Tempo estimado restante</div>
+                <div class="route-eta-value" id="routeETAValue">Calculando...</div>
+                <div class="route-eta-disclaimer">⚠️ Estimativa sem trânsito</div>
+            </div>
+        </div>
+
+        <div class="route-deliveries-list">
+    `;
+
+    // Entregas realizadas
+    if (data.entregas_realizadas.length > 0) {
+        html += `<div class="route-section-title"><i class="bi bi-check-circle-fill text-success me-1"></i>Entregas Realizadas (${data.entregas_realizadas.length})</div>`;
+        data.entregas_realizadas.forEach(e => {
+            const iconClass = e.status === 'OCORRENCIA' ? 'ocorrencia' : 'done';
+            const iconSymbol = e.status === 'OCORRENCIA' ? '<i class="bi bi-exclamation-triangle-fill"></i>' : '<i class="bi bi-check-lg"></i>';
+            html += `
+                <div class="route-delivery-item">
+                    <div class="route-delivery-icon ${iconClass}">${iconSymbol}</div>
+                    <div class="route-delivery-content">
+                        <div class="route-delivery-nota">NF ${e.nota}</div>
+                        <div class="route-delivery-dest" title="${e.destinatario}">${e.destinatario}</div>
+                        <div class="route-delivery-time">${e.data_hora || e.horario}</div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    // Entregas pendentes
+    if (data.entregas_pendentes.length > 0) {
+        html += `<div class="route-section-title" style="margin-top:8px;"><i class="bi bi-clock-fill text-warning me-1"></i>Entregas Pendentes (${data.entregas_pendentes.length})</div>`;
+        data.entregas_pendentes.forEach(e => {
+            html += `
+                <div class="route-delivery-item">
+                    <div class="route-delivery-icon pending"><i class="bi bi-box-seam"></i></div>
+                    <div class="route-delivery-content">
+                        <div class="route-delivery-nota">NF ${e.nota}</div>
+                        <div class="route-delivery-dest" title="${e.destinatario}">${e.destinatario}</div>
+                        <div class="route-delivery-dest" title="${e.endereco}">${e.endereco}</div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    html += '</div>';
+    document.getElementById('routeDetailsContent').innerHTML = html;
+
+    // Se não tem pendentes, mostra ETA como concluído
+    if (data.total_pendentes === 0) {
+        const etaEl = document.getElementById('routeETAValue');
+        if (etaEl) etaEl.textContent = 'Rota concluída!';
+    }
+}
+
+// ===== VOLTAR PARA LISTA (Estágio 1) =====
+function voltarListaManifestos() {
+    selectedManifestoId = null;
+
+    document.getElementById('sidebarManifestoList').classList.remove('hidden');
+    document.getElementById('sidebarRouteDetails').classList.remove('visible');
+
+    loadVehicles();
+}
+
+// ===== SIDEBAR TOGGLE =====
+function toggleMapSidebar() {
+    const sidebar = document.getElementById('mapaSidebar');
+    const toggleBtn = document.getElementById('sidebarToggleBtn');
+
+    sidebar.classList.toggle('collapsed');
+
+    if (sidebar.classList.contains('collapsed')) {
+        toggleBtn.style.display = 'flex';
+    } else {
+        toggleBtn.style.display = 'none';
+    }
+
+    // Recalcular tamanho do mapa
+    setTimeout(() => { mapaInstance.invalidateSize(); }, 350);
+}
+
+// ===== SELETOR DE FILIAL =====
+function onFilialChange(filialId) {
+    currentFilialId = filialId;
+    selectedManifestoId = null;
+
+    // Voltar para estágio 1
+    document.getElementById('sidebarManifestoList').classList.remove('hidden');
+    document.getElementById('sidebarRouteDetails').classList.remove('visible');
+
+    // Centralizar mapa na filial
+    const opt = document.querySelector(`#filialSelect option[value="${filialId}"]`);
+    if (opt) {
+        const lat = parseFloat(opt.dataset.lat);
+        const lng = parseFloat(opt.dataset.lng);
+        if (!isNaN(lat) && !isNaN(lng) && lat !== 0) {
+            mapaInstance.setView([lat, lng], 12);
+        }
+    }
+
+    // Atualizar URL sem recarregar
+    try {
+        const url = new URL(window.location);
+        url.searchParams.set('filial', filialId);
+        window.history.replaceState({}, '', url);
+    } catch(e) {}
+
+    loadVehicles();
+}
+
+// ===== UTILIDADES =====
+function isValidCoord(lat, lng) {
+    if (lat == null || lng == null) return false;
+    lat = parseFloat(lat);
+    lng = parseFloat(lng);
+    if (isNaN(lat) || isNaN(lng)) return false;
+    if (lat === 0 && lng === 0) return false;
+    return lat >= -34.0 && lat <= 5.5 && lng >= -74.0 && lng <= -34.0;
+}
+</script>
+
+{% endblock %}

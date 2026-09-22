@@ -126,6 +126,8 @@ class Ocorrencia(models.Model):
 class Veiculo(models.Model):
     placa = models.CharField(max_length=10, unique=True, verbose_name="Placa")
     TIPO_CHOICES = [
+        ('MOTO', 'Moto'),
+        ('CARRO', 'Carro'),
         ('CAVALO', 'Cavalo Mecânico'),
         ('CARRETA', 'Carreta'),
         ('TRUCK', 'Truck'),
