@@ -8,7 +8,7 @@ from .models import (
     HistoricoOcorrencia, ManifestoBuscaLog, WebhookEventoManifestoESL, WebhookTokenControl,
     LogBaixaNfe, Frete, Veiculo, LogChecklistManifesto
 )
-from manifesto.tasks import enviar_baixa_esl_task
+from manifesto.tasks import enviar_baixa_esl_task, processar_webhook_manifesto_task
 
 @admin.register(WebhookEventoManifestoESL)
 class WebhookEventoManifestoESLAdmin(admin.ModelAdmin):
@@ -69,7 +69,18 @@ class WebhookEventoManifestoESLAdmin(admin.ModelAdmin):
     ordering = ("-created_at",)
 
     # ⚙️ AÇÕES
-    actions = ["marcar_como_processado", "marcar_como_erro"]
+    actions = ["reprocessar_webhooks", "marcar_como_processado", "marcar_como_erro"]
+
+    def reprocessar_webhooks(self, request, queryset):
+        count = 0
+        for ev in queryset:
+            ev.status = "PENDENTE"
+            ev.erro = None
+            ev.save(update_fields=["status", "erro"])
+            processar_webhook_manifesto_task.delay(ev.id)
+            count += 1
+        self.message_user(request, f"{count} webhook(s) enviado(s) para reprocessamento na fila!")
+    reprocessar_webhooks.short_description = "🔄 Reprocessar webhooks selecionados"
 
     # 🎨 STATUS COM COR
     def status_badge(self, obj):
