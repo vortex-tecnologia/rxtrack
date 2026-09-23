@@ -551,6 +551,18 @@ def processar_webhook_manifesto_task(self, event_id):
             # - Se for um manifesto novo, inicia como AGUARDANDO.
             status_novo = manifesto_existente.status if manifesto_existente else 'AGUARDANDO'
 
+            # 🛡️ PROTEÇÃO CONTRA CONFLITO DE CONSTRAINT:
+            # Um motorista só pode ter 1 manifesto em EM_TRANSPORTE ao mesmo tempo no banco de dados.
+            # Se ele já possui outro em transporte, qualquer novo ou reaberto deve entrar na fila como AGUARDANDO.
+            if motorista_obj and status_novo == 'EM_TRANSPORTE':
+                outro_ativo = Manifesto.objects.filter(
+                    motorista=motorista_obj,
+                    status='EM_TRANSPORTE'
+                ).exclude(id=manifesto_existente.id if manifesto_existente else None).first()
+                if outro_ativo:
+                    logger.info(f"⏳ [FILA] Motorista {motorista_obj.nome_completo} já possui MFT #{outro_ativo.numero_manifesto} em transporte. Manifesto #{num_visual} definido como AGUARDANDO.")
+                    status_novo = 'AGUARDANDO'
+
             # 🏢 RESOLUÇÃO FINAL: filial_operacao via API ESL (Fallback)
             # Se filial_operacao_obj ainda é None (payload sem dados ou manifesto existente sem base),
             # consulta a ESL pelo ID interno do manifesto para obter mft_uer_crn_id (base do criador).
@@ -855,7 +867,17 @@ def processar_webhook_manifesto_task(self, event_id):
             notas_pendentes_count = NotaFiscal.objects.filter(manifesto=manifesto_obj, status='PENDENTE').count()
             if era_finalizado:
                 if notas_pendentes_count > 0 and getattr(manifesto_obj, 'status_tms', '') != 'closed':
-                    manifesto_obj.status = 'EM_TRANSPORTE'
+                    outro_ativo = Manifesto.objects.filter(
+                        motorista=manifesto_obj.motorista,
+                        status='EM_TRANSPORTE'
+                    ).exclude(id=manifesto_obj.id).first()
+
+                    if outro_ativo:
+                        manifesto_obj.status = 'AGUARDANDO'
+                        logger.info(f"⏳ [AUTO-REABERTURA WEBHOOK] Manifesto #{num_mani} reaberto como AGUARDANDO pois motorista já possui MFT #{outro_ativo.numero_manifesto} em transporte.")
+                    else:
+                        manifesto_obj.status = 'EM_TRANSPORTE'
+
                     manifesto_obj.finalizado = False
                     manifesto_obj.data_finalizacao = None
                     manifesto_obj.save(update_fields=['status', 'finalizado', 'data_finalizacao'])
@@ -1183,7 +1205,17 @@ def processar_soap_task(self, evento_id):
             notas_pendentes_count = NotaFiscal.objects.filter(manifesto=manifesto_obj, status='PENDENTE').count()
             if era_finalizado_soap:
                 if notas_pendentes_count > 0 and getattr(manifesto_obj, 'status_tms', '') != 'closed':
-                    manifesto_obj.status = 'EM_TRANSPORTE'
+                    outro_ativo = Manifesto.objects.filter(
+                        motorista=manifesto_obj.motorista,
+                        status='EM_TRANSPORTE'
+                    ).exclude(id=manifesto_obj.id).first()
+
+                    if outro_ativo:
+                        manifesto_obj.status = 'AGUARDANDO'
+                        logger.info(f"⏳ [AUTO-REABERTURA SOAP] Manifesto #{numero_rota} reaberto como AGUARDANDO pois motorista já possui MFT #{outro_ativo.numero_manifesto} em transporte.")
+                    else:
+                        manifesto_obj.status = 'EM_TRANSPORTE'
+
                     manifesto_obj.finalizado = False
                     manifesto_obj.data_finalizacao = None
                     manifesto_obj.save(update_fields=['status', 'finalizado', 'data_finalizacao'])
