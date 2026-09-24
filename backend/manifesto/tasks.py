@@ -378,21 +378,33 @@ def processar_webhook_manifesto_task(self, event_id):
             # 🔍 Busca Inteligente 2: Match por Notas Fiscais e Motorista
             # Se o webhook veio com ID interno TMS (ex: 6896677) e não encontrou manifesto direto,
             # verifica se alguma nota deste payload já pertence a um manifesto ativo deste motorista.
+            # ⚠️ PROTEÇÃO TEMPORAL: Apenas manifestos RECENTES são considerados para evitar
+            # juntar notas de dias diferentes no mesmo manifesto (rotas recorrentes com mesmas NFs).
             itens_payload_pre = payload.get('itens', [])
             if not manifesto_existente and motorista_obj and itens_payload_pre:
+                from datetime import timedelta
+                limite_busca_ativo = timezone.now() - timedelta(hours=12)
+                limite_busca_fallback = timezone.now() - timedelta(hours=6)
+
                 chaves_pre = [it.get('chave_item') for it in itens_payload_pre if it.get('chave_item')]
                 nums_pre = [str(it.get('numero_item')) for it in itens_payload_pre if it.get('numero_item')]
                 
+                # Busca 1: Manifestos NÃO finalizados E criados nas últimas 12 horas
                 nota_match = NotaFiscal.objects.filter(
                     Q(chave_acesso__in=chaves_pre) | Q(numero_nota__in=nums_pre),
                     manifesto__motorista=motorista_obj,
-                    manifesto__finalizado=False
+                    manifesto__finalizado=False,
+                    manifesto__data_criacao__gte=limite_busca_ativo
                 ).select_related('manifesto').first()
 
+                # Fallback: Manifestos recentes (últimas 6h), excluindo FINALIZADO e CANCELADO
                 if not nota_match:
                     nota_match = NotaFiscal.objects.filter(
                         Q(chave_acesso__in=chaves_pre) | Q(numero_nota__in=nums_pre),
-                        manifesto__motorista=motorista_obj
+                        manifesto__motorista=motorista_obj,
+                        manifesto__data_criacao__gte=limite_busca_fallback
+                    ).exclude(
+                        manifesto__status__in=['FINALIZADO', 'CANCELADO']
                     ).select_related('manifesto').order_by('-manifesto__id').first()
 
                 if nota_match and nota_match.manifesto:
