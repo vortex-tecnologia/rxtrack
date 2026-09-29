@@ -318,17 +318,32 @@ function garantirCardFilial(filialId, filialNome, initialCount = 0) {
             emptyMsg.remove();
         }
 
-        const deveEsconder = (window.filialAtivaTorreId && String(d.filial_id) !== String(window.filialAtivaTorreId));
+        let catVeiculo = 'CARRO';
+        const tv = (d.tipo_veiculo || '').toUpperCase();
+        if (tv === 'MOTO') catVeiculo = 'MOTO';
+        else if (tv === 'CARRO') catVeiculo = 'CARRO';
+        else if (['VAN', 'UTILITARIO'].includes(tv)) catVeiculo = 'VAN';
+        else if (['TRUCK', 'CARRETA', 'CAVALO'].includes(tv)) catVeiculo = 'CAMINHAO';
+
+        const deveEsconderFilial = (window.filialAtivaTorreId && String(d.filial_id) !== String(window.filialAtivaTorreId));
+        const deveEsconderTipo = (window.filtroVeiculoAtivo && window.filtroVeiculoAtivo !== 'TODOS' && catVeiculo !== window.filtroVeiculoAtivo);
+        const deveEsconder = deveEsconderFilial || deveEsconderTipo;
+
         const html = `
             <div class="col-12 col-md-6 col-lg-4 col-xl-3 manifesto-card-item" 
                  id="card-mft-${d.manifesto_id}"
                  data-status="${d.status || 'AGUARDANDO'}"
                  data-motorista-id="${d.motorista_id || ''}"
+                 data-motorista-nome="${(d.motorista_nome || '').toLowerCase()}"
+                 data-placa="${(d.placa_veiculo || '').toLowerCase()}"
+                 data-manifesto="${d.manifesto_id}"
                  data-criacao="${d.data_criacao_iso || ''}"
                  data-is-viagem="${d.is_viagem ? 'true' : 'false'}"
                  data-uf-destino="${d.uf_destino_viagem || ''}"
                  data-filial-id="${d.filial_id || ''}"
                  data-filial-nome="${d.filial_nome || ''}"
+                 data-tipo-veiculo="${d.tipo_veiculo || 'CARRO'}"
+                 data-categoria-veiculo="${catVeiculo}"
                  style="${deveEsconder ? 'display: none;' : ''}">
                 <div class="card h-100 border-0 shadow-sm position-relative overflow-hidden" style="border-radius: 15px;">
                     <div class="progress position-absolute top-0 start-0 w-100" style="height: 4px; border-radius: 0;">
@@ -343,9 +358,22 @@ function garantirCardFilial(filialId, filialNome, initialCount = 0) {
                                     ${d.foto_motorista ?
                 `<img src="${d.foto_motorista}" class="rounded-circle" style="width: 44px; height: 44px; object-fit: cover; border: 2px solid #0d6efd;">`
                 :
-                `<div class="bg-soft-primary p-2 rounded-circle d-flex justify-content-center align-items-center" style="width: 44px; height: 44px;">
-                                        <i class="fas fa-truck-moving text-primary"></i>
-                                    </div>`
+                (tv === 'MOTO' ?
+                    `<div class="bg-warning-subtle text-warning-emphasis p-2 rounded-circle d-flex justify-content-center align-items-center shadow-xs" style="width: 44px; height: 44px; border: 2px solid rgba(245, 158, 11, 0.5);" title="Moto (${d.placa_veiculo || 'Sem Placa'})">
+                        <i class="fas fa-motorcycle fs-5 text-warning-emphasis"></i>
+                    </div>` :
+                ['TRUCK', 'CARRETA', 'CAVALO'].includes(tv) ?
+                    `<div class="bg-primary-subtle text-primary p-2 rounded-circle d-flex justify-content-center align-items-center shadow-xs" style="width: 44px; height: 44px; border: 2px solid rgba(13, 110, 253, 0.4);" title="Caminhão (${d.placa_veiculo || 'Sem Placa'})">
+                        <i class="fas fa-truck-moving fs-5 text-primary"></i>
+                    </div>` :
+                ['VAN', 'UTILITARIO'].includes(tv) ?
+                    `<div class="bg-info-subtle text-info-emphasis p-2 rounded-circle d-flex justify-content-center align-items-center shadow-xs" style="width: 44px; height: 44px; border: 2px solid rgba(13, 202, 240, 0.4);" title="Van/Utilitário (${d.placa_veiculo || 'Sem Placa'})">
+                        <i class="fas fa-van-shuttle fs-5 text-info-emphasis"></i>
+                    </div>` :
+                    `<div class="bg-primary-subtle text-primary p-2 rounded-circle d-flex justify-content-center align-items-center shadow-xs" style="width: 44px; height: 44px; border: 2px solid rgba(13, 110, 253, 0.4);" title="Carro (${d.placa_veiculo || 'Sem Placa'})">
+                        <i class="fas fa-car-side fs-5 text-primary"></i>
+                    </div>`
+                )
             }
                                 </div>
                                 <div class="ms-2 flex-grow-1" style="min-width: 0;">
@@ -357,7 +385,12 @@ function garantirCardFilial(filialId, filialNome, initialCount = 0) {
                                         <small class="text-muted text-nowrap" style="font-size: 0.78rem;">#${d.manifesto_id}</small>
                                         ${d.placa_veiculo ? `
                                             <span class="badge bg-light text-dark border px-1 py-0 d-inline-flex align-items-center gap-1" style="font-size: 0.62rem; font-weight: 600; border-radius: 4px;" title="Veículo: ${d.placa_veiculo}">
-                                                <i class="fas ${['TRUCK', 'CARRETA', 'CAVALO'].includes(d.tipo_veiculo) ? 'fa-truck' : 'fa-car'} text-secondary" style="font-size: 0.6rem;"></i>
+                                                <i class="fas ${
+                                                    tv === 'MOTO' ? 'fa-motorcycle text-warning-emphasis' :
+                                                    ['TRUCK', 'CARRETA', 'CAVALO'].includes(tv) ? 'fa-truck text-secondary' :
+                                                    ['VAN', 'UTILITARIO'].includes(tv) ? 'fa-van-shuttle text-secondary' :
+                                                    'fa-car text-secondary'
+                                                }" style="font-size: ${tv === 'MOTO' ? '0.68rem' : '0.6rem'};"></i>
                                                 ${d.placa_veiculo}
                                             </span>
                                         ` : ''}
@@ -464,7 +497,9 @@ function garantirCardFilial(filialId, filialNome, initialCount = 0) {
             cardCriado.querySelectorAll('.operacoes-icons [data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
         }
 
-        if (typeof reavaliarStacks === 'function') {
+        if (typeof window.aplicarFiltrosNaGrid === 'function') {
+            window.aplicarFiltrosNaGrid();
+        } else if (typeof reavaliarStacks === 'function') {
             reavaliarStacks();
         }
     }
@@ -974,10 +1009,20 @@ function agruparCardsPorMotorista() {
     // Pega todos os cards de manifesto presentes no DOM
     const allCards = Array.from(grid.querySelectorAll('.manifesto-card-item'));
     
-    // Filtra apenas os cards da filial ativa no momento (ou todos se nenhuma estiver filtrada)
+    // Filtra apenas os cards que atendem aos filtros ativos (filial, veículo, busca)
     const cardsFilial = allCards.filter(card => {
+        if (typeof window.cardCorrespondeAosFiltros === 'function') {
+            return window.cardCorrespondeAosFiltros(card);
+        }
         const cFilial = card.getAttribute('data-filial-id');
         return !window.filialAtivaTorreId || String(cFilial) === String(window.filialAtivaTorreId);
+    });
+
+    // Garante que cards fora do filtro permaneçam ocultos
+    allCards.forEach(card => {
+        if (!cardsFilial.includes(card)) {
+            card.style.display = 'none';
+        }
     });
 
     // Agrupa por motorista_id ou fallback pelo nome do motorista

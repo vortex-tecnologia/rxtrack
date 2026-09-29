@@ -251,17 +251,59 @@
         </div>
     </div>
 
+    <!-- BARRA DE FILTROS: CATEGORIA DE VEÍCULO E BUSCA RÁPIDA -->
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4 p-2 px-3 bg-white rounded-4 shadow-sm border border-light-subtle">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="text-secondary fw-semibold small text-uppercase me-1" style="font-size: 0.72rem; letter-spacing: 0.5px;">
+                <i class="fas fa-layer-group text-primary me-1"></i>Categoria:
+            </span>
+            <div class="btn-group btn-group-sm" role="group" id="filtro-categoria-veiculo" style="box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden;">
+                <button type="button" class="btn btn-outline-primary active fw-semibold btn-filtro-veiculo" data-tipo="TODOS" onclick="selecionarFiltroVeiculo('TODOS')">
+                    Todos <span class="badge bg-primary text-white rounded-pill ms-1" id="badge-tipo-todos">0</span>
+                </button>
+                <button type="button" class="btn btn-outline-primary fw-semibold btn-filtro-veiculo" data-tipo="CARRO" onclick="selecionarFiltroVeiculo('CARRO')">
+                    <i class="fas fa-car me-1"></i>Carros <span class="badge bg-secondary-subtle text-dark rounded-pill ms-1" id="badge-tipo-carro">0</span>
+                </button>
+                <button type="button" class="btn btn-outline-primary fw-semibold btn-filtro-veiculo" data-tipo="MOTO" onclick="selecionarFiltroVeiculo('MOTO')">
+                    <i class="fas fa-motorcycle text-warning-emphasis me-1"></i>Motos <span class="badge bg-secondary-subtle text-dark rounded-pill ms-1" id="badge-tipo-moto">0</span>
+                </button>
+                <button type="button" class="btn btn-outline-primary fw-semibold btn-filtro-veiculo" data-tipo="VAN" onclick="selecionarFiltroVeiculo('VAN')">
+                    <i class="fas fa-van-shuttle me-1"></i>Vans <span class="badge bg-secondary-subtle text-dark rounded-pill ms-1" id="badge-tipo-van">0</span>
+                </button>
+                <button type="button" class="btn btn-outline-primary fw-semibold btn-filtro-veiculo" data-tipo="CAMINHAO" onclick="selecionarFiltroVeiculo('CAMINHAO')">
+                    <i class="fas fa-truck me-1"></i>Caminhões <span class="badge bg-secondary-subtle text-dark rounded-pill ms-1" id="badge-tipo-caminhao">0</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Busca Rápida -->
+        <div class="d-flex align-items-center gap-2">
+            <div class="input-group input-group-sm" style="width: 260px;">
+                <span class="input-group-text bg-light border-end-0 text-muted"><i class="fas fa-search"></i></span>
+                <input type="text" class="form-control bg-light border-start-0 ps-0" id="busca-torre-input" placeholder="Buscar motorista, placa, #..." oninput="aoDigitarBuscaTorre(this.value)">
+                <button class="btn btn-light border border-start-0 text-muted d-none" type="button" id="btn-limpar-busca" onclick="limparBuscaTorre()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div class="row g-3" id="grid-monitoramento">
         {% for m in manifestos %}
         <div class="col-12 col-md-6 col-lg-4 col-xl-3 manifesto-card-item" 
              id="card-mft-{{ m.numero_manifesto }}"
              data-status="{{ m.status }}"
              data-motorista-id="{% if m.motorista %}{{ m.motorista.id }}{% endif %}"
+             data-motorista-nome="{% if m.motorista %}{% if m.motorista.nome_completo %}{{ m.motorista.nome_completo|lower }}{% elif m.motorista.user %}{{ m.motorista.user.username|lower }}{% else %}{{ m.motorista.cpf }}{% endif %}{% else %}sem motorista{% endif %}"
+             data-placa="{% if m.veiculo and m.veiculo.placa %}{{ m.veiculo.placa|lower }}{% endif %}"
+             data-manifesto="{{ m.numero_manifesto }}"
              data-criacao="{{ m.data_criacao|date:'c' }}"
              data-is-viagem="{% if m.is_viagem %}true{% else %}false{% endif %}"
              data-uf-destino="{{ m.uf_destino_viagem|default:'' }}"
              data-filial-id="{% firstof m.filial_operacao_id m.filial_id '' %}"
              data-filial-nome="{% if m.filial_operacao %}{{ m.filial_operacao.nome }}{% elif m.filial %}{{ m.filial.nome }}{% endif %}"
+             data-tipo-veiculo="{{ m.veiculo.tipo|default:'CARRO' }}"
+             data-categoria-veiculo="{% if m.veiculo.tipo == 'MOTO' %}MOTO{% elif m.veiculo.tipo == 'CARRO' %}CARRO{% elif m.veiculo.tipo in 'VAN,UTILITARIO' %}VAN{% elif m.veiculo.tipo in 'TRUCK,CARRETA,CAVALO' %}CAMINHAO{% else %}CARRO{% endif %}"
              style="{% if filial_ativa_id %}{% with efetiva_id=m.filial_operacao_id|default:m.filial_id %}{% if efetiva_id != filial_ativa_id %}display: none;{% endif %}{% endwith %}{% endif %}">
             <div class="card h-100 border-0 shadow-sm position-relative overflow-hidden" style="border-radius: 15px;">
                 <div class="progress position-absolute top-0 start-0 w-100" style="height: 4px; border-radius: 0;">
@@ -277,10 +319,32 @@
                                 <img src="{{ m.motorista.foto_perfil.url }}" class="rounded-circle"
                                     style="width: 44px; height: 44px; object-fit: cover; border: 2px solid #0d6efd;">
                                 {% else %}
-                                <div class="bg-soft-primary p-2 rounded-circle d-flex justify-content-center align-items-center"
-                                    style="width: 44px; height: 44px;">
-                                    <i class="fas fa-truck-moving text-primary"></i>
-                                </div>
+                                    {% if m.veiculo and m.veiculo.tipo == 'MOTO' %}
+                                    <div class="bg-warning-subtle text-warning-emphasis p-2 rounded-circle d-flex justify-content-center align-items-center shadow-xs"
+                                        style="width: 44px; height: 44px; border: 2px solid rgba(245, 158, 11, 0.5);" title="Moto{% if m.veiculo.placa %} ({{ m.veiculo.placa }}){% endif %}">
+                                        <i class="fas fa-motorcycle fs-5 text-warning-emphasis"></i>
+                                    </div>
+                                    {% elif m.veiculo and m.veiculo.tipo in 'TRUCK,CARRETA,CAVALO' %}
+                                    <div class="bg-primary-subtle text-primary p-2 rounded-circle d-flex justify-content-center align-items-center shadow-xs"
+                                        style="width: 44px; height: 44px; border: 2px solid rgba(13, 110, 253, 0.4);" title="Caminhão{% if m.veiculo.placa %} ({{ m.veiculo.placa }}){% endif %}">
+                                        <i class="fas fa-truck-moving fs-5 text-primary"></i>
+                                    </div>
+                                    {% elif m.veiculo and m.veiculo.tipo in 'VAN,UTILITARIO' %}
+                                    <div class="bg-info-subtle text-info-emphasis p-2 rounded-circle d-flex justify-content-center align-items-center shadow-xs"
+                                        style="width: 44px; height: 44px; border: 2px solid rgba(13, 202, 240, 0.4);" title="Van/Utilitário{% if m.veiculo.placa %} ({{ m.veiculo.placa }}){% endif %}">
+                                        <i class="fas fa-van-shuttle fs-5 text-info-emphasis"></i>
+                                    </div>
+                                    {% elif m.veiculo and m.veiculo.tipo == 'CARRO' %}
+                                    <div class="bg-primary-subtle text-primary p-2 rounded-circle d-flex justify-content-center align-items-center shadow-xs"
+                                        style="width: 44px; height: 44px; border: 2px solid rgba(13, 110, 253, 0.4);" title="Carro{% if m.veiculo.placa %} ({{ m.veiculo.placa }}){% endif %}">
+                                        <i class="fas fa-car-side fs-5 text-primary"></i>
+                                    </div>
+                                    {% else %}
+                                    <div class="bg-primary-subtle text-primary p-2 rounded-circle d-flex justify-content-center align-items-center shadow-xs"
+                                        style="width: 44px; height: 44px; border: 2px solid rgba(13, 110, 253, 0.4);" title="Veículo">
+                                        <i class="fas fa-car text-primary fs-5"></i>
+                                    </div>
+                                    {% endif %}
                                 {% endif %}
                             </div>
                             <div class="ms-2 flex-grow-1" style="min-width: 0;">
@@ -304,10 +368,14 @@
                                     <small class="text-muted text-nowrap" style="font-size: 0.78rem;">#{{ m.numero_manifesto }}</small>
                                     {% if m.veiculo and m.veiculo.placa %}
                                         <span class="badge bg-light text-dark border px-1 py-0 d-inline-flex align-items-center gap-1" style="font-size: 0.62rem; font-weight: 600; border-radius: 4px;" title="Veículo: {{ m.veiculo.placa }}{% if m.veiculo.tipo %} ({{ m.veiculo.get_tipo_display }}){% endif %}">
-                                            {% if m.veiculo.tipo in 'TRUCK,CARRETA,CAVALO' %}
-                                                <i class="fas fa-truck text-secondary" style="font-size: 0.6rem;"></i>
+                                            {% if m.veiculo.tipo == 'MOTO' %}
+                                                <i class="fas fa-motorcycle text-warning-emphasis" style="font-size: 0.68rem;" title="Moto"></i>
+                                            {% elif m.veiculo.tipo in 'TRUCK,CARRETA,CAVALO' %}
+                                                <i class="fas fa-truck text-secondary" style="font-size: 0.6rem;" title="Caminhão"></i>
+                                            {% elif m.veiculo.tipo in 'VAN,UTILITARIO' %}
+                                                <i class="fas fa-van-shuttle text-secondary" style="font-size: 0.6rem;" title="Van/Utilitário"></i>
                                             {% else %}
-                                                <i class="fas fa-car text-secondary" style="font-size: 0.6rem;"></i>
+                                                <i class="fas fa-car text-secondary" style="font-size: 0.6rem;" title="Carro"></i>
                                             {% endif %}
                                             {{ m.veiculo.placa }}
                                         </span>
@@ -633,6 +701,8 @@
         // Passagem da variável de filial ativa para o WS (slugificada no backend)
         window.FILIAL_ATIVA = "{{ filial_selecionada|default:'todas' }}";
         window.filialAtivaTorreId = "{{ filial_ativa_id|default:'' }}";
+        window.filtroVeiculoAtivo = 'TODOS';
+        window.filtroBuscaTexto = '';
 
         function selecionarFilialTorre(filialId) {
             window.filialAtivaTorreId = String(filialId);
@@ -658,7 +728,7 @@
             });
 
             // 2. Filtra os cards de manifesto na grid
-            aplicarFiltroFilialNaGrid();
+            aplicarFiltrosNaGrid();
 
             // 3. Atualiza query param na URL silenciosamente
             try {
@@ -668,16 +738,113 @@
             } catch (e) {}
         }
 
-        function aplicarFiltroFilialNaGrid() {
+        function selecionarFiltroVeiculo(tipo) {
+            window.filtroVeiculoAtivo = tipo || 'TODOS';
+
+            // Atualiza botões do grupo
+            document.querySelectorAll('.btn-filtro-veiculo').forEach(btn => {
+                if (btn.getAttribute('data-tipo') === window.filtroVeiculoAtivo) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            aplicarFiltrosNaGrid();
+        }
+
+        function aoDigitarBuscaTorre(termo) {
+            window.filtroBuscaTexto = (termo || '').trim().toLowerCase();
+            const btnLimpar = document.getElementById('btn-limpar-busca');
+            if (btnLimpar) {
+                if (window.filtroBuscaTexto) {
+                    btnLimpar.classList.remove('d-none');
+                } else {
+                    btnLimpar.classList.add('d-none');
+                }
+            }
+            aplicarFiltrosNaGrid();
+        }
+
+        function limparBuscaTorre() {
+            const input = document.getElementById('busca-torre-input');
+            if (input) input.value = '';
+            aoDigitarBuscaTorre('');
+        }
+
+        function cardCorrespondeAosFiltros(card) {
+            // 1. Filial
+            const cardFilialId = card.getAttribute('data-filial-id');
+            if (window.filialAtivaTorreId && cardFilialId !== String(window.filialAtivaTorreId)) {
+                return false;
+            }
+
+            // 2. Categoria de Veículo
+            if (window.filtroVeiculoAtivo && window.filtroVeiculoAtivo !== 'TODOS') {
+                const cat = card.getAttribute('data-categoria-veiculo') || 'CARRO';
+                if (cat !== window.filtroVeiculoAtivo) {
+                    return false;
+                }
+            }
+
+            // 3. Busca de Texto (motorista, placa, número de manifesto)
+            if (window.filtroBuscaTexto) {
+                const motNome = (card.getAttribute('data-motorista-nome') || '').toLowerCase();
+                const placa = (card.getAttribute('data-placa') || '').toLowerCase();
+                const numMft = (card.getAttribute('data-manifesto') || '').toLowerCase();
+                const termo = window.filtroBuscaTexto;
+                if (!motNome.includes(termo) && !placa.includes(termo) && !numMft.includes(termo)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        function atualizarContadoresCategoriasVeiculo() {
             const grid = document.getElementById('grid-monitoramento');
             if (!grid) return;
+
+            const cards = grid.querySelectorAll('.manifesto-card-item');
+            let total = 0, carro = 0, moto = 0, van = 0, caminhao = 0;
+
+            cards.forEach(card => {
+                const cardFilialId = card.getAttribute('data-filial-id');
+                if (!window.filialAtivaTorreId || cardFilialId === String(window.filialAtivaTorreId)) {
+                    total++;
+                    const cat = card.getAttribute('data-categoria-veiculo') || 'CARRO';
+                    if (cat === 'MOTO') moto++;
+                    else if (cat === 'CARRO') carro++;
+                    else if (cat === 'VAN') van++;
+                    else if (cat === 'CAMINHAO') caminhao++;
+                    else carro++;
+                }
+            });
+
+            const bTodos = document.getElementById('badge-tipo-todos');
+            const bCarro = document.getElementById('badge-tipo-carro');
+            const bMoto = document.getElementById('badge-tipo-moto');
+            const bVan = document.getElementById('badge-tipo-van');
+            const bCaminhao = document.getElementById('badge-tipo-caminhao');
+
+            if (bTodos) bTodos.textContent = total;
+            if (bCarro) bCarro.textContent = carro;
+            if (bMoto) bMoto.textContent = moto;
+            if (bVan) bVan.textContent = van;
+            if (bCaminhao) bCaminhao.textContent = caminhao;
+        }
+
+        function aplicarFiltrosNaGrid() {
+            const grid = document.getElementById('grid-monitoramento');
+            if (!grid) return;
+
+            atualizarContadoresCategoriasVeiculo();
 
             const cards = grid.querySelectorAll('.manifesto-card-item');
             let visiveis = 0;
 
             cards.forEach(card => {
-                const cardFilialId = card.getAttribute('data-filial-id');
-                if (!window.filialAtivaTorreId || cardFilialId === String(window.filialAtivaTorreId)) {
+                if (cardCorrespondeAosFiltros(card)) {
                     card.style.display = '';
                     visiveis++;
                 } else {
@@ -693,7 +860,13 @@
                 if (emptyStateEl) {
                     const btnAtivo = document.getElementById(`btn-filial-${window.filialAtivaTorreId}`);
                     const nomeF = btnAtivo ? btnAtivo.getAttribute('data-filial-nome') : 'desta filial';
-                    if (emptyNomeFilial) emptyNomeFilial.textContent = nomeF;
+                    if (emptyNomeFilial) {
+                        if (window.filtroVeiculoAtivo !== 'TODOS') {
+                            emptyNomeFilial.textContent = `${nomeF} (${window.filtroVeiculoAtivo})`;
+                        } else {
+                            emptyNomeFilial.textContent = nomeF;
+                        }
+                    }
                     emptyStateEl.classList.remove('d-none');
                 }
             } else {
@@ -702,13 +875,19 @@
                 }
             }
 
-            // Recalcula agrupamento de pilhas para a filial selecionada
+            // Recalcula agrupamento de pilhas para a seleção ativa
             if (typeof reavaliarStacks === 'function') {
                 reavaliarStacks();
             }
         }
+
+        // Mantém compatibilidade com funções globais
+        window.aplicarFiltrosNaGrid = aplicarFiltrosNaGrid;
+        window.aplicarFiltroFilialNaGrid = aplicarFiltrosNaGrid;
+        window.cardCorrespondeAosFiltros = cardCorrespondeAosFiltros;
+        window.selecionarFiltroVeiculo = selecionarFiltroVeiculo;
     </script>
-    <script src="{% static 'desktop/js/monitoramento/ws.js' %}?v=16"></script>
+    <script src="{% static 'desktop/js/monitoramento/ws.js' %}?v=17"></script>
     <script>
         let mapaEntrega = null;
 
