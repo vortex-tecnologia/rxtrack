@@ -14,6 +14,8 @@ from integracoes.views.api_tms import (
     finalizar_manifesto_tms, registrar_nota_tms, 
     status_ocorrencia_tms, comprovante_nota_tms, remover_nota_tms
 )
+from manifesto.rotas.resumo import ManifestoResumoView
+
 api_docs_patterns = [
     path('api/webhook/tms/', webhook_tms),
     path('api/integracoes/soap/uploadRoute/', UploadRouteSoapView.as_view()),
@@ -24,6 +26,7 @@ api_docs_patterns = [
     path('api/integracoes/tms/nota/status/', status_ocorrencia_tms),
     path('api/integracoes/tms/nota/comprovante/', comprovante_nota_tms),
     path('api/integracoes/tms/nota/deletar/', remover_nota_tms),
+    path('api/manifesto/resumo/', ManifestoResumoView.as_view()),
 ]
 urlpatterns = [
     path('capacitor.js', lambda r: HttpResponse("", content_type="application/javascript")),
