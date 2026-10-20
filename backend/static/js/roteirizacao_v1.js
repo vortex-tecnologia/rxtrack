@@ -157,7 +157,7 @@
         const mapaSalvas = new Map();
         if (rotaSalva && Array.isArray(rotaSalva.paradas)) {
             rotaSalva.paradas.forEach((p, idx) => {
-                const key = String(p.id || p.numero);
+                const key = String(p.numero || p.id);
                 mapaSalvas.set(key, {
                     ordem: idx,
                     selecionada: p.selecionada !== false,
@@ -173,7 +173,7 @@
             const idNota = String(nf.id || numero);
             const isBaixada = Boolean(nf.ja_baixada || (nf.status && ['BAIXADA', 'OCORRENCIA'].includes(nf.status)));
 
-            const salvoInfo = mapaSalvas.get(idNota) || mapaSalvas.get(numero);
+            const salvoInfo = mapaSalvas.get(numero) || mapaSalvas.get(idNota);
 
             lista.push({
                 id: nf.id,
@@ -956,7 +956,7 @@
      * 2. Promove a próxima nota da sequência para ATUAL
      * 3. Atualiza o banner e botão NAVEGAR PARA PRÓXIMA
      */
-    function avancarProximaEntregaAposBaixa(numeroNotaBaixada, notaIdBaixada) {
+    function avancarProximaEntregaAposBaixa(numeroNotaBaixada) {
         const manifestoId = obterManifestoIdAtual();
         if (!manifestoId) return;
 
@@ -965,11 +965,7 @@
 
         let alterado = false;
         rota.paradas.forEach((p) => {
-            // Com ID da nota: casa só pela parada exata (número pode ser 0/repetido)
-            const casa = notaIdBaixada
-                ? String(p.id) === String(notaIdBaixada)
-                : (String(p.numero) === String(numeroNotaBaixada) || String(p.id) === String(numeroNotaBaixada));
-            if (casa) {
+            if (String(p.numero) === String(numeroNotaBaixada) || String(p.id) === String(numeroNotaBaixada)) {
                 if (!p.concluida) {
                     p.concluida = true;
                     alterado = true;

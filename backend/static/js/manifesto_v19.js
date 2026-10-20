@@ -38,28 +38,6 @@ let modoSelecaoAtivo = false;
 let notasSelecionadas = new Set();
 let longPressTimer;
 
-// =====================================================
-// IDENTIFICAÇÃO DE NOTA PELO ID INTERNO (nota_id)
-// O número da nota pode ser 0/vazio/repetido; o ID do banco é único.
-// =====================================================
-function localizarCardNota(numero, notaId) {
-    if (notaId) {
-        return Array.prototype.find.call(
-            document.querySelectorAll('.card-nf'),
-            c => c.dataset.notaId === String(notaId)
-        ) || null;
-    }
-    return document.getElementById(`card-nf-${numero}`);
-}
-
-// Seleção em lote guarda o ID da nota (ou o número, se o card não tiver ID)
-function localizarCardSelecionado(chaveSel) {
-    return Array.prototype.find.call(
-        document.querySelectorAll('.card-nf'),
-        c => c.dataset.notaId === String(chaveSel)
-    ) || document.getElementById(`card-nf-${chaveSel}`);
-}
-
 function iniciarLongPress(e, numeroNF) {
     if (modoSelecaoAtivo) return; // Se já tá ativo, ignora
     
@@ -113,13 +91,12 @@ function toggleSelecaoCard(numeroNF, cardElement) {
 
     const checkbox = cardElement.querySelector('.checkbox-selecao');
     
-    const chaveSel = cardElement.dataset.notaId || numeroNF;
-    if (notasSelecionadas.has(chaveSel)) {
-        notasSelecionadas.delete(chaveSel);
+    if (notasSelecionadas.has(numeroNF)) {
+        notasSelecionadas.delete(numeroNF);
         cardElement.classList.remove('selecionado');
         if(checkbox) checkbox.checked = false;
     } else {
-        notasSelecionadas.add(chaveSel);
+        notasSelecionadas.add(numeroNF);
         cardElement.classList.add('selecionado');
         if(checkbox) checkbox.checked = true;
     }
@@ -139,20 +116,20 @@ function toggleSelecaoCard(numeroNF, cardElement) {
 // =====================================================
 // INTERCEPTORES DE CLIQUE
 // =====================================================
-function handleCardClick(e, numeroNF, chaveAcesso, tipo, notaId) {
+function handleCardClick(e, numeroNF, chaveAcesso, tipo) {
     if (modoSelecaoAtivo) {
         // Modo WhatsApp: Apenas seleciona/deseleciona
         toggleSelecaoCard(numeroNF, e.currentTarget);
     } else {
         // Comportamento normal: abre modal de baixa individual
         if (tipo === 'ENTREGA') {
-            abrirModalBaixa(numeroNF, chaveAcesso, tipo, notaId);
+            abrirModalBaixa(numeroNF, chaveAcesso, tipo);
         } else if (tipo === 'COLETA') {
             abrirModalColeta(numeroNF, numeroNF, tipo);
         } else if (tipo === 'TRANSFERENCIA') {
-            confirmarTransferenciaIndividual(numeroNF, chaveAcesso, notaId);
+            confirmarTransferenciaIndividual(numeroNF, chaveAcesso);
         } else {
-            abrirModalPerguntaOperacional(numeroNF, chaveAcesso, tipo, notaId);
+            abrirModalPerguntaOperacional(numeroNF, chaveAcesso, tipo);
         }
     }
 }
@@ -237,9 +214,6 @@ async function sincronizarBaixasPendentes() {
 
             formData.append('chave_acesso', item.chaveNF || '');
             formData.append('numero_nota', item.numeroNF || '');
-            if (item.notaId) {
-                formData.append('nota_id', item.notaId);
-            }
             formData.append('manifesto_id', item.mID || '');
 
             if (item.campos && item.campos.tipo_operacao === 'COLETA') {
@@ -903,7 +877,6 @@ function gerarCardHTML(nf, config, baixada, sincronizando = false) {
         id="card-nf-${numero}"
         data-chave="${chave}"
         data-numero="${numero}"
-        data-nota-id="${nf.id || ''}"
         ${(!baixada && !sincronizando) ? `
         onmousedown="iniciarLongPress(event, '${numero}')" 
         onmouseup="cancelarLongPress()" 
@@ -911,7 +884,7 @@ function gerarCardHTML(nf, config, baixada, sincronizando = false) {
         ontouchstart="iniciarLongPress(event, '${numero}')" 
         ontouchend="cancelarLongPress()" 
         ontouchcancel="cancelarLongPress()"
-        onclick="handleCardClick(event, '${numero}', '${chave}', '${tipo}', '${nf.id || ''}')"
+        onclick="handleCardClick(event, '${numero}', '${chave}', '${tipo}')"
         oncontextmenu="event.preventDefault();"
         ` : ''}>
             <div class="card-body p-3">
@@ -1280,8 +1253,6 @@ async function salvarRegistro() {
     const canvas = document.getElementById('canvas-preview');
     const inputNumero = document.getElementById('hidden-numero-nf');
     const numeroNF = inputNumero ? inputNumero.value : '';
-    const inputNotaIdModal = document.getElementById('hidden-nota-id');
-    const notaIdAtual = inputNotaIdModal ? inputNotaIdModal.value : '';
 
     const isRetida = document.getElementById('check-nota-retida').checked;
     const inputObs = document.getElementById('input-observacao').value;
@@ -1363,9 +1334,6 @@ async function salvarRegistro() {
     formData.append('ocorrencia_codigo', cod);
     formData.append('chave_acesso', chaveNF);
     formData.append('numero_nota', numeroNF);
-    if (notaIdAtual) {
-        formData.append('nota_id', notaIdAtual);
-    }
     formData.append('manifesto_id', mID);
     formData.append('recebedor', inputRecebedor.value || '');
     formData.append('nota_retida', isRetida);
@@ -1422,12 +1390,7 @@ async function salvarRegistro() {
             atualizarStatusUI('success', '✅ Registro Cadastrado!', msgSucesso);
 
             // Processa o sumiço / avanço de cada nota do agrupamento
-            const idsAfetados = Array.isArray(data.notas_afetadas_ids) ? data.notas_afetadas_ids : [];
-            if (idsAfetados.length > 0 && idsAfetados.length === notasAfetadas.length) {
-                notasAfetadas.forEach((num, i) => processarSumiçoNota(num, idsAfetados[i]));
-            } else {
-                notasAfetadas.forEach(num => processarSumiçoNota(num, notasAfetadas.length === 1 ? notaIdAtual : undefined));
-            }
+            notasAfetadas.forEach(num => processarSumiçoNota(num));
             atualizarListaViva(manifestoAtual);
 
         } else {
@@ -1460,34 +1423,25 @@ async function salvarRegistro() {
             const store = transaction.objectStore('baixas_pendentes');
 
             // Determina todas as notas afetadas em modo offline
-            let alvosOffline = [{ numero: String(numeroNF), notaId: notaIdAtual, chave: chaveNF }];
+            let notasAfetadasOffline = [numeroNF];
             if (aplicarTodasCte && cteNum && Array.isArray(window.notasGerais)) {
-                const nfPrincipalObj = notaIdAtual
-                    ? window.notasGerais.find(x => String(x.id) === String(notaIdAtual))
-                    : window.notasGerais.find(x => String(x.numero_nota) === String(numeroNF));
+                const nfPrincipalObj = window.notasGerais.find(x => String(x.numero_nota) === String(numeroNF));
                 const irmasOff = window.notasGerais.filter(n =>
                     n.status === 'PENDENTE' &&
                     n.tipo_operacao === 'ENTREGA' &&
                     String(n.numero_cte) === String(cteNum) &&
                     _mesmoDestinatarioFrontend(nfPrincipalObj, n)
-                ).map(n => ({ numero: String(n.numero_nota), notaId: String(n.id), chave: n.chave_acesso || '' }));
-                const mapaAlvos = new Map();
-                mapaAlvos.set(String(notaIdAtual || ('num:' + numeroNF)), alvosOffline[0]);
-                irmasOff.forEach(a => {
-                    if (!notaIdAtual && a.numero === String(numeroNF)) return;
-                    if (!mapaAlvos.has(a.notaId)) mapaAlvos.set(a.notaId, a);
-                });
-                alvosOffline = Array.from(mapaAlvos.values());
+                ).map(n => String(n.numero_nota));
+                notasAfetadasOffline = Array.from(new Set([String(numeroNF), ...irmasOff]));
             }
 
-            for (const alvo of alvosOffline) {
-                const numAlvo = alvo.numero;
-                const chaveAlvo = alvo.chave || '';
+            for (const numAlvo of notasAfetadasOffline) {
+                const nfAlvoObj = (window.notasGerais || []).find(n => String(n.numero_nota) === String(numAlvo));
+                const chaveAlvo = nfAlvoObj ? (nfAlvoObj.chave_acesso || '') : (numAlvo === numeroNF ? chaveNF : '');
 
                 const objOffline = {
-                    id: `${Date.now()}_${alvo.notaId || numAlvo}`,
+                    id: `${Date.now()}_${numAlvo}`,
                     numeroNF: numAlvo,
-                    notaId: alvo.notaId || '',
                     chaveNF: chaveAlvo,
                     mID: mID,
                     campos: {
@@ -1504,7 +1458,7 @@ async function salvarRegistro() {
                 };
 
                 store.add(objOffline);
-                processarSumiçoNota(numAlvo, alvo.notaId);
+                processarSumiçoNota(numAlvo);
             }
 
             await atualizarIconeNuvem();
@@ -1519,11 +1473,11 @@ async function salvarRegistro() {
     }
 }
 // Função auxiliar para não repetir código de remover nota
-function processarSumiçoNota(numeroNF, notaId) {
+function processarSumiçoNota(numeroNF) {
     if (window.Roteirizacao) {
-        window.Roteirizacao.avancarProximaEntregaAposBaixa(numeroNF, notaId);
+        window.Roteirizacao.avancarProximaEntregaAposBaixa(numeroNF);
     }
-    const cardParaRemover = localizarCardNota(numeroNF, notaId);
+    const cardParaRemover = document.getElementById(`card-nf-${numeroNF}`);
     if (cardParaRemover) {
         cardParaRemover.classList.add('animate__fadeOutRight');
         setTimeout(() => {
@@ -2004,9 +1958,8 @@ function abrirModalBaixaMassa() {
     document.getElementById('qtd-massa-selecionadas').innerText = notasSelecionadas.size;
 
     // Preenche lista de resumo
-    const listaHtml = Array.from(notasSelecionadas).map(chaveSel => {
-        const card = localizarCardSelecionado(chaveSel);
-        const numero = (card && card.dataset.numero) ? card.dataset.numero : chaveSel;
+    const listaHtml = Array.from(notasSelecionadas).map(numero => {
+        const card = document.getElementById(`card-nf-${numero}`);
         const dest = card.querySelector('p.text-muted').innerText.replace('👤 ', '');
         return `<div class="d-flex justify-content-between border-bottom py-1 small">
             <span class="fw-bold">NF ${numero}</span>
@@ -2087,19 +2040,14 @@ async function salvarBaixaMassa() {
     // A promessa de cada nota é resolvida antes de ir pra próxima (importante para SQLite/Rede Mobile lenta)
     const arrayNotas = Array.from(notasSelecionadas);
     
-    for (const chaveSel of arrayNotas) {
-        const card = localizarCardSelecionado(chaveSel);
-        const numeroNF = (card && card.dataset.numero) ? card.dataset.numero : chaveSel;
-        const notaId = card ? (card.dataset.notaId || '') : '';
+    for (const numeroNF of arrayNotas) {
+        const card = document.getElementById(`card-nf-${numeroNF}`);
         const chaveNF = card ? card.dataset.chave : '';
 
         const formData = new FormData();
         formData.append('ocorrencia_codigo', cod);
         formData.append('chave_acesso', chaveNF);
         formData.append('numero_nota', numeroNF);
-        if (notaId) {
-            formData.append('nota_id', notaId);
-        }
         formData.append('manifesto_id', mID);
         formData.append('recebedor', 'BAIXA EM LOTE');
         formData.append('nota_retida', isRetida);
@@ -2120,7 +2068,7 @@ async function salvarBaixaMassa() {
             const data = await response.json();
             if (response.ok) {
                 // Sucesso na API
-                processarSumiçoNotaSilencioso(numeroNF, notaId);
+                processarSumiçoNotaSilencioso(numeroNF);
             } else {
                 falhasLote++;
                 console.error("Erro nota", numeroNF, data.erro);
@@ -2134,9 +2082,8 @@ async function salvarBaixaMassa() {
                 const store = transaction.objectStore('baixas_pendentes');
 
                 const objOffline = {
-                    id: Date.now().toString() + '_' + (notaId || numeroNF),
+                    id: Date.now().toString() + '_' + numeroNF,
                     numeroNF: numeroNF,
-                    notaId: notaId,
                     chaveNF: chaveNF,
                     mID: mID,
                     campos: {
@@ -2151,7 +2098,7 @@ async function salvarBaixaMassa() {
                 };
 
                 store.add(objOffline);
-                processarSumiçoNotaSilencioso(numeroNF, notaId);
+                processarSumiçoNotaSilencioso(numeroNF);
             } catch (dbErr) {
                 console.error("Erro crítico salvar offline lote:", dbErr);
                 falhasLote++;
@@ -2176,8 +2123,8 @@ async function salvarBaixaMassa() {
     }, 3000);
 }
 
-function processarSumiçoNotaSilencioso(numeroNF, notaId) {
-    const cardParaRemover = localizarCardNota(numeroNF, notaId);
+function processarSumiçoNotaSilencioso(numeroNF) {
+    const cardParaRemover = document.getElementById(`card-nf-${numeroNF}`);
     if (cardParaRemover) {
         cardParaRemover.classList.add('animate__fadeOutRight');
         setTimeout(() => {
@@ -2190,7 +2137,7 @@ function processarSumiçoNotaSilencioso(numeroNF, notaId) {
 // =========================================================================
 // Abre o modal de baixa com os dados da nota e configurações específicas
 // =========================================================================
-function abrirModalBaixa(numeroNota, chaveAcesso, tipo, notaId) {
+function abrirModalBaixa(numeroNota, chaveAcesso, tipo) {
     // === BLOQUEIO POR STATUS TMS ===
     if (window.manifestoStatusTms === 'pending') {
         mostrarModalPendenteTms();
@@ -2255,16 +2202,6 @@ function abrirModalBaixa(numeroNota, chaveAcesso, tipo, notaId) {
     inputChave.value = (chaveAcesso && chaveAcesso !== 'null') ? chaveAcesso : '';
     if (inputNumero) inputNumero.value = numeroNota || '';
 
-    // ID interno da nota: identifica a nota certa mesmo com número 0/vazio/repetido
-    let inputNotaId = document.getElementById('hidden-nota-id');
-    if (!inputNotaId) {
-        inputNotaId = document.createElement('input');
-        inputNotaId.type = 'hidden';
-        inputNotaId.id = 'hidden-nota-id';
-        (document.querySelector('#modalBaixa .modal-body') || document.body).appendChild(inputNotaId);
-    }
-    inputNotaId.value = notaId ? String(notaId) : '';
-
     let inputTipo = document.getElementById('hidden-tipo-operacao');
     if (!inputTipo) {
         inputTipo = document.createElement('input');
@@ -2293,9 +2230,7 @@ function abrirModalBaixa(numeroNota, chaveAcesso, tipo, notaId) {
     if (inputCte) inputCte.value = '';
 
     const nfAtual = (window.notasGerais || []).find(n => 
-        notaId
-            ? String(n.id) === String(notaId)
-            : (String(n.numero_nota) === String(numeroNota) || (chaveAcesso && n.chave_acesso === chaveAcesso))
+        String(n.numero_nota) === String(numeroNota) || (chaveAcesso && n.chave_acesso === chaveAcesso)
     );
     const cteAtual = nfAtual ? (nfAtual.numero_cte || '') : '';
     if (inputCte) inputCte.value = cteAtual;
@@ -2304,7 +2239,7 @@ function abrirModalBaixa(numeroNota, chaveAcesso, tipo, notaId) {
     if (tipoUpper === 'ENTREGA' && cteAtual && Array.isArray(window.notasGerais)) {
         irmasValidas = window.notasGerais.filter(n =>
             n.id !== (nfAtual ? nfAtual.id : null) &&
-            (nfAtual ? true : String(n.numero_nota) !== String(numeroNota)) &&
+            String(n.numero_nota) !== String(numeroNota) &&
             n.tipo_operacao === 'ENTREGA' &&
             n.status === 'PENDENTE' &&
             String(n.numero_cte) === String(cteAtual) &&
@@ -2322,7 +2257,7 @@ function abrirModalBaixa(numeroNota, chaveAcesso, tipo, notaId) {
         if (badgesNotasContainer) {
             const todasDoGrupo = [nfAtual, ...irmasValidas].filter(Boolean);
             badgesNotasContainer.innerHTML = todasDoGrupo.map(n => `
-                <span class="badge ${(nfAtual ? n.id === nfAtual.id : String(n.numero_nota) === String(numeroNota)) ? 'bg-primary' : 'bg-secondary'} px-2 py-1">
+                <span class="badge ${String(n.numero_nota) === String(numeroNota) ? 'bg-primary' : 'bg-secondary'} px-2 py-1">
                     NF ${n.numero_nota}
                 </span>
             `).join('');
@@ -2881,7 +2816,7 @@ async function registrarChegadaColetiva(manifestoId) {
 
 // Função para abrir o modal de pergunta operacional (Despacho ou Retirada)
 
-function abrirModalPerguntaOperacional(numeroNota, chave, tipo, notaId) {
+function abrirModalPerguntaOperacional(numeroNota, chave, tipo) {
     // === BLOQUEIO POR STATUS TMS ===
     if (window.manifestoStatusTms === 'pending') {
         mostrarModalPendenteTms();
@@ -2909,10 +2844,10 @@ function abrirModalPerguntaOperacional(numeroNota, chave, tipo, notaId) {
                     <p class="mb-4">${pergunta}</p>
                     
                     <div class="d-grid gap-2">
-                        <button class="btn btn-success btn-lg fw-bold" onclick="executarBaixaOp('${chave}', '${tipo}', true, '${notaId || ''}')">
+                        <button class="btn btn-success btn-lg fw-bold" onclick="executarBaixaOp('${chave}', '${tipo}', true)">
                             SIM (Completo)
                         </button>
-                        <button class="btn btn-outline-danger" onclick="executarBaixaOp('${chave}', '${tipo}', false, '${notaId || ''}')">
+                        <button class="btn btn-outline-danger" onclick="executarBaixaOp('${chave}', '${tipo}', false)">
                             NÃO (Parcial)
                         </button>
                         <button class="btn btn-link text-muted" data-bs-dismiss="modal">Cancelar</button>
@@ -2932,7 +2867,7 @@ function abrirModalPerguntaOperacional(numeroNota, chave, tipo, notaId) {
     });
 }
 
-async function executarBaixaOp(chave, tipo, isCompleto, notaId) {
+async function executarBaixaOp(chave, tipo, isCompleto) {
     const modalEl = document.getElementById('modalOperacional');
     const bootstrapModal = bootstrap.Modal.getInstance(modalEl);
     if (bootstrapModal) bootstrapModal.hide();
@@ -2943,7 +2878,6 @@ async function executarBaixaOp(chave, tipo, isCompleto, notaId) {
     const dadosBaixa = {
         tipo_operacao: tipo,
         chave_acesso: chave,
-        nota_id: notaId || undefined,
         manifesto_id: manifestoAtual, // Usando sua variável global
         is_completo: isCompleto,
         data_registro: new Date().toISOString()
@@ -3001,7 +2935,7 @@ async function executarBaixaOp(chave, tipo, isCompleto, notaId) {
     }
 }
 // Função para transferência unitária (Nota por Nota)
-async function confirmarTransferenciaIndividual(numeroNota, chave, notaId) {
+async function confirmarTransferenciaIndividual(numeroNota, chave) {
     const confirmar = await new Promise(resolve => {
         // Usando um modal de confirmação limpo em vez de alert
         const modalConfirmHTML = `
@@ -3030,7 +2964,7 @@ async function confirmarTransferenciaIndividual(numeroNota, chave, notaId) {
 
     if (confirmar) {
         // Chama a mesma lógica de execução enviando is_completo=true (pois 098 é fixo)
-        executarBaixaOp(chave, 'TRANSFERENCIA', true, notaId);
+        executarBaixaOp(chave, 'TRANSFERENCIA', true);
     }
 }
 
@@ -3321,7 +3255,6 @@ function renderizarAlertasCanhotos(notas) {
         let html = '';
         notasComFotoRuim.forEach(nf => {
             const numNota = nf.numero_nota || (nf.dados_baixa ? nf.dados_baixa.numero_nota : '---');
-            const notaIdRec = nf.id || '';
             const tentativa = nf.tentativa_foto || (nf.dados_baixa ? nf.dados_baixa.tentativa_foto : 1);
             const chave = nf.chave_acesso || '';
             const tipo = nf.tipo_operacao || 'ENTREGA';
@@ -3339,7 +3272,7 @@ function renderizarAlertasCanhotos(notas) {
                             </div>
                         </div>
                         <p class="small mb-3 text-white">A foto do canhoto não pôde ser lida pela IA. Por favor, tire uma nova foto com boa iluminação e foco para comprovar a entrega.</p>
-                        <button class="btn btn-warning btn-lg fw-bold text-dark w-100 rounded-pill shadow-sm py-2" onclick="abrirModalRecadastroFoto('${numNota}', '${chave}', '${tipo}', ${tentativa}, '${notaIdRec}')">
+                        <button class="btn btn-warning btn-lg fw-bold text-dark w-100 rounded-pill shadow-sm py-2" onclick="abrirModalRecadastroFoto('${numNota}', '${chave}', '${tipo}', ${tentativa})">
                             <i class="bi bi-camera-fill me-2"></i> BATER NOVA FOTO (TENTATIVA ${tentativa + 1}/3)
                         </button>
                     </div>
@@ -3352,9 +3285,9 @@ function renderizarAlertasCanhotos(notas) {
     }
 }
 
-function abrirModalRecadastroFoto(numeroNota, chaveAcesso, tipo, tentativa, notaId) {
+function abrirModalRecadastroFoto(numeroNota, chaveAcesso, tipo, tentativa) {
     console.log(`📸 Abrindo recadastro de foto para NF #${numeroNota} (Tentativa ${tentativa + 1}/3)...`);
-    abrirModalBaixa(numeroNota, chaveAcesso, tipo, notaId);
+    abrirModalBaixa(numeroNota, chaveAcesso, tipo);
     
     setTimeout(() => {
         const modalBody = document.querySelector('#modalBaixa .modal-body');

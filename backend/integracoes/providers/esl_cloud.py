@@ -1442,17 +1442,6 @@ class ESLCloudAdapter(BaseTMSAdapter):
         numero_local_limpo = numero_local.lstrip('0')
         chave_local = str(nf.chave_acesso or '').strip()
 
-        # Número "0"/vazio e chave só de zeros não identificam nota alguma na ESL.
-        # Usar isso como critério poderia achar o frete de OUTRO documento.
-        numero_util = bool(numero_local_limpo)
-        chave_util = bool(chave_local.strip('0'))
-        if not numero_util and not chave_util:
-            logger.warning(
-                f"Minuta ID {getattr(nf, 'id', '?')}: sem número/chave utilizável (número='{numero_local}', chave='{chave_local}'). "
-                f"Busca automática de freight_id ignorada; é necessário o freight_id salvo na nota."
-            )
-            return None
-
         url_oc = f"https://{self.config.dominio_esl}/api/invoice_occurrences"
         headers = {"Authorization": f"Bearer {TOKEN}"}
 
@@ -1466,22 +1455,19 @@ class ESLCloudAdapter(BaseTMSAdapter):
             cte_freight = str(freight.get("cte_number") or "").strip()
 
             return (
-                (numero_util and num_inv and (num_inv == numero_local or num_inv.lstrip('0') == numero_local_limpo)) or
-                (key_inv and (
-                    (numero_util and (key_inv == numero_local or key_inv.lstrip('0') == numero_local_limpo)) or
-                    (chave_util and key_inv == chave_local)
-                )) or
-                (numero_util and seq_freight and (seq_freight == numero_local or seq_freight.lstrip('0') == numero_local_limpo)) or
-                (numero_util and cte_freight and (cte_freight == numero_local or cte_freight.lstrip('0') == numero_local_limpo))
+                (num_inv and (num_inv == numero_local or num_inv.lstrip('0') == numero_local_limpo)) or
+                (key_inv and (key_inv == numero_local or key_inv == chave_local or key_inv.lstrip('0') == numero_local_limpo)) or
+                (seq_freight and (seq_freight == numero_local or seq_freight.lstrip('0') == numero_local_limpo)) or
+                (cte_freight and (cte_freight == numero_local or cte_freight.lstrip('0') == numero_local_limpo))
             )
 
         # 1. Busca direta por invoice_number ou invoice_key na ESL (mais rápido e assertivo)
         buscas_diretas = []
-        if numero_util:
+        if numero_local:
             buscas_diretas.append({"invoice_number": numero_local, "per": 50})
             if numero_local_limpo and numero_local_limpo != numero_local:
                 buscas_diretas.append({"invoice_number": numero_local_limpo, "per": 50})
-        if chave_util and chave_local != numero_local:
+        if chave_local and chave_local != numero_local:
             buscas_diretas.append({"invoice_key": chave_local, "per": 50})
 
         for p_dir in buscas_diretas:
@@ -1543,8 +1529,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
         try:
             token_geral = self.config.token_analytics or TOKEN
             dados_frete = self.buscar_dados_frete_report_7693(
-                chave=chave_local if chave_util else None, 
-                numero=numero_local if numero_util else None, 
+                chave=chave_local or None, 
+                numero=numero_local, 
                 token=token_geral
             )
             if dados_frete:
@@ -1764,7 +1750,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 logger.info(f"🔄 [FALLBACK MINUTA] Tentando endpoint geral {URL_ESL_NOTAS} para Minuta #{nf.numero_nota}...")
                 
                 # Tentativa 2.1: Enviar com a chave cadastrada (mesmo curta, como '2373')
-                if nf.chave_acesso and str(nf.chave_acesso).strip().strip('0'):
+                if nf.chave_acesso:
                     payload_chave = {
                         "invoice_occurrence": {
                             **payload["invoice_occurrence"],
@@ -1789,8 +1775,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     except Exception as e_chave:
                         logger.warning(f"Aviso no envio por chave em invoice_occurrences: {e_chave}")
 
-                # Tentativa 2.2: Enviar com o número do documento (somente se o número identifica a nota; "0"/vazio não)
-                if not sucesso and str(nf.numero_nota or '').strip().lstrip('0'):
+                # Tentativa 2.2: Enviar com o número do documento
+                if not sucesso:
                     payload_num = {
                         "invoice_occurrence": {
                             **payload["invoice_occurrence"],
