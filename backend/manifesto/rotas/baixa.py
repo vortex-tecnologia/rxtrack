@@ -122,7 +122,7 @@ class RegistrarBaixaView(APIView):
             with transaction.atomic():
                 # --- BUSCA INTELIGENTE (HÍBRIDA) ---
                 filtros = {}
-                nota_id = request.data.get('nota_id')
+                nota_id = limpar_param(request.data.get('nota_id'))
                 
                 if nota_id:
                     filtros['id'] = nota_id
@@ -145,6 +145,20 @@ class RegistrarBaixaView(APIView):
                         filtros['manifesto__motorista__user'] = request.user
                         filtros['manifesto__status'] = 'EM_TRANSPORTE'
 
+                # Escopo de segurança para busca por ID: a nota precisa estar no manifesto informado
+                # OU pertencer a um manifesto do próprio motorista (cobre notas movidas entre manifestos).
+                escopo_nota_id = Q()
+                if nota_id:
+                    motorista_req = getattr(request.user, 'motorista_perfil', None)
+                    if numero_mft:
+                        escopo_nota_id |= Q(manifesto__numero_manifesto=str(numero_mft))
+                    if motorista_req:
+                        escopo_nota_id |= Q(manifesto__motorista=motorista_req)
+
+                # Sem nenhum identificador a baixa seria aplicada em uma nota qualquer do manifesto
+                if not (nota_id or chave_acesso or numero_nota or nota_id_tms):
+                    raise NotaFiscal.DoesNotExist("Nenhum identificador da nota foi informado (nota_id, chave, número ou ID TMS).")
+
                 # Tenta encontrar a nota ou minuta
                 if tipo_operacao == 'COLETA':
                     id_coleta = nota_id_tms if nota_id_tms else numero_nota
@@ -165,10 +179,11 @@ class RegistrarBaixaView(APIView):
                     if not nf:
                         raise NotaFiscal.DoesNotExist(f"Coleta {id_coleta} não encontrada.")
                 else:
-                    nf = NotaFiscal.objects.filter(**filtros).first()
+                    nf = NotaFiscal.objects.filter(escopo_nota_id, **filtros).first()
 
                     # Fallback flexível: Se não achou com filtro estrito, busca por chave, número limpo ou ID TMS
-                    if not nf:
+                    # (não se aplica quando a nota foi pedida pelo ID interno: ela é exata, sem adivinhar por número)
+                    if not nf and not nota_id:
                         query_flex = Q()
                         if chave_acesso:
                             query_flex |= Q(chave_acesso=chave_acesso)
@@ -210,7 +225,8 @@ class RegistrarBaixaView(APIView):
                             'status': 'sucesso',
                             'mensagem': 'Baixa já registrada anteriormente (requisição idempotente).',
                             'idempotente': True,
-                            'notas_afetadas': [nf.numero_nota]
+                            'notas_afetadas': [nf.numero_nota],
+                            'notas_afetadas_ids': [nf.id]
                         })
 
                 # ======= BLOQUEIO POR STATUS TMS (PENDENTE/FINALIZADO) =======
@@ -482,6 +498,7 @@ class RegistrarBaixaView(APIView):
                 _trace_logger.info(f"🔍 [TRACE BAIXA VIEW] {_trace_str}")
 
             notas_afetadas_nums = [n.numero_nota for n in todas_as_notas]
+            notas_afetadas_ids = [n.id for n in todas_as_notas]
             msg_sucesso = f"Baixa registrada com sucesso para {len(todas_as_notas)} nota(s)!"
             if len(notas_irmas_elegiveis) > 0:
                 msg_sucesso = f"Entrega agrupada realizada com sucesso! {len(todas_as_notas)} notas do CT-e {cte_alvo} baixadas com a mesma foto."
@@ -490,6 +507,7 @@ class RegistrarBaixaView(APIView):
                 'status': 'sucesso',
                 'mensagem': msg_sucesso,
                 'notas_afetadas': notas_afetadas_nums,
+                'notas_afetadas_ids': notas_afetadas_ids,
                 'cte_agrupado': bool(len(notas_irmas_elegiveis) > 0),
                 'numero_cte': cte_alvo
             })
@@ -528,6 +546,11 @@ class RegistrarBaixaOperacionalView(APIView):
         tipo_acao = data.get('tipo_operacao')  # TRANSFERENCIA, DESPACHO, RETIRADA
         numero_mft = data.get('manifesto_id')
         chave_acesso = data.get('chave_acesso')
+        nota_id = data.get('nota_id')
+        if isinstance(chave_acesso, str) and chave_acesso.strip().lower() in ('', 'null', 'none', 'undefined'):
+            chave_acesso = None
+        if isinstance(nota_id, str) and nota_id.strip().lower() in ('', 'null', 'none', 'undefined'):
+            nota_id = None
         
         # Tratamento para booleano (JS envia 'true'/'false' como string às vezes)
         is_completo_raw = data.get('is_completo', True)
@@ -562,16 +585,26 @@ class RegistrarBaixaOperacionalView(APIView):
         # 3. FILTRAGEM DAS NOTAS ALVO
         # Usamos numero_manifesto para a busca (fictício que o motorista usa)
         try:
-            if tipo_acao == 'TRANSFERENCIA' and not chave_acesso:
+            if tipo_acao == 'TRANSFERENCIA' and not chave_acesso and not nota_id:
                 notas_alvo = NotaFiscal.objects.filter(
                     manifesto__numero_manifesto=str(numero_mft),
                     tipo_operacao='TRANSFERENCIA'
                 ).exclude(status='BAIXADA')
-            else:
+            elif nota_id:
+                # Nota exata pelo ID interno (funciona com nota sem chave/número 0)
+                notas_alvo = NotaFiscal.objects.filter(
+                    id=nota_id,
+                    manifesto__numero_manifesto=str(numero_mft)
+                )
+            elif chave_acesso:
                 notas_alvo = NotaFiscal.objects.filter(
                     chave_acesso=chave_acesso, 
                     manifesto__numero_manifesto=str(numero_mft)
                 )
+            else:
+                return Response({
+                    'erro': 'Informe nota_id ou chave_acesso da nota para a baixa operacional.'
+                }, status=400)
 
             if not notas_alvo.exists():
                 return Response({

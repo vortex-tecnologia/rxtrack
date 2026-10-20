@@ -1,5 +1,5 @@
-// UNIFICADO: Versão v1.49
-const CACHE_NAME = 'fluxo-logistica-v1.49';
+// UNIFICADO: Versão v1.50
+const CACHE_NAME = 'fluxo-logistica-v1.50';
 
 const filesToCache = [
     '/app/',
