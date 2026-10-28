@@ -11,14 +11,22 @@ import os
 from ftplib import FTP
 from io import BytesIO
 
-@shared_task(queue='ia_queue')
-def task_processar_canhoto_ia(baixa_id, somente_comprovante=False, schema_name=None):
+@shared_task(bind=True, queue='ia_queue')
+def task_processar_canhoto_ia(self, baixa_id, somente_comprovante=False, schema_name=None):
     """
     Interceptor do Agente IA: 
     Processa a foto antes do envio final para o TMS.
     Roda dentro do schema_context do tenant para compatibilidade com django_tenants.
     """
+    # 1. Proteção contra fila errada: descarta tasks antigas acumuladas na fila 'celery'
+    delivery_info = getattr(self.request, 'delivery_info', None) or {}
+    routing_key = delivery_info.get('routing_key')
+    if routing_key and routing_key != 'ia_queue':
+        print(f"[IA-DISCARD] Baixa #{baixa_id} descartada da fila antiga '{routing_key}'. Fila exclusiva é 'ia_queue'.")
+        return
+
     from django_tenants.utils import schema_context
+    from django.core.cache import cache
 
     # Se não recebeu schema_name, tenta descobrir iterando os tenants
     if not schema_name:
@@ -29,8 +37,17 @@ def task_processar_canhoto_ia(baixa_id, somente_comprovante=False, schema_name=N
         if not schema_name:
             schema_name = 'public'
 
-    with schema_context(schema_name):
-        _processar_canhoto_ia_interno(baixa_id, somente_comprovante)
+    # 2. Lock distribuído no Redis para impedir processamento simultâneo da MESMA baixa
+    lock_key = f"lock_ia_baixa_{schema_name}_{baixa_id}"
+    if not cache.add(lock_key, "1", timeout=180):
+        print(f"[IA-LOCK] Baixa #{baixa_id} já está sendo processada por outro worker neste instante. Descartando duplicata.")
+        return
+
+    try:
+        with schema_context(schema_name):
+            _processar_canhoto_ia_interno(baixa_id, somente_comprovante)
+    finally:
+        cache.delete(lock_key)
 
 
 def _processar_canhoto_ia_interno(baixa_id, somente_comprovante=False):
@@ -38,6 +55,16 @@ def _processar_canhoto_ia_interno(baixa_id, somente_comprovante=False):
     try:
         baixa = BaixaNF.objects.get(id=baixa_id)
     except BaixaNF.DoesNotExist:
+        return
+
+    # 3. Se a baixa já foi aprovada e não é um recadastro manual, descarta execução redundante
+    if not somente_comprovante and baixa.qualidade_canhoto == 'APROVADO':
+        print(f"[IA] Baixa #{baixa_id} já está com status APROVADO. Descartando execução duplicada.")
+        return
+
+    # 4. Se a baixa já foi rejeitada e está aguardando nova foto do motorista, descarta
+    if not somente_comprovante and baixa.solicitar_nova_foto:
+        print(f"[IA] Baixa #{baixa_id} já está aguardando nova foto do motorista. Descartando execução duplicada.")
         return
 
     try:

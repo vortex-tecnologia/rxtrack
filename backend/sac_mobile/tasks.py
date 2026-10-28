@@ -380,6 +380,12 @@ def processar_canhoto_sac_task(self, historico_id, dados_baixa):
     Passa a imagem original do SAC pelo YOLO executando o script run_ia.py via subprocess,
     da mesma forma que a task do motorista.
     """
+    delivery_info = getattr(self.request, 'delivery_info', None) or {}
+    routing_key = delivery_info.get('routing_key')
+    if routing_key and routing_key != 'ia_queue':
+        logger.warning(f"[SAC-IA-DISCARD] Histórico SAC #{historico_id} descartado da fila antiga '{routing_key}'. Fila exclusiva é 'ia_queue'.")
+        return
+
     from .models import HistoricoBaixaSAC
     from django.conf import settings
     from configuracao.utils import get_config

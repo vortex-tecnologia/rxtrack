@@ -56,6 +56,12 @@ def auto_recuperar_baixas_pendentes_ia():
             ).select_related('nota_fiscal', 'nota_fiscal__manifesto')
 
             for b in baixas_pendentes:
+                # Evita re-enfileirar a MESMA baixa repetidamente a cada 2 minutos (debounce de 10 min)
+                from django.core.cache import cache
+                cache_key = f"sentinela_ia_reenfileirado_{tenant.schema_name}_{b.id}"
+                if cache.get(cache_key):
+                    continue
+
                 nf_num = b.nota_fiscal.numero_nota if b.nota_fiscal else '?'
                 mft_num = b.nota_fiscal.manifesto.numero_manifesto if b.nota_fiscal and b.nota_fiscal.manifesto else '?'
                 tempo_min = int((agora - b.data_baixa).total_seconds() / 60) if b.data_baixa else '?'
@@ -63,6 +69,7 @@ def auto_recuperar_baixas_pendentes_ia():
                 try:
                     from AgenteIa.tasks import task_processar_canhoto_ia
                     task_processar_canhoto_ia.apply_async(args=[b.id], kwargs={'schema_name': tenant.schema_name}, queue='ia_queue')
+                    cache.set(cache_key, True, timeout=600)  # Aguarda 10 minutos antes de tentar reenfileirar de novo
 
                     print(f"[SENTINELA-IA] RE-ENFILEIRADO Baixa #{b.id} "
                           f"(NF {nf_num}, Mft #{mft_num}) "

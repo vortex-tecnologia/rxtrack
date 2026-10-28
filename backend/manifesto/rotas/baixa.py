@@ -443,7 +443,8 @@ class RegistrarBaixaView(APIView):
                     # 2. Disparo das tasks do Celery
                     for t_func, t_args, t_kwargs in tasks_para_disparar:
                         try:
-                            if t_func.__name__ == 'task_processar_canhoto_ia':
+                            func_name = getattr(t_func, '__name__', '') or getattr(t_func, 'name', '')
+                            if 'task_processar_canhoto_ia' in func_name:
                                 t_func.apply_async(args=t_args, kwargs=t_kwargs, queue='ia_queue')
                             elif t_kwargs:
                                 t_func.apply_async(args=t_args, kwargs=t_kwargs)
