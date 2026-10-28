@@ -374,7 +374,7 @@ def processar_envio_sac_tms_task(self, dados_baixa):
         atualizar_historico('ERRO', msg)
         raise e
 
-@shared_task(bind=True, max_retries=2)
+@shared_task(bind=True, max_retries=2, queue='ia_queue')
 def processar_canhoto_sac_task(self, historico_id, dados_baixa):
     """
     Passa a imagem original do SAC pelo YOLO executando o script run_ia.py via subprocess,

@@ -294,6 +294,13 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_ACKS_LATE = True
+
+CELERY_TASK_ROUTES = {
+    'AgenteIa.tasks.*': {'queue': 'ia_queue'},
+    'sac_mobile.tasks.processar_canhoto_sac_task': {'queue': 'ia_queue'},
+}
 
 
 REST_FRAMEWORK = {

@@ -62,7 +62,7 @@ def auto_recuperar_baixas_pendentes_ia():
 
                 try:
                     from AgenteIa.tasks import task_processar_canhoto_ia
-                    task_processar_canhoto_ia.delay(b.id, schema_name=tenant.schema_name)
+                    task_processar_canhoto_ia.apply_async(args=[b.id], kwargs={'schema_name': tenant.schema_name}, queue='ia_queue')
 
                     print(f"[SENTINELA-IA] RE-ENFILEIRADO Baixa #{b.id} "
                           f"(NF {nf_num}, Mft #{mft_num}) "

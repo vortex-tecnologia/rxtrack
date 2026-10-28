@@ -11,7 +11,7 @@ import os
 from ftplib import FTP
 from io import BytesIO
 
-@shared_task
+@shared_task(queue='ia_queue')
 def task_processar_canhoto_ia(baixa_id, somente_comprovante=False, schema_name=None):
     """
     Interceptor do Agente IA: 
