@@ -143,6 +143,7 @@ def upsert_frete(dados, filial, forcar=False):
 
     frete.esl_freight_id = fid
     _definir_autoritativo(frete, 'esl_unique_id', dados.get('unique_id'))
+    _definir_autoritativo(frete, 'sequence_code', dados.get('sequence_code'))
     _definir_autoritativo(frete, 'numero_cte', cte_n)
     if cte_k:
         _definir_autoritativo(frete, 'chave_cte', cte_k)
@@ -212,9 +213,11 @@ def aplicar_em_nota(nf, dados, frete, filial, forcar=False):
     # oficial da ESL, sempre vincula o Frete real (substituindo eventual Frete provisório do webhook).
     _set('frete', frete)
 
-    # Código único da etiqueta ESL (`freight.uniqueId`) — usado para bipagem em CT-e e Minutas
+    # Código único da etiqueta ESL (`freight.uniqueId`) e sequenceCode (`freight.sequenceCode`)
     if dados.get('unique_id'):
         _set('esl_unique_id', dados['unique_id'])
+    if dados.get('sequence_code'):
+        _set('sequence_code', dados['sequence_code'])
 
     # CT-e ou Nº da Minuta (`corporationSequenceNumber` quando emissionType == "draft")
     if dados.get('cte_numero'):
@@ -510,6 +513,7 @@ def notas_pendentes_de_enriquecimento(manifesto):
             or not freight_id_valido(nf.freight_id_tms, nf.numero_nota, nf.chave_acesso)
             or not nf.numero_cte
             or not getattr(nf, 'esl_unique_id', None)
+            or not getattr(nf, 'sequence_code', None)
             or frete_obj is None
             or not getattr(frete_obj, 'graphql_sincronizado_em', None)
             or (nf.status == 'PENDENTE' and (

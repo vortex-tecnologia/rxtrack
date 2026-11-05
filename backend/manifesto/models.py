@@ -176,6 +176,13 @@ class Frete(models.Model):
         verbose_name="Código da Etiqueta ESL (uniqueId)"
     )
 
+    # Código sequencial do frete na ESL (`freight.sequenceCode` no GraphQL, ex: '468524').
+    # Base do código de barras/QR Code da etiqueta física da ESL (`2F0{sequenceCode}/{volume}`).
+    sequence_code = models.CharField(
+        max_length=50, null=True, blank=True, db_index=True,
+        verbose_name="Sequence Code ESL (sequenceCode)"
+    )
+
     # FILIAL EMISSORA do frete (quem emitiu o CT-e/minuta) — vem do GraphQL `freight.corporationId`.
     # Base do rateio de diárias/fechamento dos motoristas.
     filial_emissora = models.ForeignKey(
@@ -417,6 +424,10 @@ class NotaFiscal(models.Model):
     esl_unique_id = models.CharField(
         max_length=50, null=True, blank=True, db_index=True,
         verbose_name="Código da Etiqueta ESL (uniqueId)"
+    )
+    sequence_code = models.CharField(
+        max_length=50, null=True, blank=True, db_index=True,
+        verbose_name="Sequence Code ESL (sequenceCode)"
     )
 
     def __str__(self):

@@ -633,69 +633,137 @@ def detalhes_nota_fiscal_view(request, nota_id):
 @apenas_operacional
 def imprimir_etiqueta_nota_view(request, nota_id):
     """
-    Renderiza a etiqueta térmica de volumes (100mm x 100mm) para a nota fiscal / minuta,
-    com QR Code codificando o `esl_unique_id` (para bipagem) e dados de entrega.
+    Renderiza a etiqueta térmica de volumes (100mm x 100mm) para a nota fiscal / minuta.
+    Gera uma etiqueta para cada volume, com QR Code codificando `{sequenceCode}/{volume}`
+    (ex: '468524/1', '468524/2', etc.), idêntico ao padrão de bipagem da ESL.
     """
+    import json
+    import logging
     import re
-    nota = get_object_or_404(
-        NotaFiscal.objects.select_related(
-            'manifesto', 'frete', 'filial_emissora', 'frete__filial_emissora'
-        ),
-        id=nota_id
-    )
-    frete = nota.frete
-    
-    total_volumes = 1
-    if frete and frete.volumes:
-        try:
-            total_volumes = max(1, int(frete.volumes))
-        except (TypeError, ValueError):
-            total_volumes = 1
+    from django.http import HttpResponse
 
-    vol_param = request.GET.get('volume')
-    if vol_param and vol_param.isdigit():
-        vol_num = int(vol_param)
-        volumes = [f"{vol_num:03d} / {total_volumes:03d}"]
-    else:
-        volumes = [f"{i + 1:03d} / {total_volumes:03d}" for i in range(total_volumes)]
+    logger = logging.getLogger(__name__)
 
-    # Código do QR Code: prioriza esl_unique_id (da nota ou do frete)
-    unique_id = nota.esl_unique_id or (frete.esl_unique_id if frete else None)
-    codigo_qr = unique_id or nota.chave_acesso or nota.numero_nota
-    
-    filial_nome = None
-    if nota.filial_emissora:
-        filial_nome = nota.filial_emissora.nome
-    elif nota.nome_filial_emissora_tms:
-        filial_nome = nota.nome_filial_emissora_tms
-    elif frete and frete.filial_emissora:
-        filial_nome = frete.filial_emissora.nome
+    try:
+        nota = get_object_or_404(
+            NotaFiscal.objects.select_related(
+                'manifesto', 'frete', 'filial_emissora', 'frete__filial_emissora'
+            ),
+            id=nota_id
+        )
+        frete = nota.frete
+        
+        # Volumes totais (vem do Frete da ESL ou 1)
+        total_volumes = 1
+        if frete and getattr(frete, 'volumes', None):
+            try:
+                total_volumes = max(1, int(frete.volumes))
+            except (TypeError, ValueError):
+                total_volumes = 1
 
-    num_doc_frete = nota.numero_cte or (frete.numero_cte if frete else None)
-    chave_doc_frete = nota.chave_cte or (frete.chave_cte if frete else None)
-    tipo_doc_frete = "CT-e" if chave_doc_frete else ("Minuta" if num_doc_frete else "NF-e")
+        # sequenceCode: prioridade absoluta para a bipagem ESL
+        # Ordem de resolução:
+        # 1. nota.sequence_code
+        # 2. frete.sequence_code
+        # 3. frete.freight_id_tms (se for puramente numérico / sequence_code legado)
+        # 4. nota.freight_id_tms
+        # 5. nota.numero_nota
+        seq_code = (
+            getattr(nota, 'sequence_code', None)
+            or (getattr(frete, 'sequence_code', None) if frete else None)
+        )
+        if not seq_code:
+            cand = getattr(frete, 'freight_id_tms', None) if frete else None
+            if cand and str(cand).isdigit() and len(str(cand)) <= 10:
+                seq_code = str(cand)
+            elif nota.freight_id_tms and str(nota.freight_id_tms).isdigit():
+                seq_code = str(nota.freight_id_tms)
+            else:
+                seq_code = str(nota.numero_nota or '')
 
-    destino_cidade_uf = ""
-    if nota.endereco_entrega:
-        m = re.search(r'\(([^)]+)\)', nota.endereco_entrega)
-        if m:
-            destino_cidade_uf = m.group(1).strip().upper()
+        vol_param = request.GET.get('volume')
+        if vol_param and vol_param.isdigit():
+            vol_indices = [max(1, min(int(vol_param), total_volumes))]
+        else:
+            vol_indices = list(range(1, total_volumes + 1))
 
-    context = {
-        'nota': nota,
-        'frete': frete,
-        'volumes': volumes,
-        'total_volumes': total_volumes,
-        'codigo_qr': codigo_qr,
-        'unique_id': unique_id,
-        'filial_nome': filial_nome or 'QUICK DELIVERY',
-        'num_doc_frete': num_doc_frete,
-        'chave_doc_frete': chave_doc_frete,
-        'tipo_doc_frete': tipo_doc_frete,
-        'destino_cidade_uf': destino_cidade_uf,
-        'autoprint': request.GET.get('autoprint') == '1',
-    }
-    return render(request, 'desktop/paginas/etiqueta_10x10.html', context)
+        # Lista de volumes estruturada para o template e para o gerador de QR Code
+        itens_volumes = []
+        for v_num in vol_indices:
+            codigo_volume = f"{seq_code}/{v_num}" if seq_code else f"{nota.numero_nota}/{v_num}"
+            itens_volumes.append({
+                'numero': v_num,
+                'numero_formatado': f"{v_num:03d}",
+                'total_formatado': f"{total_volumes:03d}",
+                'texto_volume': f"{v_num:03d} / {total_volumes:03d}",
+                'codigo_bipagem': codigo_volume,
+                'qr_id': f"qrcode_{v_num}",
+            })
+
+        # Filial Origem
+        filial_nome = None
+        if nota.filial_emissora:
+            filial_nome = nota.filial_emissora.nome
+        elif nota.nome_filial_emissora_tms:
+            filial_nome = nota.nome_filial_emissora_tms
+        elif frete and frete.filial_emissora:
+            filial_nome = frete.filial_emissora.nome
+        elif frete and frete.nome_filial_emissora_tms:
+            filial_nome = frete.nome_filial_emissora_tms
+
+        num_doc_frete = nota.numero_cte or (frete.numero_cte if frete else None)
+        chave_doc_frete = nota.chave_cte or (frete.chave_cte if frete else None)
+        tipo_doc_frete = "CT-e" if chave_doc_frete else ("Minuta" if num_doc_frete else "NF-e")
+
+        # Destino: extrai Cidade/UF do endereço se houver entre parênteses
+        destino_cidade_uf = ""
+        if nota.endereco_entrega:
+            m = re.search(r'\(([^)]+)\)', nota.endereco_entrega)
+            if m:
+                destino_cidade_uf = m.group(1).strip().upper()
+
+        # CEP formatado seguro
+        cep_raw = re.sub(r'\D', '', str(nota.cep or ''))
+        cep_formatado = f"{cep_raw[:5]}-{cep_raw[5:8]}" if len(cep_raw) == 8 else (nota.cep or "—")
+
+        # Data de Emissão segura (sem filtros arriscados no template)
+        data_emissao = ""
+        data_obj = getattr(nota.manifesto, 'data_criacao', None) if nota.manifesto else None
+        if not data_obj and frete:
+            data_obj = getattr(frete, 'criado_em', None)
+        if data_obj and hasattr(data_obj, 'strftime'):
+            data_emissao = data_obj.strftime("%d/%m/%Y")
+        else:
+            data_emissao = timezone.now().strftime("%d/%m/%Y")
+
+        unique_id = nota.esl_unique_id or (frete.esl_unique_id if frete else None)
+
+        context = {
+            'nota': nota,
+            'frete': frete,
+            'itens_volumes': itens_volumes,
+            'total_volumes': total_volumes,
+            'total_volumes_fmt': f"{total_volumes:03d}",
+            'seq_code': seq_code,
+            'unique_id': unique_id,
+            'filial_nome': filial_nome or 'QUICK DELIVERY',
+            'num_doc_frete': num_doc_frete,
+            'chave_doc_frete': chave_doc_frete,
+            'tipo_doc_frete': tipo_doc_frete,
+            'destino_cidade_uf': destino_cidade_uf,
+            'cep_formatado': cep_formatado,
+            'data_emissao': data_emissao,
+            'itens_volumes_json': json.dumps(itens_volumes),
+            'autoprint': request.GET.get('autoprint') == '1',
+        }
+        return render(request, 'desktop/paginas/etiqueta_10x10.html', context)
+    except Exception as exc:
+        logger.exception(f"Erro ao renderizar etiqueta da nota {nota_id}: {exc}")
+        return HttpResponse(
+            f"Erro ao gerar etiqueta da nota #{nota_id}: {exc}",
+            status=500,
+            content_type="text/plain; charset=utf-8"
+        )
 
 import pytz
 from datetime import datetime, time

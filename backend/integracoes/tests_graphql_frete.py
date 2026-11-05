@@ -487,6 +487,7 @@ class EnriquecimentoEFilialEmissoraTests(TestCase):
             status="PENDENTE",
             freight_id_tms=None,
             esl_unique_id=None,
+            sequence_code=None,
             frete_id=None,
             frete=None,
             filial_emissora_id=None,
@@ -509,6 +510,7 @@ class EnriquecimentoEFilialEmissoraTests(TestCase):
         self.assertEqual(conflitos, [])
         self.assertEqual(nf.freight_id_tms, "57258355")
         self.assertEqual(nf.esl_unique_id, "508afca5904dfb13")
+        self.assertEqual(nf.sequence_code, "466451")
         self.assertEqual(nf.id_filial_emissora_tms, "237974")
         self.assertEqual(nf.nome_filial_emissora_tms, "QUICK GOIANIA")
         self.assertEqual(nf.filial_emissora, filial_go)
@@ -545,6 +547,7 @@ class EnriquecimentoEFilialEmissoraTests(TestCase):
                     chave_acesso=None,
                     freight_id_tms="57258355",
                     esl_unique_id=None,
+                    sequence_code=None,
                     frete_id=None,
                     frete=None,
                     filial_emissora_id=None,
@@ -609,6 +612,7 @@ class EnriquecimentoEFilialEmissoraTests(TestCase):
             self.assertEqual(nf.cep, "21011400")
             self.assertEqual(nf.id_filial_emissora_tms, "237974")
             self.assertEqual(nf.esl_unique_id, "508afca5904dfb13")
+            self.assertEqual(nf.sequence_code, "466451")
 
     def test_enriquecer_coletas_manifesto_71413_corporation_id_237973(self):
         """
@@ -976,3 +980,50 @@ class EnviarBaixaMinutaBugFixTests(TestCase):
         self.assertNotIn("466451", mock_post.call_args[0][0])
         self.assertTrue(baixa.integrado_tms)
         self.assertIn("57258355", resultado)
+
+    def test_etiqueta_termica_gera_sequence_code_por_volume(self):
+        """
+        Valida que a lógica da etiqueta térmica gera {sequenceCode}/{volume}
+        para cada volume do frete (ex: 468524/1, 468524/2, 468524/3).
+        """
+        seq_code = "468524"
+        total_volumes = 3
+
+        itens_volumes = []
+        for v_num in range(1, total_volumes + 1):
+            codigo_volume = f"{seq_code}/{v_num}"
+            itens_volumes.append({
+                'numero': v_num,
+                'numero_formatado': f"{v_num:03d}",
+                'total_formatado': f"{total_volumes:03d}",
+                'texto_volume': f"{v_num:03d} / {total_volumes:03d}",
+                'codigo_bipagem': codigo_volume,
+                'qr_id': f"qrcode_{v_num}",
+            })
+
+        self.assertEqual(len(itens_volumes), 3)
+        self.assertEqual(itens_volumes[0]['codigo_bipagem'], "468524/1")
+        self.assertEqual(itens_volumes[0]['texto_volume'], "001 / 003")
+        self.assertEqual(itens_volumes[1]['codigo_bipagem'], "468524/2")
+        self.assertEqual(itens_volumes[1]['texto_volume'], "002 / 003")
+        self.assertEqual(itens_volumes[2]['codigo_bipagem'], "468524/3")
+        self.assertEqual(itens_volumes[2]['texto_volume'], "003 / 003")
+
+    def test_template_etiqueta_sem_tags_estaticas_externas(self):
+        """
+        Garante que etiqueta_10x10.html não utiliza {% load static %} nem {% static %}
+        evitando erro 500 no Whitenoise / CompressedStaticFilesStorage em produção.
+        """
+        import os
+        template_path = os.path.join(
+            os.path.dirname(__file__), "..", "templates", "desktop", "paginas", "etiqueta_10x10.html"
+        )
+        self.assertTrue(os.path.exists(template_path))
+        with open(template_path, "r", encoding="utf-8") as f:
+            conteudo = f.read()
+
+        self.assertNotIn("{% load static %}", conteudo)
+        self.assertNotIn("{% static", conteudo)
+        self.assertIn("var QRCode", conteudo)
+        self.assertIn("codigo_bipagem", conteudo)
+

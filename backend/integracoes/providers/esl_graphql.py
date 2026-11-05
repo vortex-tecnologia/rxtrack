@@ -327,9 +327,10 @@ def consultar_frete(
         if _s(node.get("id")) == fid:
             norm = normalizar_frete(node)
             # Reentrega ('Freight::Redelivery'): na ESL, o frete de reentrega tem uniqueId=null
-            # e aponta para o frete original em `originalFreightId`. Herdamos o unique_id do frete
-            # original para que a bipagem da etiqueta física colada na caixa funcione perfeitamente!
-            if not norm.get("unique_id") and node.get("originalFreightId") and _profundidade < 2:
+            # e aponta para o frete original em `originalFreightId`. Herdamos o unique_id e sequence_code
+            # do frete original para que a bipagem da etiqueta física colada na caixa funcione perfeitamente!
+            precisa_herdar = (not norm.get("unique_id") or not norm.get("sequence_code"))
+            if precisa_herdar and node.get("originalFreightId") and _profundidade < 2:
                 orig_id = _s(node.get("originalFreightId"))
                 if orig_id and orig_id != fid:
                     try:
@@ -337,15 +338,22 @@ def consultar_frete(
                             dominio, token, orig_id, timeout=timeout, post=post, sleep=sleep,
                             max_429=max_429, _profundidade=_profundidade + 1
                         )
-                        if orig and orig.get("unique_id"):
-                            norm["unique_id"] = orig["unique_id"]
-                            logger.info(
-                                "Frete %s (reentrega) herdou unique_id '%s' do frete original %s",
-                                fid, norm["unique_id"], orig_id
-                            )
+                        if orig:
+                            if not norm.get("unique_id") and orig.get("unique_id"):
+                                norm["unique_id"] = orig["unique_id"]
+                                logger.info(
+                                    "Frete %s (reentrega) herdou unique_id '%s' do frete original %s",
+                                    fid, norm["unique_id"], orig_id
+                                )
+                            if not norm.get("sequence_code") and orig.get("sequence_code"):
+                                norm["sequence_code"] = orig["sequence_code"]
+                                logger.info(
+                                    "Frete %s (reentrega) herdou sequence_code '%s' do frete original %s",
+                                    fid, norm["sequence_code"], orig_id
+                                )
                     except Exception as exc_orig:
                         logger.warning(
-                            "Falha ao consultar frete original %s para herdar unique_id: %s",
+                            "Falha ao consultar frete original %s para herdar unique_id/sequence_code: %s",
                             orig_id, exc_orig
                         )
             return norm

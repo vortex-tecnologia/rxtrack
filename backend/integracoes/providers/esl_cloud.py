@@ -943,6 +943,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         numero_cte=(dados_gql or {}).get('cte_numero'),
                         chave_cte=(dados_gql or {}).get('cte_chave'),
                         esl_unique_id=(dados_gql or {}).get('unique_id'),
+                        sequence_code=(dados_gql or {}).get('sequence_code'),
                         filial_emissora=filial_gql,
                         id_filial_emissora_tms=(dados_gql or {}).get('corporation_id'),
                         nome_filial_emissora_tms=(dados_gql or {}).get('corporation_nome'),
