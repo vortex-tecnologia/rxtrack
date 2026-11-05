@@ -628,6 +628,75 @@ def detalhes_nota_fiscal_view(request, nota_id):
     # Retorna apenas o fragmento HTML para o modal
     return render(request, 'desktop/parciais/detalhes_nota_modal.html', context)
 
+
+@login_required(login_url='/login/')
+@apenas_operacional
+def imprimir_etiqueta_nota_view(request, nota_id):
+    """
+    Renderiza a etiqueta térmica de volumes (100mm x 100mm) para a nota fiscal / minuta,
+    com QR Code codificando o `esl_unique_id` (para bipagem) e dados de entrega.
+    """
+    import re
+    nota = get_object_or_404(
+        NotaFiscal.objects.select_related(
+            'manifesto', 'frete', 'filial_emissora', 'frete__filial_emissora'
+        ),
+        id=nota_id
+    )
+    frete = nota.frete
+    
+    total_volumes = 1
+    if frete and frete.volumes:
+        try:
+            total_volumes = max(1, int(frete.volumes))
+        except (TypeError, ValueError):
+            total_volumes = 1
+
+    vol_param = request.GET.get('volume')
+    if vol_param and vol_param.isdigit():
+        vol_num = int(vol_param)
+        volumes = [f"{vol_num:03d} / {total_volumes:03d}"]
+    else:
+        volumes = [f"{i + 1:03d} / {total_volumes:03d}" for i in range(total_volumes)]
+
+    # Código do QR Code: prioriza esl_unique_id (da nota ou do frete)
+    unique_id = nota.esl_unique_id or (frete.esl_unique_id if frete else None)
+    codigo_qr = unique_id or nota.chave_acesso or nota.numero_nota
+    
+    filial_nome = None
+    if nota.filial_emissora:
+        filial_nome = nota.filial_emissora.nome
+    elif nota.nome_filial_emissora_tms:
+        filial_nome = nota.nome_filial_emissora_tms
+    elif frete and frete.filial_emissora:
+        filial_nome = frete.filial_emissora.nome
+
+    num_doc_frete = nota.numero_cte or (frete.numero_cte if frete else None)
+    chave_doc_frete = nota.chave_cte or (frete.chave_cte if frete else None)
+    tipo_doc_frete = "CT-e" if chave_doc_frete else ("Minuta" if num_doc_frete else "NF-e")
+
+    destino_cidade_uf = ""
+    if nota.endereco_entrega:
+        m = re.search(r'\(([^)]+)\)', nota.endereco_entrega)
+        if m:
+            destino_cidade_uf = m.group(1).strip().upper()
+
+    context = {
+        'nota': nota,
+        'frete': frete,
+        'volumes': volumes,
+        'total_volumes': total_volumes,
+        'codigo_qr': codigo_qr,
+        'unique_id': unique_id,
+        'filial_nome': filial_nome or 'QUICK DELIVERY',
+        'num_doc_frete': num_doc_frete,
+        'chave_doc_frete': chave_doc_frete,
+        'tipo_doc_frete': tipo_doc_frete,
+        'destino_cidade_uf': destino_cidade_uf,
+        'autoprint': request.GET.get('autoprint') == '1',
+    }
+    return render(request, 'desktop/paginas/etiqueta_10x10.html', context)
+
 import pytz
 from datetime import datetime, time
 # Pagina Manifesto 

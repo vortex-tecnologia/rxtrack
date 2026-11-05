@@ -15,6 +15,7 @@ urlpatterns = [
     path('logout/', views.logout_operacional_view, name='logout_operacional'),
     path('notas-fiscais/', NotasFiscaisListView.as_view(), name='notas_fiscais'),
     path('api/manifesto/detalhes-nota/<int:nota_id>/', detalhes_nota_fiscal_view, name='detalhes_nota_fiscal'),
+    path('api/nota-fiscal/<int:nota_id>/etiqueta/', views.imprimir_etiqueta_nota_view, name='imprimir_etiqueta_nota'),
     path('api/manifesto/buscar-importar/', buscar_e_importar_nfe, name='buscar_e_importar_nfe'),
     path('manifesto/', ManifestosMonitoramentoView.as_view(), name='manifesto_detalhes'),
     path('api/manifesto/sincronizar-nota/<int:nota_id>/', sincronizar_nota_tms_view, name='sincronizar_nota_tms'),
