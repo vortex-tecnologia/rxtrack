@@ -620,9 +620,32 @@ def detalhes_nota_fiscal_view(request, nota_id):
         'baixa_info__ocorrencia' 
     ).order_by('-manifesto__data_criacao')
 
+    frete_principal = nota_clicada.frete
+    total_volumes = 1
+    if frete_principal and getattr(frete_principal, 'volumes', None):
+        try:
+            total_volumes = max(1, int(frete_principal.volumes))
+        except (TypeError, ValueError):
+            total_volumes = 1
+
+    seq_code = (
+        getattr(nota_clicada, 'sequence_code', None)
+        or (getattr(frete_principal, 'sequence_code', None) if frete_principal else None)
+        or (getattr(frete_principal, 'freight_id_tms', None) if (frete_principal and str(frete_principal.freight_id_tms).isdigit()) else None)
+        or (nota_clicada.freight_id_tms if str(nota_clicada.freight_id_tms or '').isdigit() else None)
+    )
+    unique_id = getattr(nota_clicada, 'esl_unique_id', None) or (getattr(frete_principal, 'esl_unique_id', None) if frete_principal else None)
+    num_doc_frete = nota_clicada.numero_cte or (frete_principal.numero_cte if frete_principal else None)
+    chave_doc_frete = nota_clicada.chave_cte or (frete_principal.chave_cte if frete_principal else None)
+
     context = {
         'nota_principal': nota_clicada,
         'historico': historico_completo,
+        'codigo_bipagem': seq_code,
+        'unique_id': unique_id,
+        'total_volumes': total_volumes,
+        'num_doc_frete': num_doc_frete,
+        'chave_doc_frete': chave_doc_frete,
     }
     
     # Retorna apenas o fragmento HTML para o modal

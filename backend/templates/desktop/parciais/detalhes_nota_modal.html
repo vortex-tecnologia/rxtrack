@@ -62,24 +62,18 @@
                             <span class="text-muted d-block" style="font-size: 0.62rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">
                                 <i class="bi bi-qr-code me-1 text-primary"></i>Código de Bipagem (sequenceCode)
                             </span>
-                            {% with seq=nota_principal.sequence_code|default:nota_principal.frete.sequence_code|default:nota_principal.frete.freight_id_tms %}
-                                {% if seq %}
-                                    <code class="text-primary fw-bold px-2 py-0 bg-primary-subtle rounded border border-primary-subtle" style="font-size: 0.82rem;">{{ seq }}/1</code>
-                                    {% if nota_principal.frete.volumes and nota_principal.frete.volumes > 1 %}
-                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle ms-1" style="font-size: 0.68rem;">
-                                            {{ nota_principal.frete.volumes }} volumes
-                                        </span>
-                                    {% endif %}
-                                {% else %}
-                                    {% with uid=nota_principal.esl_unique_id|default:nota_principal.frete.esl_unique_id %}
-                                        {% if uid %}
-                                            <code class="text-primary fw-bold px-2 py-0 bg-primary-subtle rounded border border-primary-subtle" style="font-size: 0.82rem;">{{ uid }}</code>
-                                        {% else %}
-                                            <span class="text-muted small fst-italic" style="font-size: 0.75rem;">Aguardando sincronização</span>
-                                        {% endif %}
-                                    {% endwith %}
+                            {% if codigo_bipagem %}
+                                <code class="text-primary fw-bold px-2 py-0 bg-primary-subtle rounded border border-primary-subtle" style="font-size: 0.82rem;">{{ codigo_bipagem }}/1</code>
+                                {% if total_volumes and total_volumes > 1 %}
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle ms-1" style="font-size: 0.68rem;">
+                                        {{ total_volumes }} volumes
+                                    </span>
                                 {% endif %}
-                            {% endwith %}
+                            {% elif unique_id %}
+                                <code class="text-primary fw-bold px-2 py-0 bg-primary-subtle rounded border border-primary-subtle" style="font-size: 0.82rem;">{{ unique_id }}</code>
+                            {% else %}
+                                <span class="text-muted small fst-italic" style="font-size: 0.75rem;">Aguardando sincronização</span>
+                            {% endif %}
                         </div>
                         <button type="button" class="btn btn-primary btn-sm fw-bold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-2"
                                 onclick="window.abrirEtiquetaNota ? window.abrirEtiquetaNota({{ nota_principal.id }}) : window.open('/api/nota-fiscal/{{ nota_principal.id }}/etiqueta/?autoprint=1', 'etiqueta_{{ nota_principal.id }}', 'width=550,height=650,scrollbars=yes,resizable=yes')"
@@ -95,7 +89,6 @@
         <!-- Documentos e Informações Operacionais -->
         <div class="col-md-5 ps-md-3">
             <div class="row g-2 small">
-                {% with num_doc_frete=nota_principal.numero_cte|default:nota_principal.frete.numero_cte chave_doc_frete=nota_principal.chave_cte|default:nota_principal.frete.chave_cte %}
                 {% if num_doc_frete %}
                 <div class="col-6">
                     {% if chave_doc_frete %}
@@ -167,7 +160,6 @@
                     </span>
                 </div>
                 {% endif %}
-                {% endwith %}
             </div>
         </div>
     </div>
