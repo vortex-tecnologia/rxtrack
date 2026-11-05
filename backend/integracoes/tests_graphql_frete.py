@@ -423,6 +423,7 @@ class EnriquecimentoEFilialEmissoraTests(TestCase):
         qs_mock.select_related.return_value = notas_mock
         notas_mgr = MagicMock()
         notas_mgr.exclude.return_value = qs_mock
+        notas_mgr.filter.return_value = []
 
         mft = SimpleNamespace(
             id=71318,
@@ -463,6 +464,123 @@ class EnriquecimentoEFilialEmissoraTests(TestCase):
         for nf in notas_mock:
             self.assertEqual(nf.cep, "21011400")
             self.assertEqual(nf.id_filial_emissora_tms, "237974")
+
+    def test_enriquecer_coletas_manifesto_71413_corporation_id_237973(self):
+        """
+        Valida o enriquecimento das coletas do Manifesto #71413 (54661, 54662, 54674)
+        usando o novo campo `corporation_id: 237973` (QUICK BRASILIA - DF) e CEP do Report 11324.
+        """
+        filial_df = SimpleNamespace(id=3, nome="QUICK BRASILIA", uf="DF", id_filial_tms="237973")
+        coletas_report_71413 = [
+            {
+                "sequence_code": 54661,
+                "request_date": "2026-11-05",
+                "requester": "",
+                "service_type": "0",
+                "corporation_id": 237973,
+                "pck_pln_name": "CBA - COMERCIO DE PRODUTOS HOSPITALARES LTDA",
+                "pck_pln_mds_line_1": "SETOR SCIA QUADRA 15 CONJUNTO 3 LOTE",
+                "pck_pln_mds_number": "5",
+                "pck_pln_mds_line_2": "",
+                "pck_pln_mds_postal_code": "71250015",
+                "pck_pln_mds_neighborhood": "ZONA INDUSTRIAL (GUARA)",
+                "pck_pln_mds_cty_name": "Brasília",
+                "pck_pln_mds_cty_sae_name": "Distrito Federal",
+            },
+            {
+                "sequence_code": 54662,
+                "request_date": "2026-11-05",
+                "requester": "",
+                "service_type": "0",
+                "corporation_id": 237973,
+                "pck_pln_name": "FULLFARMA COMERCIO DE PRODUTOS FARMACEUTICOS LTDA",
+                "pck_pln_mds_line_1": "TR SIA TRECHO 3 LOTES 625/695",
+                "pck_pln_mds_number": "SN",
+                "pck_pln_mds_line_2": "BLOCO B 306",
+                "pck_pln_mds_postal_code": "71200038",
+                "pck_pln_mds_neighborhood": "ZONA INDUSTRIAL (GUARA)",
+                "pck_pln_mds_cty_name": "Brasília",
+                "pck_pln_mds_cty_sae_name": "Distrito Federal",
+            },
+            {
+                "sequence_code": 54674,
+                "request_date": "2026-11-05",
+                "requester": "",
+                "service_type": "0",
+                "corporation_id": 237973,
+                "pck_pln_name": "BENENUTRI COMERCIAL LTDA",
+                "pck_pln_mds_line_1": "QUADRA SAAN QUADRA 3",
+                "pck_pln_mds_number": "SN",
+                "pck_pln_mds_line_2": "LOTE: 750 / 760",
+                "pck_pln_mds_postal_code": "70632320",
+                "pck_pln_mds_neighborhood": "ZONA INDUSTRIAL",
+                "pck_pln_mds_cty_name": "Brasília",
+                "pck_pln_mds_cty_sae_name": "Distrito Federal",
+            },
+        ]
+
+        coletas_mock = []
+        for seq in ["54661", "54662", "54674"]:
+            coletas_mock.append(
+                SimpleNamespace(
+                    id=int(seq),
+                    numero_nota=seq,
+                    numero_coleta=seq,
+                    tipo_operacao="COLETA",
+                    status="PENDENTE",
+                    filial_emissora_id=None,
+                    filial_emissora=None,
+                    id_filial_emissora_tms=None,
+                    nome_filial_emissora_tms=None,
+                    cep=None,
+                    endereco_entrega="ENDEREÇO NÃO INFORMADO",
+                    destinatario="NÃO INFORMADO",
+                    latitude=-15.79,
+                    longitude=-47.88,
+                    save=MagicMock(),
+                )
+            )
+
+        qs_empty = MagicMock()
+        qs_empty.__iter__.return_value = iter([])
+        qs_empty.select_related.return_value = []
+        notas_mgr = MagicMock()
+        notas_mgr.exclude.return_value = qs_empty
+        notas_mgr.filter.return_value = coletas_mock
+
+        mft = SimpleNamespace(
+            id=71413,
+            numero_manifesto="71413",
+            manifesto_id_tms="6500999",
+            notas_fiscais=notas_mgr,
+        )
+        config = SimpleNamespace(
+            dominio_esl="quickdelivery.eslcloud.com.br",
+            token_analytics="token-db-analytics",
+            token_invoices="token-db-invoices",
+            report_coletas="11324",
+        )
+
+        with patch(
+            "integracoes.enriquecimento_frete.listar_coletas_manifesto_esl",
+            return_value=coletas_report_71413,
+        ) as mock_rep_col, patch(
+            "integracoes.enriquecimento_frete.resolver_filial_emissora",
+            return_value=filial_df,
+        ):
+            resumo = enriquecer_manifesto(config, mft)
+
+        self.assertEqual(mock_rep_col.call_count, 1)
+        self.assertEqual(resumo["coletas_alvo"], 3)
+        self.assertEqual(resumo["coletas_enriquecidas"], 3)
+        self.assertEqual(coletas_mock[0].cep, "71250015")
+        self.assertEqual(coletas_mock[1].cep, "71200038")
+        self.assertEqual(coletas_mock[2].cep, "70632320")
+        for col in coletas_mock:
+            self.assertEqual(col.id_filial_emissora_tms, "237973")
+            self.assertEqual(col.nome_filial_emissora_tms, "QUICK BRASILIA")
+            self.assertEqual(col.filial_emissora, filial_df)
+            self.assertEqual(_uf_emissora_da_nota(col), "DF")
 
 
 class FinanceiroRateioFilialEmissoraTests(TestCase):

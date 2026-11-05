@@ -971,6 +971,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 coletas = self.buscar_coletas_esl(numero_visual, token_geral, self.config.dominio_esl, report_coletas)
                 
                 if coletas:
+                    from integracoes.enriquecimento_frete import resolver_filial_emissora
+                    from integracoes.providers.esl_graphql import MAPA_ID_ESL_FILIAL, limpar_cep
                     for coleta in coletas:
                         seq_code = coleta.get('sequence_code')
                         if not seq_code:
@@ -991,17 +993,37 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         if not endereco:
                             endereco = "ENDEREÇO NÃO INFORMADO"
                         endereco = endereco.upper()
+
+                        cep_coleta = limpar_cep(coleta.get('pck_pln_mds_postal_code'))
+                        corp_id_col = str(coleta.get('corporation_id') or coleta.get('pck_crn_id') or '').strip() or None
+                        nome_corp_col = MAPA_ID_ESL_FILIAL.get(corp_id_col)
+                        filial_col = resolver_filial_emissora(corp_id_col, nome_corp_col, filiais_cache_gql) if corp_id_col else None
+                        if filial_col and not nome_corp_col:
+                            nome_corp_col = filial_col.nome
+
+                        defaults_coleta = {
+                            'destinatario': destinatario,
+                            'endereco_entrega': endereco,
+                            'numero_coleta': str(seq_code),
+                            'filial_emissora': filial_col,
+                            'id_filial_emissora_tms': corp_id_col,
+                            'nome_filial_emissora_tms': nome_corp_col,
+                        }
+                        if cep_coleta:
+                            defaults_coleta['cep'] = cep_coleta
                         
                         coleta_obj, _ = NotaFiscal.objects.update_or_create(
                             manifesto=manifesto_obj,
                             numero_nota=str(seq_code),
                             tipo_operacao='COLETA',
-                            defaults={
-                                'destinatario': destinatario,
-                                'endereco_entrega': endereco,
-                                'numero_coleta': str(seq_code),
-                            }
+                            defaults=defaults_coleta
                         )
+                        if cep_coleta and coleta_obj.latitude is None and coleta_obj.longitude is None:
+                            try:
+                                from manifesto.tasks import enriquecer_geolocalizacao_nota_task
+                                enriquecer_geolocalizacao_nota_task.delay(coleta_obj.id)
+                            except Exception:
+                                pass
                         ids_processadas.append(coleta_obj.id)
                         total_coletas += 1
                     
@@ -1134,6 +1156,9 @@ class ESLCloudAdapter(BaseTMSAdapter):
             coletas = self.buscar_coletas_esl(numero_visual, token_geral, dominio, report_coletas)
             
             if coletas:
+                from integracoes.enriquecimento_frete import resolver_filial_emissora
+                from integracoes.providers.esl_graphql import MAPA_ID_ESL_FILIAL, limpar_cep
+                filiais_cache_col = {}
                 total_adicionadas = 0
                 for coleta in coletas:
                     seq_code = coleta.get('sequence_code')
@@ -1156,17 +1181,37 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     if not endereco:
                         endereco = "ENDEREÇO NÃO INFORMADO"
                     endereco = endereco.upper()
+
+                    cep_coleta = limpar_cep(coleta.get('pck_pln_mds_postal_code'))
+                    corp_id_col = str(coleta.get('corporation_id') or coleta.get('pck_crn_id') or '').strip() or None
+                    nome_corp_col = MAPA_ID_ESL_FILIAL.get(corp_id_col)
+                    filial_col = resolver_filial_emissora(corp_id_col, nome_corp_col, filiais_cache_col) if corp_id_col else None
+                    if filial_col and not nome_corp_col:
+                        nome_corp_col = filial_col.nome
+
+                    defaults_coleta = {
+                        'destinatario': destinatario,
+                        'endereco_entrega': endereco,
+                        'numero_coleta': str(seq_code),
+                        'filial_emissora': filial_col,
+                        'id_filial_emissora_tms': corp_id_col,
+                        'nome_filial_emissora_tms': nome_corp_col,
+                    }
+                    if cep_coleta:
+                        defaults_coleta['cep'] = cep_coleta
                     
-                    NotaFiscal.objects.update_or_create(
+                    coleta_obj, _ = NotaFiscal.objects.update_or_create(
                         manifesto=manifesto_obj,
                         numero_nota=str(seq_code),
                         tipo_operacao='COLETA',
-                        defaults={
-                            'destinatario': destinatario,
-                            'endereco_entrega': endereco,
-                            'numero_coleta': str(seq_code),
-                        }
+                        defaults=defaults_coleta
                     )
+                    if cep_coleta and coleta_obj.latitude is None and coleta_obj.longitude is None:
+                        try:
+                            from manifesto.tasks import enriquecer_geolocalizacao_nota_task
+                            enriquecer_geolocalizacao_nota_task.delay(coleta_obj.id)
+                        except Exception:
+                            pass
                     total_adicionadas += 1
                 
                 if total_adicionadas > 0:

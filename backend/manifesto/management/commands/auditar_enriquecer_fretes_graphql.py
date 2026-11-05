@@ -144,11 +144,15 @@ class Command(BaseCommand):
                     f"   • Manifesto #{mft.numero_manifesto}: "
                     f"fretes_consultados={res.get('fretes_consultados', 0)}, "
                     f"notas_enriquecidas={res.get('notas_enriquecidas', 0)}/{res.get('notas_alvo', 0)}, "
+                    f"coletas_enriquecidas={res.get('coletas_enriquecidas', 0)}/{res.get('coletas_alvo', 0)}, "
                     f"erros={len(res.get('erros', []))}"
                 )
 
         # Relatório de Auditoria pós-verificação
         total_notas = 0
+        total_coletas = 0
+        coletas_com_emissora = 0
+        coletas_com_cep = 0
         com_freight_id = 0
         sem_freight_id = 0
         com_filial_emissora = 0
@@ -161,6 +165,39 @@ class Command(BaseCommand):
         pendencias = []
 
         for mft in manifestos:
+            coletas_qs = (
+                NotaFiscal.objects.filter(manifesto=mft, tipo_operacao="COLETA")
+                .select_related("filial_emissora")
+            )
+            for col in coletas_qs:
+                total_coletas += 1
+                filial_col = col.filial_emissora
+                corp_id_col = col.id_filial_emissora_tms
+                corp_nome_col = col.nome_filial_emissora_tms
+                cep_col_ok = bool(limpar_cep(col.cep))
+                if cep_col_ok:
+                    coletas_com_cep += 1
+                if filial_col or corp_id_col:
+                    coletas_com_emissora += 1
+                    label_emissora = (
+                        f"{filial_col.nome} ({filial_col.uf})"
+                        if filial_col
+                        else f"{corp_nome_col or 'ESL'} [ID {corp_id_col}]"
+                    )
+                    contagem_emissoras[label_emissora] += 1
+                else:
+                    pendencias.append(
+                        {
+                            "manifesto": mft.numero_manifesto,
+                            "nota": col.numero_coleta or col.numero_nota,
+                            "tipo": "COLETA",
+                            "freight_id": "-",
+                            "emissora": "PENDENTE",
+                            "cep": col.cep or "SEM_CEP",
+                            "cte": "-",
+                        }
+                    )
+
             notas = (
                 NotaFiscal.objects.filter(manifesto=mft)
                 .exclude(tipo_operacao="COLETA")
@@ -218,7 +255,7 @@ class Command(BaseCommand):
                     )
 
         self.stdout.write("\n" + "=" * 78)
-        self.stdout.write(self.style.SUCCESS("📊 RESUMO DA AUDITORIA DE FRETES E NOTAS FISCAIS"))
+        self.stdout.write(self.style.SUCCESS("📊 RESUMO DA AUDITORIA DE FRETES, NOTAS FISCAIS E COLETAS"))
         self.stdout.write("=" * 78)
         self.stdout.write(f"  Manifestos auditados         : {len(manifestos)}")
         self.stdout.write(f"  Total de Notas/Minutas       : {total_notas} (sendo {minutas_sem_chave} minutas/declarações)")
@@ -226,11 +263,13 @@ class Command(BaseCommand):
         self.stdout.write(f"  Com Filial Emissora salva    : {com_filial_emissora}/{total_notas} (pendentes: {sem_filial_emissora})")
         self.stdout.write(f"  Com CEP válido               : {com_cep}/{total_notas} (pendentes: {sem_cep})")
         self.stdout.write(f"  Com Número de CT-e           : {com_cte}/{total_notas}")
+        self.stdout.write(f"  Total de Coletas             : {total_coletas}")
+        self.stdout.write(f"  Coletas com Filial Emissora  : {coletas_com_emissora}/{total_coletas} (com CEP: {coletas_com_cep}/{total_coletas})")
 
         if contagem_emissoras:
-            self.stdout.write("\n🏢 DISTRIBUIÇÃO POR FILIAL EMISSORA DO FRETE:")
+            self.stdout.write("\n🏢 DISTRIBUIÇÃO POR FILIAL EMISSORA (FRETES + COLETAS):")
             for emissora, qtd in contagem_emissoras.most_common():
-                self.stdout.write(f"   • {emissora}: {qtd} nota(s)")
+                self.stdout.write(f"   • {emissora}: {qtd} item(ns)")
 
         if pendencias:
             self.stdout.write(

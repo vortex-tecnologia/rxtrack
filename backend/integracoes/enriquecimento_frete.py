@@ -29,6 +29,7 @@ from integracoes.providers.esl_graphql import (
     freight_id_valido,
     limpar_cep,
     mapear_notas_para_fretes,
+    normalizar_numero,
     nota_pertence_ao_frete,
     texto_e_placeholder,
 )
@@ -285,6 +286,180 @@ def listar_ocorrencias_manifesto(config, manifesto):
     return []
 
 
+# ───────────────────────── Coletas (Report 11324) ─────────────────────────
+def _endereco_coleta_report(coleta_dict):
+    rua = str(coleta_dict.get('pck_pln_mds_line_1') or '').strip()
+    num = str(coleta_dict.get('pck_pln_mds_number') or '').strip()
+    bairro = str(coleta_dict.get('pck_pln_mds_neighborhood') or '').strip()
+    cidade = str(coleta_dict.get('pck_pln_mds_cty_name') or '').strip()
+    partes = [p for p in (rua, num, bairro, cidade) if p]
+    return ", ".join(partes).upper() if partes else None
+
+
+def aplicar_em_coleta(nf, coleta_dict, filial, forcar=False):
+    """
+    Aplica os dados do Report de Coletas (11324) numa NotaFiscal com tipo_operacao='COLETA':
+      - corporation_id -> id_filial_emissora_tms, nome_filial_emissora_tms, filial_emissora
+      - pck_pln_mds_postal_code -> cep (se PENDENTE e sem CEP válido) + geocodificação
+      - endereço e solicitante (se PENDENTE e com placeholder)
+    Devolve a lista de campos alterados.
+    """
+    campos = []
+
+    def _set(campo, valor):
+        if getattr(nf, campo, None) != valor:
+            setattr(nf, campo, valor)
+            if campo not in campos:
+                campos.append(campo)
+
+    cid = str(coleta_dict.get('corporation_id') or coleta_dict.get('pck_crn_id') or '').strip() or None
+    nome_corp = MAPA_ID_ESL_FILIAL.get(cid) or (filial.nome if filial else None)
+
+    if cid:
+        _set('id_filial_emissora_tms', cid)
+    if nome_corp:
+        _set('nome_filial_emissora_tms', nome_corp)
+    if filial is not None or forcar:
+        _set('filial_emissora', filial)
+
+    seq_code = str(coleta_dict.get('sequence_code') or '').strip()
+    if seq_code and not getattr(nf, 'numero_coleta', None):
+        _set('numero_coleta', seq_code)
+
+    precisa_geo = False
+    if getattr(nf, 'status', 'PENDENTE') == 'PENDENTE':
+        cep = limpar_cep(coleta_dict.get('pck_pln_mds_postal_code'))
+        if cep and (not limpar_cep(getattr(nf, 'cep', None)) or forcar):
+            _set('cep', cep)
+            precisa_geo = True
+
+        end_txt = _endereco_coleta_report(coleta_dict)
+        if end_txt and (texto_e_placeholder(getattr(nf, 'endereco_entrega', None)) or forcar):
+            _set('endereco_entrega', end_txt)
+            precisa_geo = True
+
+        solicitante = str(
+            coleta_dict.get('pck_pln_name') or coleta_dict.get('requester') or ''
+        ).upper().strip()
+        if solicitante and (
+            (getattr(nf, 'destinatario', None) or '').strip().upper() in PLACEHOLDERS_DESTINATARIO
+            or forcar
+        ):
+            _set('destinatario', solicitante[:255])
+
+    if campos:
+        nf.save(update_fields=campos)
+
+    if precisa_geo and getattr(nf, 'latitude', None) is None and getattr(nf, 'longitude', None) is None:
+        def _agendar_geo_col(nota_id=nf.id, numero=nf.numero_nota):
+            try:
+                from manifesto.tasks import enriquecer_geolocalizacao_nota_task
+                enriquecer_geolocalizacao_nota_task.delay(nota_id)
+            except Exception as exc:
+                logger.warning("⚠️ Erro ao agendar geocodificação da Coleta %s: %s", numero, exc)
+        transaction.on_commit(_agendar_geo_col)
+
+    return campos
+
+
+def listar_coletas_manifesto_esl(config, numero_manifesto):
+    """
+    Consulta o Report de Coletas (11324) no Data Export da ESL usando `token_analytics`
+    para obter `corporation_id` (filial emissora da coleta), `sequence_code` e CEP.
+    """
+    import json
+    import requests
+
+    report_coletas = getattr(config, 'report_coletas', None) or '11324'
+    url = f"https://{config.dominio_esl}/api/analytics/reports/{report_coletas}/data"
+    headers = {
+        "Authorization": f"Bearer {config.token_analytics}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "search": {
+            "picks": {"request_date": "2024-01-01 - 2050-12-31"},
+            "scopes": {"from_manifest_sequence_code": str(numero_manifesto).strip()},
+        },
+        "page": "1",
+        "per": "100",
+    }
+    respeitar_intervalo_esl()
+    resp = requests.get(url, headers=headers, data=json.dumps(payload), timeout=30)
+    if resp.status_code == 429:
+        time.sleep(2.5)
+        resp = requests.get(url, headers=headers, data=json.dumps(payload), timeout=30)
+    if resp.status_code != 200:
+        raise RuntimeError(f"report_coletas {report_coletas} HTTP {resp.status_code} (manifesto {numero_manifesto}): {resp.text[:200]}")
+    dados = resp.json()
+    return dados if isinstance(dados, list) else []
+
+
+def coletas_pendentes_de_enriquecimento(manifesto):
+    """Coletas do manifesto que ainda estão sem filial emissora (corporation_id) ou sem CEP."""
+    faltando = []
+    for nf in manifesto.notas_fiscais.filter(tipo_operacao='COLETA'):
+        lacuna = (
+            not nf.id_filial_emissora_tms
+            or not nf.filial_emissora_id
+            or (nf.status == 'PENDENTE' and not limpar_cep(nf.cep))
+        )
+        if lacuna:
+            faltando.append(nf)
+    return faltando
+
+
+def enriquecer_coletas_manifesto(config, manifesto, forcar=False, filiais_cache=None):
+    """
+    Enriquece as coletas (`tipo_operacao='COLETA'`) do manifesto com a Filial Emissora
+    (`corporation_id` do Report 11324) e CEP (`pck_pln_mds_postal_code`).
+    """
+    filiais_cache = filiais_cache if filiais_cache is not None else {}
+    resumo_col = {'coletas_alvo': 0, 'coletas_enriquecidas': 0, 'erros': [], 'sem_filial_cadastrada': []}
+
+    todas_coletas = list(manifesto.notas_fiscais.filter(tipo_operacao='COLETA'))
+    alvo = todas_coletas if forcar else coletas_pendentes_de_enriquecimento(manifesto)
+    resumo_col['coletas_alvo'] = len(alvo)
+    if not alvo:
+        return resumo_col
+
+    if not (config.dominio_esl and config.token_analytics):
+        resumo_col['erros'].append("Token analytics ou domínio ESL não configurados para enriquecer coletas.")
+        return resumo_col
+
+    try:
+        itens_esl = listar_coletas_manifesto_esl(config, manifesto.numero_manifesto)
+    except Exception as exc:
+        resumo_col['erros'].append(f"coletas manifesto {manifesto.numero_manifesto}: {exc}")
+        logger.warning("⚠️ [COLETAS EMISSOR] Falha ao consultar Report de Coletas para manifesto #%s: %s",
+                       manifesto.numero_manifesto, exc)
+        return resumo_col
+
+    por_seq = {}
+    for item in itens_esl:
+        seq = normalizar_numero(item.get('sequence_code'))
+        if seq:
+            por_seq[seq] = item
+
+    for nf in alvo:
+        chave_seq = normalizar_numero(getattr(nf, 'numero_coleta', None) or getattr(nf, 'numero_nota', None))
+        dados_col = por_seq.get(chave_seq)
+        if not dados_col:
+            continue
+
+        cid = str(dados_col.get('corporation_id') or dados_col.get('pck_crn_id') or '').strip() or None
+        nome_corp = MAPA_ID_ESL_FILIAL.get(cid)
+        filial = resolver_filial_emissora(cid, nome_corp, filiais_cache) if cid else None
+        if cid and not filial and cid not in resumo_col['sem_filial_cadastrada']:
+            resumo_col['sem_filial_cadastrada'].append(cid)
+
+        campos = aplicar_em_coleta(nf, dados_col, filial, forcar=forcar)
+        if campos:
+            resumo_col['coletas_enriquecidas'] += 1
+
+    return resumo_col
+
+
 # ───────────────────────── orquestração ─────────────────────────
 def notas_pendentes_de_enriquecimento(manifesto):
     """Notas (não-coleta) do manifesto que ainda têm lacuna que o GraphQL resolve."""
@@ -306,7 +481,8 @@ def notas_pendentes_de_enriquecimento(manifesto):
 
 def enriquecer_manifesto(config, manifesto, forcar=False, cache_gql=None, filiais_cache=None):
     """
-    Enriquece todas as notas (não-coleta) do manifesto. Devolve um resumo (dict) auditável.
+    Enriquece todas as notas/minutas (via GraphQL `freight`) e coletas (via Report 11324 `corporation_id`)
+    do manifesto. Devolve um resumo (dict) auditável.
     Nunca levanta por falha de um frete: o erro vai para resumo['erros'].
     Levanta apenas se não conseguir listar as ocorrências do manifesto (para o chamador reagendar).
     """
@@ -314,14 +490,33 @@ def enriquecer_manifesto(config, manifesto, forcar=False, cache_gql=None, filiai
     filiais_cache = filiais_cache if filiais_cache is not None else {}
     resumo = {
         'manifesto': manifesto.numero_manifesto, 'notas_alvo': 0, 'notas_enriquecidas': 0,
+        'coletas_alvo': 0, 'coletas_enriquecidas': 0,
         'fretes_consultados': 0, 'sem_match': 0, 'ambiguas': 0, 'divergentes': 0,
         'conflitos': [], 'erros': [], 'sem_filial_cadastrada': [],
     }
 
+    # 1. Enriquecimento de Coletas (Filial Emissora corporation_id + CEP via Report 11324)
+    try:
+        res_col = enriquecer_coletas_manifesto(config, manifesto, forcar=forcar, filiais_cache=filiais_cache)
+        resumo['coletas_alvo'] = res_col['coletas_alvo']
+        resumo['coletas_enriquecidas'] = res_col['coletas_enriquecidas']
+        resumo['erros'].extend(res_col['erros'])
+        for cid_sem in res_col['sem_filial_cadastrada']:
+            if cid_sem not in resumo['sem_filial_cadastrada']:
+                resumo['sem_filial_cadastrada'].append(cid_sem)
+    except Exception as exc_col:
+        logger.warning("⚠️ [COLETAS EMISSOR] Erro ao enriquecer coletas do manifesto #%s: %s",
+                       manifesto.numero_manifesto, exc_col)
+
+    # 2. Enriquecimento de Notas e Minutas (GraphQL `freight`)
     todas = list(manifesto.notas_fiscais.exclude(tipo_operacao='COLETA').select_related('frete'))
     alvo = todas if forcar else notas_pendentes_de_enriquecimento(manifesto)
     resumo['notas_alvo'] = len(alvo)
     if not alvo:
+        if resumo['coletas_alvo'] > 0:
+            logger.info("✅ [GRAPHQL/COLETAS] Manifesto #%s enriquecido (apenas coletas): %s",
+                        manifesto.numero_manifesto,
+                        {k: v for k, v in resumo.items() if k not in ('conflitos', 'erros', 'sem_filial_cadastrada')})
         return resumo
 
     if not (config.dominio_esl and config.token_analytics and config.token_invoices):
