@@ -319,11 +319,12 @@ def aplicar_em_coleta(nf, coleta_dict, filial, forcar=False):
         _set('id_filial_emissora_tms', cid)
     if nome_corp:
         _set('nome_filial_emissora_tms', nome_corp)
-    if filial is not None or forcar:
+    if filial is not None:
         _set('filial_emissora', filial)
 
     seq_code = str(coleta_dict.get('sequence_code') or '').strip()
-    if seq_code and not getattr(nf, 'numero_coleta', None):
+    num_col_atual = str(getattr(nf, 'numero_coleta', None) or '').strip()
+    if seq_code and (not num_col_atual or (num_col_atual.isdigit() and int(num_col_atual) < 100) or forcar):
         _set('numero_coleta', seq_code)
 
     precisa_geo = False
@@ -436,15 +437,32 @@ def enriquecer_coletas_manifesto(config, manifesto, forcar=False, filiais_cache=
         return resumo_col
 
     por_seq = {}
+    por_nome = {}
     for item in itens_esl:
         seq = normalizar_numero(item.get('sequence_code'))
         if seq:
             por_seq[seq] = item
+        nome_item = str(item.get('pck_pln_name') or item.get('requester') or '').strip().upper()
+        if nome_item:
+            por_nome.setdefault(nome_item, []).append(item)
 
+    resumo_col['coletas_sem_match'] = []
     for nf in alvo:
-        chave_seq = normalizar_numero(getattr(nf, 'numero_coleta', None) or getattr(nf, 'numero_nota', None))
-        dados_col = por_seq.get(chave_seq)
+        seq_col = normalizar_numero(getattr(nf, 'numero_coleta', None))
+        seq_nota = normalizar_numero(getattr(nf, 'numero_nota', None))
+        dados_col = por_seq.get(seq_col) or por_seq.get(seq_nota)
+
         if not dados_col:
+            # Fallback seguro: casa pelo nome do solicitante SOMENTE se for único no relatório e na própria lista.
+            # (o webhook/SOAP pode trazer um identificador de coleta diferente do sequence_code do Report 11324)
+            nome_nf = str(getattr(nf, 'destinatario', None) or '').strip().upper()
+            candidatos = por_nome.get(nome_nf) or []
+            iguais_local = [c for c in alvo if str(getattr(c, 'destinatario', None) or '').strip().upper() == nome_nf]
+            if nome_nf and len(candidatos) == 1 and len(iguais_local) == 1:
+                dados_col = candidatos[0]
+
+        if not dados_col:
+            resumo_col['coletas_sem_match'].append(str(getattr(nf, 'numero_coleta', None) or getattr(nf, 'numero_nota', None)))
             continue
 
         cid = str(dados_col.get('corporation_id') or dados_col.get('pck_crn_id') or '').strip() or None
@@ -456,6 +474,10 @@ def enriquecer_coletas_manifesto(config, manifesto, forcar=False, filiais_cache=
         campos = aplicar_em_coleta(nf, dados_col, filial, forcar=forcar)
         if campos:
             resumo_col['coletas_enriquecidas'] += 1
+
+    if resumo_col['coletas_sem_match']:
+        logger.warning("⚠️ [COLETAS EMISSOR] Manifesto #%s: %s coleta(s) sem correspondência no Report de Coletas: %s",
+                       manifesto.numero_manifesto, len(resumo_col['coletas_sem_match']), resumo_col['coletas_sem_match'])
 
     return resumo_col
 
@@ -500,6 +522,7 @@ def enriquecer_manifesto(config, manifesto, forcar=False, cache_gql=None, filiai
         res_col = enriquecer_coletas_manifesto(config, manifesto, forcar=forcar, filiais_cache=filiais_cache)
         resumo['coletas_alvo'] = res_col['coletas_alvo']
         resumo['coletas_enriquecidas'] = res_col['coletas_enriquecidas']
+        resumo['coletas_sem_match'] = res_col.get('coletas_sem_match', [])
         resumo['erros'].extend(res_col['erros'])
         for cid_sem in res_col['sem_filial_cadastrada']:
             if cid_sem not in resumo['sem_filial_cadastrada']:

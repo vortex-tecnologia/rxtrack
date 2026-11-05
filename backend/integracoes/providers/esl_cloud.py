@@ -1005,10 +1005,14 @@ class ESLCloudAdapter(BaseTMSAdapter):
                             'destinatario': destinatario,
                             'endereco_entrega': endereco,
                             'numero_coleta': str(seq_code),
-                            'filial_emissora': filial_col,
-                            'id_filial_emissora_tms': corp_id_col,
-                            'nome_filial_emissora_tms': nome_corp_col,
                         }
+                        # Só grava a filial emissora quando veio/resolveu (nunca apaga um valor já salvo com None)
+                        if corp_id_col:
+                            defaults_coleta['id_filial_emissora_tms'] = corp_id_col
+                        if nome_corp_col:
+                            defaults_coleta['nome_filial_emissora_tms'] = nome_corp_col
+                        if filial_col:
+                            defaults_coleta['filial_emissora'] = filial_col
                         if cep_coleta:
                             defaults_coleta['cep'] = cep_coleta
                         
@@ -1193,10 +1197,14 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         'destinatario': destinatario,
                         'endereco_entrega': endereco,
                         'numero_coleta': str(seq_code),
-                        'filial_emissora': filial_col,
-                        'id_filial_emissora_tms': corp_id_col,
-                        'nome_filial_emissora_tms': nome_corp_col,
                     }
+                    # Só grava a filial emissora quando veio/resolveu (nunca apaga um valor já salvo com None)
+                    if corp_id_col:
+                        defaults_coleta['id_filial_emissora_tms'] = corp_id_col
+                    if nome_corp_col:
+                        defaults_coleta['nome_filial_emissora_tms'] = nome_corp_col
+                    if filial_col:
+                        defaults_coleta['filial_emissora'] = filial_col
                     if cep_coleta:
                         defaults_coleta['cep'] = cep_coleta
                     

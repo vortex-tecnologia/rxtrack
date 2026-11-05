@@ -584,6 +584,55 @@ class EnriquecimentoEFilialEmissoraTests(TestCase):
 
 
 class FinanceiroRateioFilialEmissoraTests(TestCase):
+    def test_coleta_com_identificador_diferente_casa_por_nome_unico_e_reporta_sem_match(self):
+        """
+        Se o webhook trouxer para a coleta um identificador diferente do sequence_code do Report 11324,
+        o casamento cai no nome do solicitante (somente se único). Sem correspondência, vai para
+        `coletas_sem_match` (nunca chuta).
+        """
+        filial_df = SimpleNamespace(id=3, nome="QUICK BRASILIA", uf="DF", id_filial_tms="237973")
+        report = [
+            {"sequence_code": 54661, "corporation_id": 237973, "pck_pln_name": "CBA - COMERCIO DE PRODUTOS HOSPITALARES LTDA",
+             "pck_pln_mds_postal_code": "71250015"},
+            {"sequence_code": 54662, "corporation_id": 237973, "pck_pln_name": "SOLICITANTE QUALQUER",
+             "pck_pln_mds_postal_code": "71200038"},
+        ]
+
+        def _col(seq_nota, seq_coleta, nome):
+            return SimpleNamespace(
+                id=int(seq_coleta), numero_nota=seq_nota, numero_coleta=seq_coleta, tipo_operacao="COLETA", status="PENDENTE",
+                filial_emissora_id=None, filial_emissora=None, id_filial_emissora_tms=None,
+                nome_filial_emissora_tms=None, cep=None, endereco_entrega="ENDEREÇO NÃO INFORMADO",
+                destinatario=nome, latitude=-15.7, longitude=-47.8, save=MagicMock(),
+            )
+
+        # Caso 1: Webhook trouxe @numero="1" em numero_coleta e Documento.Numero="54662" em numero_nota
+        casa_por_numero_nota = _col("54662", "1", "OUTRO NOME NO WEBHOOK")
+        # Caso 2: Webhook trouxe índice da parada tanto em numero_nota quanto em numero_coleta -> casa pelo nome único
+        casa_por_nome = _col("3", "3", "CBA - COMERCIO DE PRODUTOS HOSPITALARES LTDA")
+        # Caso 3: Sem match nem por número nem por nome -> vai para coletas_sem_match
+        sem_match = _col("4", "4", "EMPRESA DESCONHECIDA LTDA")
+
+        mgr = MagicMock()
+        mgr.filter.return_value = [casa_por_numero_nota, casa_por_nome, sem_match]
+        mft = SimpleNamespace(id=1, numero_manifesto="71413", notas_fiscais=mgr)
+        config = SimpleNamespace(dominio_esl="x.eslcloud.com.br", token_analytics="tk", token_invoices="tk")
+
+        from integracoes.enriquecimento_frete import enriquecer_coletas_manifesto
+        with patch("integracoes.enriquecimento_frete.listar_coletas_manifesto_esl", return_value=report), patch(
+            "integracoes.enriquecimento_frete.resolver_filial_emissora", return_value=filial_df
+        ):
+            res = enriquecer_coletas_manifesto(config, mft)
+
+        self.assertEqual(res["coletas_enriquecidas"], 2)
+        self.assertEqual(casa_por_numero_nota.id_filial_emissora_tms, "237973")
+        self.assertEqual(casa_por_numero_nota.numero_coleta, "54662")
+        self.assertEqual(casa_por_nome.id_filial_emissora_tms, "237973")
+        self.assertEqual(casa_por_nome.numero_coleta, "54661")
+        self.assertEqual(casa_por_nome.cep, "71250015")
+        self.assertIsNone(sem_match.id_filial_emissora_tms)
+        self.assertEqual(res["coletas_sem_match"], ["4"])
+
     def test_uf_emissora_da_nota_prioriza_filial_emissora_e_corporation_id(self):
         filial_go = SimpleNamespace(nome="Filial Goiânia", uf="GO", id_filial_tms="237974")
         nf_com_filial = SimpleNamespace(
