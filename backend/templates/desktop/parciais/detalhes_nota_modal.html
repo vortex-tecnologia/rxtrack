@@ -71,7 +71,8 @@
                             {% endwith %}
                         </div>
                         <button type="button" class="btn btn-primary btn-sm fw-bold px-3 py-1 shadow-sm d-inline-flex align-items-center gap-2"
-                                onclick="abrirEtiquetaNota({{ nota_principal.id }})" title="Imprimir etiqueta térmica 10x10 cm para colar nos volumes">
+                                onclick="window.abrirEtiquetaNota ? window.abrirEtiquetaNota({{ nota_principal.id }}) : window.open('/api/nota-fiscal/{{ nota_principal.id }}/etiqueta/?autoprint=1', 'etiqueta_{{ nota_principal.id }}', 'width=550,height=650,scrollbars=yes,resizable=yes')"
+                                title="Imprimir etiqueta térmica 10x10 cm para colar nos volumes">
                             <i class="bi bi-printer-fill"></i>
                             <span>Imprimir Etiqueta (10x10)</span>
                         </button>

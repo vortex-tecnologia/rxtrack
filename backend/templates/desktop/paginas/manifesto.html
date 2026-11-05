@@ -664,6 +664,15 @@
             });
     }
 
+    function abrirEtiquetaNota(notaId) {
+        const url = `/api/nota-fiscal/${notaId}/etiqueta/?autoprint=1`;
+        const w = 550, h = 650;
+        const left = (screen.width / 2) - (w / 2);
+        const top = (screen.height / 2) - (h / 2);
+        window.open(url, `etiqueta_${notaId}`, `width=${w},height=${h},top=${top},left=${left},scrollbars=yes,resizable=yes`);
+    }
+    window.abrirEtiquetaNota = abrirEtiquetaNota;
+
     // 3. ADICIONE o novo cronômetro regressivo
     // Configuração do cronômetro: 180 segundos = 3 minutos
     let tempoRestante = 180;
