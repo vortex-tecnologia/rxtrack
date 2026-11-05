@@ -114,6 +114,46 @@ def verificar_autofinalizacao_manifesto_task(manifesto_id, schema_name=None):
         return {"sucesso": sucesso, "mensagem": msg, "schema": target_schema}
 
 
+@shared_task(bind=True, max_retries=4, default_retry_delay=90)
+def enriquecer_manifesto_graphql_task(self, manifesto_id, schema_name=None, forcar=False):
+    """
+    Enriquece em BACKGROUND as notas/minutas do manifesto via GraphQL `freight` da ESL:
+    ID interno do frete, FILIAL EMISSORA, CT-e e CEP/endereço/destinatário que faltarem.
+
+    Disparada após o webhook/SOAP (o manifesto já está liberado para o motorista) e pela busca manual.
+    É idempotente: se nenhuma nota tiver lacuna, não faz nenhuma chamada à ESL.
+    """
+    from django_tenants.utils import schema_context
+
+    target_schema = schema_name or _descobrir_schema_manifesto(manifesto_id)
+    with schema_context(target_schema):
+        from django.core.cache import cache
+        from manifesto.models import Manifesto
+        from configuracao.utils import get_config
+
+        lock_key = f"gql_enriquecer_{target_schema}_{manifesto_id}"
+        if not cache.add(lock_key, "1", timeout=300):
+            # Outro enriquecimento do mesmo manifesto em curso (webhooks repetidos): tenta de novo depois.
+            raise self.retry(countdown=60)
+
+        try:
+            manifesto = Manifesto.objects.filter(id=manifesto_id).first()
+            if not manifesto:
+                return f"Manifesto {manifesto_id} não encontrado em {target_schema}."
+
+            adapter = get_tms_adapter(get_config())
+            if adapter is None or not hasattr(adapter, 'enriquecer_manifesto_graphql'):
+                return "TMS sem suporte a enriquecimento GraphQL."
+
+            resumo = adapter.enriquecer_manifesto_graphql(manifesto, forcar=forcar)
+            return resumo
+        except Exception as exc:
+            logger.error(f"❌ [GRAPHQL] Falha ao enriquecer manifesto {manifesto_id}: {exc}")
+            raise self.retry(exc=exc)
+        finally:
+            cache.delete(lock_key)
+
+
 
 @shared_task(bind=True, max_retries=2)
 def enviar_baixa_minuta_task(self, baixa_id):
@@ -954,6 +994,16 @@ def processar_webhook_manifesto_task(self, event_id):
             except Exception as ws_err:
                 logger.warning(f"⚠️ Erro ao notificar painel via webhook_task: {ws_err}")
 
+            # 🔎 Enriquecimento em background (GraphQL ESL): ID interno do frete, FILIAL EMISSORA, CT-e e
+            # CEP/endereço faltantes. Roda DEPOIS do commit, sem atrasar a liberação do manifesto ao motorista.
+            try:
+                from django.db import connection as _conn
+                _schema_gql = getattr(_conn, 'schema_name', None)
+                transaction.on_commit(lambda mid=manifesto_obj.id, s=_schema_gql: enriquecer_manifesto_graphql_task.apply_async(
+                    args=[mid], kwargs={'schema_name': s}, countdown=8))
+            except Exception as gql_err:
+                logger.warning(f"⚠️ Erro ao agendar enriquecimento GraphQL do MFT {num_mani}: {gql_err}")
+
             return f"Manifesto {num_mani} (Motorista: {nome_mot}) processado com sucesso. {count_notas} notas."
 
 
@@ -1262,6 +1312,14 @@ def processar_soap_task(self, evento_id):
             enviar_painel(manifesto_obj)
         except Exception as ws_err:
             logger.warning(f"⚠️ Erro ao notificar painel via soap_task: {ws_err}")
+
+        # 🔎 Enriquecimento em background (GraphQL ESL): ID interno do frete, FILIAL EMISSORA, CT-e e CEP faltantes.
+        try:
+            from django.db import connection as _conn
+            enriquecer_manifesto_graphql_task.apply_async(
+                args=[manifesto_obj.id], kwargs={'schema_name': getattr(_conn, 'schema_name', None)}, countdown=8)
+        except Exception as gql_err:
+            logger.warning(f"⚠️ Erro ao agendar enriquecimento GraphQL (SOAP) do MFT {numero_rota}: {gql_err}")
 
         return f"Manifesto SOAP {numero_rota} processado com sucesso. {count_notas} notas."
 

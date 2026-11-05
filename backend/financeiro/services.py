@@ -50,20 +50,89 @@ def _obter_ocorrencias_pagamento():
     return ids_entrega, ids_coleta
 
 
+MAPA_ID_ESL_UF = {
+    '237988': 'RJ',  # RD EXPRESSO (Matriz RJ)
+    '237978': 'SP',  # QUICK SAO PAULO
+    '237973': 'DF',  # QUICK BRASILIA
+    '237974': 'GO',  # QUICK GOIANIA
+}
+
+
+def _uf_por_texto_filial(texto):
+    """Infere a UF a partir do nome/apelido da filial emissora."""
+    if not texto:
+        return None
+    nome = str(texto).upper().strip()
+    if 'GOIANIA' in nome or 'GOIÂNIA' in nome or 'APARECIDA DE GOIANIA' in nome:
+        return 'GO'
+    if 'BRASILIA' in nome or 'BRASÍLIA' in nome or 'DISTRITO FEDERAL' in nome:
+        return 'DF'
+    if 'SAO PAULO' in nome or 'SÃO PAULO' in nome or 'GUARULHOS' in nome:
+        return 'SP'
+    if 'RIO DE JANEIRO' in nome or 'RD EXPRESSO' in nome or 'DUQUE DE CAXIAS' in nome:
+        return 'RJ'
+    ufs = [
+        'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS',
+        'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC',
+        'SP', 'SE', 'TO',
+    ]
+    for uf in ufs:
+        if nome.endswith(f' {uf}') or nome.endswith(f'-{uf}') or nome.endswith(f'/{uf}') or nome == uf:
+            return uf
+    return None
+
+
 def _uf_da_filial(filial):
-    """Extrai a UF da filial de operação. Retorna 'OUTROS' se não definida."""
-    if filial and filial.uf:
+    """Extrai a UF da filial de operação/emissora. Retorna 'OUTROS' se não definida."""
+    if not filial:
+        return 'OUTROS'
+    if getattr(filial, 'uf', None):
         return filial.uf.upper().strip()
-    if filial and filial.nome:
-        # Tenta extrair UF do nome da filial como fallback
-        nome = filial.nome.upper().strip()
-        ufs = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS',
-               'MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC',
-               'SP','SE','TO']
-        for uf in ufs:
-            if nome.endswith(f' {uf}') or nome.endswith(f'-{uf}') or nome == uf:
-                return uf
+    id_tms = str(getattr(filial, 'id_filial_tms', '') or '').strip()
+    if id_tms in MAPA_ID_ESL_UF:
+        return MAPA_ID_ESL_UF[id_tms]
+    uf_nome = _uf_por_texto_filial(getattr(filial, 'nome', None))
+    if uf_nome:
+        return uf_nome
     return 'OUTROS'
+
+
+def _uf_emissora_da_nota(nf):
+    """
+    Determina a UF da filial emissora do frete/nota fiscal (vinda do GraphQL ESL).
+    Prioridade:
+    1. Filial emissora vinculada à NotaFiscal ou ao Frete (`filial_emissora`)
+    2. `id_filial_emissora_tms` (corporationId da ESL: 237974=GO, 237978=SP, 237973=DF, 237988=RJ)
+    3. `nome_filial_emissora_tms` (nickname da filial na ESL)
+    Retorna None caso a nota ainda não possua dados de filial emissora.
+    """
+    if not nf:
+        return None
+    frete = getattr(nf, 'frete', None)
+
+    filial_obj = getattr(nf, 'filial_emissora', None) or (getattr(frete, 'filial_emissora', None) if frete else None)
+    if filial_obj:
+        uf = _uf_da_filial(filial_obj)
+        if uf and uf != 'OUTROS':
+            return uf
+
+    corp_id = str(
+        getattr(nf, 'id_filial_emissora_tms', None)
+        or (getattr(frete, 'id_filial_emissora_tms', None) if frete else None)
+        or ''
+    ).strip()
+    if corp_id in MAPA_ID_ESL_UF:
+        return MAPA_ID_ESL_UF[corp_id]
+
+    corp_nome = (
+        getattr(nf, 'nome_filial_emissora_tms', None)
+        or (getattr(frete, 'nome_filial_emissora_tms', None) if frete else None)
+    )
+    uf_texto = _uf_por_texto_filial(corp_nome)
+    if uf_texto:
+        return uf_texto
+
+    return None
 
 
 def sincronizar_clientes_pagadores():
@@ -194,7 +263,9 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
         valor_por_coleta = tarifa.valor_por_coleta if tarifa else Decimal('10.00')
         
         # Conta entregas e coletas PAGAS no manifesto
-        notas = NotaFiscal.objects.filter(manifesto=mft)
+        notas = NotaFiscal.objects.filter(manifesto=mft).select_related(
+            'frete', 'filial_emissora', 'frete__filial_emissora'
+        )
         
         qtd_entregas = 0
         qtd_coletas = 0
@@ -204,7 +275,10 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
         breakdown = defaultdict(lambda: {'entregas': 0, 'coletas': 0})
         
         for nf in notas:
-            # Determina o cliente pagador e a UF da filial responsável
+            # Determina o cliente pagador e a UF da filial responsável pelo frete/nota:
+            # 1º Prioridade: Filial emissora real do frete na ESL (GraphQL corporationId / filial_emissora)
+            # 2º Fallback: ClienteBasePagadora (para notas antigas ou coletas sem frete vinculado)
+            # 3º Fallback: UF base do manifesto
             cliente_nome = None
             tipo_nf = (nf.tipo_operacao or '').upper()
             if tipo_nf == 'COLETA':
@@ -213,6 +287,7 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
                 cliente_nome = (nf.frete.pagador_nome if nf.frete else None) or (nf.frete.remetente if nf.frete else None) or nf.destinatario
 
             nf_uf = uf_base
+            cli_obj = None
             if cliente_nome:
                 c_clean = cliente_nome.strip().upper()
                 cli_obj = clientes_map.get(c_clean)
@@ -221,8 +296,11 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
                     cli_obj, _ = ClienteBasePagadora.objects.get_or_create(nome=c_clean)
                     clientes_map[c_clean] = cli_obj
 
-                if cli_obj.filial_responsavel:
-                    nf_uf = _uf_da_filial(cli_obj.filial_responsavel)
+            uf_emissora = _uf_emissora_da_nota(nf)
+            if uf_emissora:
+                nf_uf = uf_emissora
+            elif cli_obj and cli_obj.filial_responsavel:
+                nf_uf = _uf_da_filial(cli_obj.filial_responsavel)
             
             # CT-es: conta todos os fretes vinculados
             if nf.frete and nf.frete.numero_cte:

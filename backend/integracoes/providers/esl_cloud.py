@@ -8,6 +8,12 @@ from django.utils import timezone
 from django.conf import settings
 
 from integracoes.base import BaseTMSAdapter
+from integracoes.providers.esl_graphql import (
+    consultar_frete,
+    endereco_texto,
+    freight_id_valido,
+    nota_pertence_ao_frete,
+)
 from usuarios.models import Motorista, Filial
 from manifesto.models import Manifesto, NotaFiscal, ManifestoBuscaLog, BaixaNF, Veiculo, Frete
 from manifesto.services import enviar_painel
@@ -289,6 +295,39 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 return resultado
                 
         return None
+
+    # =====================================================
+    # GRAPHQL `freight` (mesmo token do Data Export: token_analytics)
+    # =====================================================
+    def consultar_frete_graphql(self, freight_id):
+        """Consulta 1 frete pelo ID interno da ESL. Levanta GraphQLFreightError em falha."""
+        return consultar_frete(self.config.dominio_esl, self.config.token_analytics, freight_id)
+
+    def _graphql_do_frete(self, freight_id, cache_gql=None):
+        """
+        Consulta GraphQL com cache por freight.id. Devolve None em QUALQUER falha
+        (o chamador cai no Data Export): nunca interrompe a importação do manifesto.
+        """
+        fid = str(freight_id or '').strip()
+        if not freight_id_valido(fid):
+            return None
+        if cache_gql is not None and fid in cache_gql:
+            return cache_gql[fid]
+        try:
+            from integracoes.enriquecimento_frete import respeitar_intervalo_esl
+            respeitar_intervalo_esl()
+            dados = self.consultar_frete_graphql(fid)
+        except Exception as exc:
+            logger.warning(f"⚠️ [GRAPHQL] Falha ao consultar frete {fid}: {exc}")
+            return None
+        if dados and cache_gql is not None:
+            cache_gql[fid] = dados
+        return dados
+
+    def enriquecer_manifesto_graphql(self, manifesto, forcar=False, cache_gql=None):
+        """Enriquece notas/minutas do manifesto (ID interno, FILIAL EMISSORA, CT-e, CEP). Devolve resumo."""
+        from integracoes.enriquecimento_frete import enriquecer_manifesto
+        return enriquecer_manifesto(self.config, manifesto, forcar=forcar, cache_gql=cache_gql)
 
     def buscar_coletas_esl(self, numero_manifesto, token, dominio, report_coletas):
         """Busca coletas no Data Export usando o sequence_code do manifesto."""
@@ -687,6 +726,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
             
             total_processadas = 0
             ids_processadas = []
+            cache_gql = {}            # freight.id -> dados GraphQL (1 chamada por frete, não por nota)
+            filiais_cache_gql = {}    # corporationId -> Filial
             for id_doc, dados_base in notas_unicas_dict.items():
                 try:
                     chave = dados_base['chave']
@@ -807,7 +848,30 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     endereco = "CONSULTE O DOCUMENTO FÍSICO"
                     cep_nota = None
 
-                    if chave:
+                    # 🆕 GraphQL `freight` PRIMEIRO (1 chamada por frete, com cache): destinatário, endereço+CEP,
+                    # CT-e e FILIAL EMISSORA — inclusive para minutas sem chave NF-e. Se falhar/divergir, cai no Data Export.
+                    dados_gql = None
+                    filial_gql = None
+                    if freight_id:
+                        dados_gql = self._graphql_do_frete(freight_id, cache_gql)
+                        if dados_gql and not nota_pertence_ao_frete({'numero': numero, 'chave': chave}, dados_gql):
+                            logger.warning(f"⚠️ [GRAPHQL] NF {numero} não consta no frete {freight_id} devolvido pela ESL. Usando Data Export.")
+                            dados_gql = None
+                    if dados_gql:
+                        if dados_gql.get('destinatario_nome'):
+                            destinatario = dados_gql['destinatario_nome'].upper()[:255]
+                        end_gql = dados_gql.get('endereco') or {}
+                        if endereco_texto(end_gql):
+                            endereco = endereco_texto(end_gql)
+                        if end_gql.get('cep'):
+                            cep_nota = end_gql['cep']
+                        try:
+                            from integracoes.enriquecimento_frete import resolver_filial_emissora
+                            filial_gql = resolver_filial_emissora(dados_gql.get('corporation_id'), dados_gql.get('corporation_nome'), filiais_cache_gql)
+                        except Exception as e_fil:
+                            logger.warning(f"⚠️ [GRAPHQL] Não foi possível resolver filial emissora da NF {numero}: {e_fil}")
+
+                    if chave and not cep_nota:
                         time.sleep(2.0)
                         detalhes = self.buscar_detalhes_esl_interno(chave, numero, token_geral)
                         if detalhes:
@@ -830,9 +894,18 @@ class ESLCloudAdapter(BaseTMSAdapter):
                             if cep_val:
                                 cep_nota = str(cep_val).strip()[:10]
 
-                    time.sleep(2.0)
-                    dados_frete = self.buscar_dados_frete_report_7693(chave, numero, token_geral)
+                    dados_frete = None
                     frete_obj = None
+                    if dados_gql:
+                        try:
+                            from integracoes.enriquecimento_frete import upsert_frete
+                            frete_obj = upsert_frete(dados_gql, filial_gql)
+                        except Exception as e_fr:
+                            logger.warning(f"⚠️ [GRAPHQL] Falha ao gravar Frete {freight_id}: {e_fr}. Usando Data Export.")
+                            frete_obj = None
+                    if frete_obj is None:
+                        time.sleep(2.0)
+                        dados_frete = self.buscar_dados_frete_report_7693(chave, numero, token_geral)
                     if dados_frete:
                         seq_code_frete = dados_frete.get('sequence_code')
                         if seq_code_frete:
@@ -866,7 +939,12 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         tipo_operacao=tipo_operacao,
                         status='PENDENTE',
                         freight_id_tms=str(freight_id) if freight_id else None,
-                        frete=frete_obj
+                        frete=frete_obj,
+                        numero_cte=(dados_gql or {}).get('cte_numero'),
+                        chave_cte=(dados_gql or {}).get('cte_chave'),
+                        filial_emissora=filial_gql,
+                        id_filial_emissora_tms=(dados_gql or {}).get('corporation_id'),
+                        nome_filial_emissora_tms=(dados_gql or {}).get('corporation_nome'),
                     )
                     ids_processadas.append(nota_obj.id)
                     total_processadas += 1
@@ -941,6 +1019,19 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     args=[manifesto_obj.id, numero_visual],
                     countdown=30
                 )
+
+            # 🔎 Notas que já existiam no manifesto (ou cujo GraphQL falhou acima) são completadas em background:
+            # ID interno, FILIAL EMISSORA, CT-e e CEP faltantes. Idempotente: sem lacunas, não chama a ESL.
+            try:
+                from manifesto.tasks import enriquecer_manifesto_graphql_task
+                from django.db import connection as _conn
+                enriquecer_manifesto_graphql_task.apply_async(
+                    args=[manifesto_obj.id],
+                    kwargs={'schema_name': getattr(_conn, 'schema_name', None)},
+                    countdown=10
+                )
+            except Exception as e_gql:
+                logger.warning(f"⚠️ [GRAPHQL] Não foi possível agendar enriquecimento do manifesto {numero_visual}: {e_gql}")
 
             # === REMOÇÃO DE NOTAS ÓRFÃS ===
             try:
@@ -1675,13 +1766,26 @@ class ESLCloudAdapter(BaseTMSAdapter):
             url_tentada = ""
 
             # --- ESTRATÉGIA 1: TENTATIVA VIA ENDPOINT DE FRETE V1 (/api/v1/freights/{id}/invoice_occurrences) ---
-            freight_id = nf.freight_id_tms or (nf.frete.freight_id_tms if (hasattr(nf, 'frete') and nf.frete) else None)
-            # Identifica ID ausente ou suspeito (menor que 100, ou igual ao número da própria nota/chave)
+            from integracoes.providers.esl_graphql import freight_id_valido
+            esl_fid_frete = getattr(nf.frete, 'esl_freight_id', None) if (hasattr(nf, 'frete') and nf.frete) else None
+            seq_fid_frete = getattr(nf.frete, 'freight_id_tms', None) if (hasattr(nf, 'frete') and nf.frete) else None
+
+            if freight_id_valido(nf.freight_id_tms, numero_nota=nf.numero_nota, chave_acesso=nf.chave_acesso):
+                freight_id = str(nf.freight_id_tms).strip()
+            elif freight_id_valido(esl_fid_frete, numero_nota=nf.numero_nota, chave_acesso=nf.chave_acesso):
+                freight_id = str(esl_fid_frete).strip()
+            else:
+                freight_id = nf.freight_id_tms or esl_fid_frete
+
+            # Identifica ID ausente ou suspeito (menor que 100, igual ao número/chave, ou igual ao sequence_code visual quando esl_freight_id difere)
             id_suspeito = (
-                not freight_id or 
-                (str(freight_id).isdigit() and int(freight_id) < 100) or
-                (str(freight_id).strip() == str(nf.numero_nota).strip()) or
-                (nf.chave_acesso and str(freight_id).strip() == str(nf.chave_acesso).strip())
+                not freight_id_valido(freight_id, numero_nota=nf.numero_nota, chave_acesso=nf.chave_acesso)
+                or (
+                    seq_fid_frete
+                    and esl_fid_frete
+                    and str(freight_id).strip() == str(seq_fid_frete).strip()
+                    and str(esl_fid_frete).strip() != str(seq_fid_frete).strip()
+                )
             )
             if id_suspeito:
                 logger.info(f"Minuta {nf.numero_nota}: freight_id '{freight_id}' ausente/suspeito. Buscando ID interno real na ESL...")
@@ -1691,7 +1795,22 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     nf.freight_id_tms = novo_fid
                     nf.save(update_fields=['freight_id_tms'])
                     logger.info(f"Minuta {nf.numero_nota}: freight_id real encontrado = {freight_id}")
+                elif not freight_id_valido(freight_id, numero_nota=nf.numero_nota, chave_acesso=nf.chave_acesso):
+                    freight_id = None
 
+            # Se encontrou um freight_id válido e a nota ainda não tem filial emissora ou chave CT-e, enriquece via GraphQL
+            if freight_id and (not getattr(nf, 'filial_emissora_id', None) or not getattr(nf, 'chave_cte', None)):
+                try:
+                    from integracoes.enriquecimento_frete import aplicar_em_nota, resolver_filial_emissora, upsert_frete
+                    norm_gql = self._graphql_do_frete(freight_id)
+                    if norm_gql:
+                        filial_em = resolver_filial_emissora(norm_gql.get('corporation_id'), norm_gql.get('corporation_nome'))
+                        frete_gql = upsert_frete(norm_gql, filial_em)
+                        aplicar_em_nota(nf, norm_gql, frete_gql, filial_em)
+                except Exception as e_enriq_min:
+                    logger.debug(f"Aviso ao enriquecer minuta #{nf.numero_nota} via GraphQL antes da baixa: {e_enriq_min}")
+
+            frete_respondeu_422 = False
             if freight_id:
                 URL_ESL_FRETE = f"https://{self.config.dominio_esl}/api/v1/freights/{freight_id}/invoice_occurrences"
                 url_tentada = URL_ESL_FRETE
@@ -1736,16 +1855,23 @@ class ESLCloudAdapter(BaseTMSAdapter):
                                 msg_sucesso = f"Sucesso: Baixa de Minuta integrada via Freight ID {freight_id}"
                             else:
                                 response = res_frete_novo
+                                if res_frete_novo.status_code == 422:
+                                    frete_respondeu_422 = True
+                                    integrado_via_frete = True
                         else:
                             response = res_frete
                     else:
                         response = res_frete
+                        if res_frete.status_code == 422:
+                            frete_respondeu_422 = True
+                            integrado_via_frete = True
                 except Exception as e_post_frete:
                     logger.warning(f"Exceção no envio via Freight ID {freight_id}: {e_post_frete}")
 
             # --- ESTRATÉGIA 2: FALLBACK PARA ENDPOINT GERAL (/api/invoice_occurrences) ---
-            # Se a tentativa de frete não deu sucesso (404 ou sem freight_id), tenta o endpoint geral de notas
-            if not sucesso:
+            # Se a tentativa de frete não deu sucesso (404 ou sem freight_id) e NÃO retornou 422 de validação no frete,
+            # tenta o endpoint geral de notas. (Não sobrescreve 422 do frete com 404 do endpoint de notas!)
+            if not sucesso and not frete_respondeu_422:
                 URL_ESL_NOTAS = f"https://{self.config.dominio_esl}/api/invoice_occurrences"
                 logger.info(f"🔄 [FALLBACK MINUTA] Tentando endpoint geral {URL_ESL_NOTAS} para Minuta #{nf.numero_nota}...")
                 
@@ -1763,14 +1889,15 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     if manifesto and manifesto.manifesto_id_tms and str(manifesto.manifesto_id_tms).isdigit():
                         payload_chave["invoice_occurrence"]["manifest"] = {"id": int(manifesto.manifesto_id_tms)}
 
-                    url_tentada = URL_ESL_NOTAS
                     try:
                         res_chave = requests.post(URL_ESL_NOTAS, json=payload_chave, headers=headers, timeout=30)
                         if res_chave.status_code in [200, 201]:
+                            url_tentada = URL_ESL_NOTAS
                             response = res_chave
                             sucesso = True
                             msg_sucesso = f"Sucesso: Baixa de Minuta integrada via /api/invoice_occurrences (chave: {nf.chave_acesso})"
                         elif res_chave.status_code == 422:
+                            url_tentada = URL_ESL_NOTAS
                             response = res_chave
                     except Exception as e_chave:
                         logger.warning(f"Aviso no envio por chave em invoice_occurrences: {e_chave}")
@@ -1789,19 +1916,22 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     if manifesto and manifesto.manifesto_id_tms and str(manifesto.manifesto_id_tms).isdigit():
                         payload_num["invoice_occurrence"]["manifest"] = {"id": int(manifesto.manifesto_id_tms)}
 
-                    url_tentada = URL_ESL_NOTAS
                     try:
                         res_num = requests.post(URL_ESL_NOTAS, json=payload_num, headers=headers, timeout=30)
                         if res_num.status_code in [200, 201]:
+                            url_tentada = URL_ESL_NOTAS
                             response = res_num
                             sucesso = True
                             msg_sucesso = f"Sucesso: Baixa de Minuta integrada via /api/invoice_occurrences (número: {nf.numero_nota})"
-                        elif res_num.status_code == 422 or not response:
+                        elif res_num.status_code == 422 or response is None:
+                            url_tentada = URL_ESL_NOTAS
                             response = res_num
                     except Exception as e_num:
                         logger.warning(f"Aviso no envio por número em invoice_occurrences: {e_num}")
 
-            if not response:
+            # IMPORTANTE: Em `requests`, `bool(Response)` é False para status >= 400!
+            # Por isso usamos `response is None` para não mascarar respostas 422/404/500 da ESL.
+            if response is None:
                 raise Exception(
                     f"Minuta #{nf.numero_nota} sem freight_id válido e nenhuma rota de integração foi concluída (Manifesto #{manifesto.numero_manifesto if manifesto else 'N/A'})."
                 )
@@ -2247,7 +2377,31 @@ class ESLCloudAdapter(BaseTMSAdapter):
         if nf.chave_acesso and len(str(nf.chave_acesso).strip()) == 44 and str(nf.chave_acesso).strip().isdigit():
             return str(nf.chave_acesso).strip()
 
-        # 4. Consulta rápida em /api/invoice_occurrences por invoice_number ou freight_id para obter cte_key
+        # 4. Consulta GraphQL freight pelo ID interno do frete (fid / nf.freight_id_tms / nf.frete.esl_freight_id)
+        try:
+            from integracoes.providers.esl_graphql import freight_id_valido
+            fid_busca = (
+                fid
+                or getattr(nf, 'freight_id_tms', None)
+                or (getattr(nf.frete, 'esl_freight_id', None) if (hasattr(nf, 'frete') and nf.frete) else None)
+            )
+            if freight_id_valido(fid_busca, numero_nota=getattr(nf, 'numero_nota', None), chave_acesso=getattr(nf, 'chave_acesso', None)):
+                norm_gql = self._graphql_do_frete(fid_busca)
+                if norm_gql:
+                    try:
+                        from integracoes.enriquecimento_frete import aplicar_em_nota, resolver_filial_emissora, upsert_frete
+                        filial_em = resolver_filial_emissora(norm_gql.get('corporation_id'), norm_gql.get('corporation_nome'))
+                        frete_gql = upsert_frete(norm_gql, filial_em)
+                        aplicar_em_nota(nf, norm_gql, frete_gql, filial_em)
+                    except Exception:
+                        pass
+                    cte_k = norm_gql.get('cte_chave')
+                    if cte_k and len(str(cte_k).strip()) == 44:
+                        return str(cte_k).strip()
+        except Exception as e_gql_cte:
+            logger.debug(f"Aviso ao consultar cte_key via GraphQL para frete {fid}: {e_gql_cte}")
+
+        # 5. Consulta rápida em /api/invoice_occurrences por invoice_number ou freight_id para obter cte_key
         try:
             num = str(nf.numero_nota or '').strip()
             url_oc = f"https://{self.config.dominio_esl}/api/invoice_occurrences"
@@ -2310,7 +2464,12 @@ class ESLCloudAdapter(BaseTMSAdapter):
             nf = baixa.nota_fiscal
 
         # Resolve freight_id (ID interno da ESL)
-        fid = freight_id or getattr(nf, 'freight_id_tms', None) or (getattr(nf.frete, 'freight_id_tms', None) if (nf and hasattr(nf, 'frete') and nf.frete) else None)
+        fid = (
+            freight_id
+            or getattr(nf, 'freight_id_tms', None)
+            or (getattr(nf.frete, 'esl_freight_id', None) if (nf and hasattr(nf, 'frete') and nf.frete) else None)
+            or (getattr(nf.frete, 'freight_id_tms', None) if (nf and hasattr(nf, 'frete') and nf.frete) else None)
+        )
         
         # Resolve número da minuta / nota (draft_number)
         draft_num = getattr(nf, 'numero_nota', None) or getattr(baixa, 'numero_nota', None)

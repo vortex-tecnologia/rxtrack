@@ -161,6 +161,31 @@ class Frete(models.Model):
     pagador_nome = models.CharField(max_length=255, null=True, blank=True)
     pagador_documento = models.CharField(max_length=50, null=True, blank=True)
     natureza_carga = models.CharField(max_length=255, null=True, blank=True)
+
+    # ID INTERNO do frete na ESL (o mesmo de /freight/normals/<id>/edit e de invoice_occurrences.freight.id).
+    # NÃO confundir com `freight_id_tms`, que historicamente mistura sequence_code e id_tms.
+    esl_freight_id = models.CharField(
+        max_length=50, null=True, blank=True, db_index=True,
+        verbose_name="ID interno do frete na ESL (freight.id)"
+    )
+
+    # FILIAL EMISSORA do frete (quem emitiu o CT-e/minuta) — vem do GraphQL `freight.corporationId`.
+    # Base do rateio de diárias/fechamento dos motoristas.
+    filial_emissora = models.ForeignKey(
+        Filial, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='fretes_emitidos', verbose_name="Filial Emissora do Frete"
+    )
+    id_filial_emissora_tms = models.CharField(
+        max_length=50, null=True, blank=True, db_index=True,
+        verbose_name="ID da filial emissora na ESL (corporationId)"
+    )
+    nome_filial_emissora_tms = models.CharField(
+        max_length=150, null=True, blank=True,
+        verbose_name="Nome da filial emissora na ESL"
+    )
+    graphql_sincronizado_em = models.DateTimeField(
+        null=True, blank=True, verbose_name="Última sincronização via GraphQL"
+    )
     
     criado_em = models.DateTimeField(auto_now_add=True)
 
@@ -367,6 +392,21 @@ class NotaFiscal(models.Model):
         ('OCORRENCIA', 'Ocorrência Registrada'),
     ]
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDENTE')
+
+    # FILIAL EMISSORA da nota/minuta (corporationId do frete na ESL). Usada no rateio do fechamento:
+    # "quantas notas de cada filial em cada manifesto".
+    filial_emissora = models.ForeignKey(
+        Filial, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='notas_emitidas', verbose_name="Filial Emissora"
+    )
+    id_filial_emissora_tms = models.CharField(
+        max_length=50, null=True, blank=True, db_index=True,
+        verbose_name="ID da filial emissora na ESL (corporationId)"
+    )
+    nome_filial_emissora_tms = models.CharField(
+        max_length=150, null=True, blank=True,
+        verbose_name="Nome da filial emissora na ESL"
+    )
 
     def __str__(self):
         return f"NF {self.numero_nota} ({self.manifesto.numero_manifesto})"

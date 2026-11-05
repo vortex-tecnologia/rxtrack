@@ -8,7 +8,7 @@ from .models import (
     HistoricoOcorrencia, ManifestoBuscaLog, WebhookEventoManifestoESL, WebhookTokenControl,
     LogBaixaNfe, Frete, Veiculo, LogChecklistManifesto
 )
-from manifesto.tasks import enviar_baixa_esl_task, processar_webhook_manifesto_task
+from manifesto.tasks import enviar_baixa_esl_task, processar_webhook_manifesto_task, enriquecer_manifesto_graphql_task
 
 @admin.register(WebhookEventoManifestoESL)
 class WebhookEventoManifestoESLAdmin(admin.ModelAdmin):
@@ -125,6 +125,17 @@ class ManifestoAdmin(ModelAdmin):
     list_display = ("numero_manifesto", "motorista", "filial", "filial_operacao", "status", "status_tms", "veiculo", "data_criacao")
     list_filter = ("status", "status_tms", "finalizado", "filial", "filial_operacao")
     search_fields = ("numero_manifesto", "motorista__nome_completo", "veiculo__placa")
+    actions = ["enriquecer_fretes_graphql"]
+
+    def enriquecer_fretes_graphql(self, request, queryset):
+        from django.db import connection
+        schema_name = getattr(connection, "schema_name", None)
+        count = 0
+        for mft in queryset:
+            enriquecer_manifesto_graphql_task.delay(mft.id, schema_name=schema_name, forcar=True)
+            count += 1
+        self.message_user(request, f"{count} manifesto(s) enviado(s) para enriquecimento de fretes/filial emissora via GraphQL!")
+    enriquecer_fretes_graphql.short_description = "⚡ Enriquecer Fretes e Filial Emissora (GraphQL ESL)"
 
 @admin.register(Veiculo)
 class VeiculoAdmin(ModelAdmin):
@@ -134,15 +145,53 @@ class VeiculoAdmin(ModelAdmin):
 
 @admin.register(Frete)
 class FreteAdmin(ModelAdmin):
-    list_display = ("freight_id_tms", "numero_cte", "modal", "remetente", "criado_em")
-    search_fields = ("freight_id_tms", "numero_cte", "chave_cte", "remetente")
-    list_filter = ("modal", "criado_em")
+    list_display = (
+        "freight_id_tms",
+        "esl_freight_id",
+        "numero_cte",
+        "filial_emissora",
+        "id_filial_emissora_tms",
+        "nome_filial_emissora_tms",
+        "modal",
+        "remetente",
+        "graphql_sincronizado_em",
+    )
+    search_fields = (
+        "freight_id_tms",
+        "esl_freight_id",
+        "numero_cte",
+        "chave_cte",
+        "remetente",
+        "pagador_nome",
+        "id_filial_emissora_tms",
+        "nome_filial_emissora_tms",
+    )
+    list_filter = ("filial_emissora", "id_filial_emissora_tms", "modal", "criado_em")
 
 @admin.register(NotaFiscal)
 class NotaFiscalAdmin(ModelAdmin):
-    list_display = ("numero_nota", "manifesto", "destinatario", "status")
-    search_fields = ("numero_nota", "chave_acesso", "destinatario")
-    list_filter = ("status",)
+    list_display = (
+        "numero_nota",
+        "manifesto",
+        "tipo_operacao",
+        "filial_emissora",
+        "id_filial_emissora_tms",
+        "freight_id_tms",
+        "numero_cte",
+        "cep",
+        "destinatario",
+        "status",
+    )
+    search_fields = (
+        "numero_nota",
+        "chave_acesso",
+        "freight_id_tms",
+        "numero_cte",
+        "chave_cte",
+        "destinatario",
+        "cep",
+    )
+    list_filter = ("status", "tipo_operacao", "filial_emissora", "id_filial_emissora_tms")
 
 @admin.register(Ocorrencia)
 class OcorrenciaAdmin(ModelAdmin):
