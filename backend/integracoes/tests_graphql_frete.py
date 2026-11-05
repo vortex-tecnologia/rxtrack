@@ -190,6 +190,7 @@ from integracoes.enriquecimento_frete import (  # noqa: E402
     resolver_filial_emissora,
 )
 from integracoes.providers.esl_graphql import (  # noqa: E402
+    consultar_frete,
     endereco_texto,
     freight_id_valido,
     mapear_notas_para_fretes,
@@ -364,6 +365,62 @@ class ESLGraphQLNormalizerTests(TestCase):
         self.assertEqual(norm["remetente_nome"], "LABORATORIO TEUTO BRASILEIRO S/A")
         self.assertEqual(norm["corporation_id"], "237988")
         self.assertEqual(norm["corporation_nome"], "RD EXPRESSO")
+
+    def test_consultar_frete_reentrega_herda_unique_id_do_frete_original(self):
+        """
+        Em fretes de reentrega (ex: 57513089), a ESL devolve uniqueId=None e originalFreightId=57426912.
+        Garante que consultar_frete busca o frete original e herda seu unique_id ('b05426d0a8d6cb66').
+        """
+        import json
+
+        def fake_post(url, headers, payload, timeout):
+            fid = payload["variables"]["params"]["id"]
+            if fid == "57513089":
+                # Reentrega sem uniqueId
+                return 200, json.dumps({
+                    "data": {
+                        "freight": {
+                            "edges": [{
+                                "node": {
+                                    "id": 57513089,
+                                    "sequenceCode": 468524,
+                                    "type": "Freight::Redelivery",
+                                    "uniqueId": None,
+                                    "originalFreightId": 57426912,
+                                    "corporationId": 237978,
+                                    "cte": {"number": 281104, "series": 2, "key": "35261114539546000120570020002811041468278402"},
+                                }
+                            }]
+                        }
+                    }
+                })
+            elif fid == "57426912":
+                # Frete original com etiqueta/uniqueId
+                return 200, json.dumps({
+                    "data": {
+                        "freight": {
+                            "edges": [{
+                                "node": {
+                                    "id": 57426912,
+                                    "sequenceCode": 467778,
+                                    "type": "Freight::Normal",
+                                    "uniqueId": "b05426d0a8d6cb66",
+                                    "originalFreightId": None,
+                                    "corporationId": 237978,
+                                    "cte": {"number": 280850, "series": 2, "key": "35261114539546000120570020002808501004677789"},
+                                }
+                            }]
+                        }
+                    }
+                })
+            return 404, "{}"
+
+        res = consultar_frete("dominio.esl", "token-fake", "57513089", post=fake_post)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["freight_id"], "57513089")
+        self.assertEqual(res["tipo"], "Freight::Redelivery")
+        self.assertEqual(res["original_freight_id"], "57426912")
+        self.assertEqual(res["unique_id"], "b05426d0a8d6cb66")
 
     def test_freight_id_valido_rejeita_ids_suspeitos(self):
         self.assertFalse(freight_id_valido(None))

@@ -33,6 +33,7 @@ query freight($params: FreightInput!, $first: Int) {
         sequenceCode
         corporationSequenceNumber
         uniqueId
+        originalFreightId
         corporationId
         status
         modal
@@ -216,6 +217,7 @@ def normalizar_frete(node: dict) -> dict:
         "sequence_code": _s(node.get("sequenceCode")),
         "corporation_sequence_number": _s(node.get("corporationSequenceNumber")),
         "unique_id": _s(node.get("uniqueId")),
+        "original_freight_id": _s(node.get("originalFreightId")),
         "corporation_id": _s(node.get("corporationId")),
         "corporation_nome": _s(corp.get("nickname")) or _s(corp.get("name")),
         "corporation_cnpj": re.sub(r"\D", "", corp.get("document") or "") or None,
@@ -246,9 +248,24 @@ def normalizar_frete(node: dict) -> dict:
 
 # ───────────────────────── cliente HTTP ─────────────────────────
 def _post_requests(url: str, headers: dict, payload: dict, timeout: int) -> Tuple[int, str]:
-    import requests  # import tardio: este módulo precisa carregar sem dependências
-    r = requests.post(url, headers=headers, json=payload, timeout=timeout)
-    return r.status_code, r.text
+    try:
+        import requests
+        r = requests.post(url, headers=headers, json=payload, timeout=timeout)
+        return r.status_code, r.text
+    except ImportError:
+        import urllib.request
+        import urllib.error
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST"
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.status, resp.read().decode("utf-8", errors="ignore")
+        except urllib.error.HTTPError as err:
+            return err.code, err.read().decode("utf-8", errors="ignore")
 
 
 def consultar_frete(
@@ -259,6 +276,7 @@ def consultar_frete(
     post: Optional[Callable[[str, dict, dict, int], Tuple[int, str]]] = None,
     sleep: Callable[[float], None] = time.sleep,
     max_429: int = 2,
+    _profundidade: int = 0,
 ) -> Optional[dict]:
     """
     Consulta UM frete pelo ID interno da ESL (`freight.id`) e devolve o dict normalizado.
@@ -307,7 +325,30 @@ def consultar_frete(
     for edge in edges:
         node = (edge or {}).get("node") or {}
         if _s(node.get("id")) == fid:
-            return normalizar_frete(node)
+            norm = normalizar_frete(node)
+            # Reentrega ('Freight::Redelivery'): na ESL, o frete de reentrega tem uniqueId=null
+            # e aponta para o frete original em `originalFreightId`. Herdamos o unique_id do frete
+            # original para que a bipagem da etiqueta física colada na caixa funcione perfeitamente!
+            if not norm.get("unique_id") and node.get("originalFreightId") and _profundidade < 2:
+                orig_id = _s(node.get("originalFreightId"))
+                if orig_id and orig_id != fid:
+                    try:
+                        orig = consultar_frete(
+                            dominio, token, orig_id, timeout=timeout, post=post, sleep=sleep,
+                            max_429=max_429, _profundidade=_profundidade + 1
+                        )
+                        if orig and orig.get("unique_id"):
+                            norm["unique_id"] = orig["unique_id"]
+                            logger.info(
+                                "Frete %s (reentrega) herdou unique_id '%s' do frete original %s",
+                                fid, norm["unique_id"], orig_id
+                            )
+                    except Exception as exc_orig:
+                        logger.warning(
+                            "Falha ao consultar frete original %s para herdar unique_id: %s",
+                            orig_id, exc_orig
+                        )
+            return norm
 
     if edges:
         logger.warning("GraphQL ESL devolveu frete(s) diferente(s) do pedido (%s). Ignorado.", fid)
