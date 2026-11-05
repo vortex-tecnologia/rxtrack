@@ -142,6 +142,7 @@ def upsert_frete(dados, filial, forcar=False):
         frete = Frete(freight_id_tms=escolhido)
 
     frete.esl_freight_id = fid
+    _definir_autoritativo(frete, 'esl_unique_id', dados.get('unique_id'))
     _definir_autoritativo(frete, 'numero_cte', cte_n)
     if cte_k:
         _definir_autoritativo(frete, 'chave_cte', cte_k)
@@ -210,6 +211,10 @@ def aplicar_em_nota(nf, dados, frete, filial, forcar=False):
     # Frete (FK): como `nota_pertence_ao_frete` já validou que esta nota consta dentro do frete
     # oficial da ESL, sempre vincula o Frete real (substituindo eventual Frete provisório do webhook).
     _set('frete', frete)
+
+    # Código único da etiqueta ESL (`freight.uniqueId`) — usado para bipagem em CT-e e Minutas
+    if dados.get('unique_id'):
+        _set('esl_unique_id', dados['unique_id'])
 
     # CT-e ou Nº da Minuta (`corporationSequenceNumber` quando emissionType == "draft")
     if dados.get('cte_numero'):
@@ -504,6 +509,7 @@ def notas_pendentes_de_enriquecimento(manifesto):
             not nf.id_filial_emissora_tms
             or not freight_id_valido(nf.freight_id_tms, nf.numero_nota, nf.chave_acesso)
             or not nf.numero_cte
+            or not getattr(nf, 'esl_unique_id', None)
             or frete_obj is None
             or not getattr(frete_obj, 'graphql_sincronizado_em', None)
             or (nf.status == 'PENDENTE' and (

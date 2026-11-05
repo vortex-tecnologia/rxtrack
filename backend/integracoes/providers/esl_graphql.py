@@ -32,6 +32,7 @@ query freight($params: FreightInput!, $first: Int) {
         id
         sequenceCode
         corporationSequenceNumber
+        uniqueId
         corporationId
         status
         modal
@@ -214,6 +215,7 @@ def normalizar_frete(node: dict) -> dict:
         "freight_id": _s(node.get("id")),
         "sequence_code": _s(node.get("sequenceCode")),
         "corporation_sequence_number": _s(node.get("corporationSequenceNumber")),
+        "unique_id": _s(node.get("uniqueId")),
         "corporation_id": _s(node.get("corporationId")),
         "corporation_nome": _s(corp.get("nickname")) or _s(corp.get("name")),
         "corporation_cnpj": re.sub(r"\D", "", corp.get("document") or "") or None,

@@ -169,6 +169,13 @@ class Frete(models.Model):
         verbose_name="ID interno do frete na ESL (freight.id)"
     )
 
+    # Código único da etiqueta na ESL (`freight.uniqueId` no GraphQL, ex: 'b88b7a4d6aa02ba3').
+    # Usado para bipagem de volumes/etiquetas tanto em CT-e quanto em Minutas.
+    esl_unique_id = models.CharField(
+        max_length=50, null=True, blank=True, db_index=True,
+        verbose_name="Código da Etiqueta ESL (uniqueId)"
+    )
+
     # FILIAL EMISSORA do frete (quem emitiu o CT-e/minuta) — vem do GraphQL `freight.corporationId`.
     # Base do rateio de diárias/fechamento dos motoristas.
     filial_emissora = models.ForeignKey(
@@ -406,6 +413,10 @@ class NotaFiscal(models.Model):
     nome_filial_emissora_tms = models.CharField(
         max_length=150, null=True, blank=True,
         verbose_name="Nome da filial emissora na ESL"
+    )
+    esl_unique_id = models.CharField(
+        max_length=50, null=True, blank=True, db_index=True,
+        verbose_name="Código da Etiqueta ESL (uniqueId)"
     )
 
     def __str__(self):

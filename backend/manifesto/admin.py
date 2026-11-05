@@ -148,6 +148,7 @@ class FreteAdmin(ModelAdmin):
     list_display = (
         "freight_id_tms",
         "esl_freight_id",
+        "esl_unique_id",
         "numero_cte",
         "filial_emissora",
         "id_filial_emissora_tms",
@@ -159,6 +160,7 @@ class FreteAdmin(ModelAdmin):
     search_fields = (
         "freight_id_tms",
         "esl_freight_id",
+        "esl_unique_id",
         "numero_cte",
         "chave_cte",
         "remetente",
@@ -177,6 +179,7 @@ class NotaFiscalAdmin(ModelAdmin):
         "filial_emissora",
         "id_filial_emissora_tms",
         "freight_id_tms",
+        "esl_unique_id",
         "numero_cte",
         "cep",
         "destinatario",
@@ -186,6 +189,7 @@ class NotaFiscalAdmin(ModelAdmin):
         "numero_nota",
         "chave_acesso",
         "freight_id_tms",
+        "esl_unique_id",
         "numero_cte",
         "chave_cte",
         "destinatario",

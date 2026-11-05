@@ -201,6 +201,7 @@ from integracoes.providers.esl_graphql import (  # noqa: E402
 NODE_FRETE_57258355 = {
     "id": "57258355",
     "sequenceCode": 466451,
+    "uniqueId": "508afca5904dfb13",
     "corporationId": 237974,
     "status": "finished",
     "modal": "road",
@@ -267,6 +268,7 @@ class ESLGraphQLNormalizerTests(TestCase):
         self.assertIsNotNone(norm)
         self.assertEqual(norm["freight_id"], "57258355")
         self.assertEqual(norm["sequence_code"], "466451")
+        self.assertEqual(norm["unique_id"], "508afca5904dfb13")
         self.assertEqual(norm["cte_numero"], "90964")
         self.assertEqual(norm["cte_chave"], "52260408296144000734570010000909641004664515")
         self.assertEqual(norm["corporation_id"], "237974")
@@ -291,6 +293,7 @@ class ESLGraphQLNormalizerTests(TestCase):
             "id": 57391800,
             "sequenceCode": 467207,
             "corporationSequenceNumber": 17360,
+            "uniqueId": "b88b7a4d6aa02ba3",
             "corporationId": 237988,
             "status": "in_transit",
             "modal": "rodo",
@@ -349,6 +352,7 @@ class ESLGraphQLNormalizerTests(TestCase):
         }
         norm = normalizar_frete(node_57391800)
         self.assertTrue(norm["eh_minuta"])
+        self.assertEqual(norm["unique_id"], "b88b7a4d6aa02ba3")
         self.assertEqual(norm["minuta_numero"], "17360")
         self.assertEqual(norm["cte_numero"], "17360")
         self.assertIsNone(norm["cte_chave"])
@@ -425,6 +429,7 @@ class EnriquecimentoEFilialEmissoraTests(TestCase):
             chave_acesso=None,
             status="PENDENTE",
             freight_id_tms=None,
+            esl_unique_id=None,
             frete_id=None,
             frete=None,
             filial_emissora_id=None,
@@ -446,6 +451,7 @@ class EnriquecimentoEFilialEmissoraTests(TestCase):
         self.assertTrue(len(campos) > 0)
         self.assertEqual(conflitos, [])
         self.assertEqual(nf.freight_id_tms, "57258355")
+        self.assertEqual(nf.esl_unique_id, "508afca5904dfb13")
         self.assertEqual(nf.id_filial_emissora_tms, "237974")
         self.assertEqual(nf.nome_filial_emissora_tms, "QUICK GOIANIA")
         self.assertEqual(nf.filial_emissora, filial_go)
@@ -481,6 +487,7 @@ class EnriquecimentoEFilialEmissoraTests(TestCase):
                     status="PENDENTE",
                     chave_acesso=None,
                     freight_id_tms="57258355",
+                    esl_unique_id=None,
                     frete_id=None,
                     frete=None,
                     filial_emissora_id=None,
@@ -544,6 +551,7 @@ class EnriquecimentoEFilialEmissoraTests(TestCase):
         for nf in notas_mock:
             self.assertEqual(nf.cep, "21011400")
             self.assertEqual(nf.id_filial_emissora_tms, "237974")
+            self.assertEqual(nf.esl_unique_id, "508afca5904dfb13")
 
     def test_enriquecer_coletas_manifesto_71413_corporation_id_237973(self):
         """
