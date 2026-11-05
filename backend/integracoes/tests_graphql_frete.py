@@ -281,6 +281,86 @@ class ESLGraphQLNormalizerTests(TestCase):
             self.assertTrue(nota_pertence_ao_frete({"numero": num, "chave": None}, norm))
         self.assertFalse(nota_pertence_ao_frete({"numero": "999999", "chave": None}, norm))
 
+    def test_normalizar_frete_minuta_sem_cte_57391800_usa_corporation_sequence_number_e_pagador(self):
+        """
+        No frete 57391800 (Minuta RD Expresso /17360), `cte` é null e `emissionType` é 'draft'.
+        O número da minuta deve vir de `corporationSequenceNumber` (17360), `cte_chave` deve ser None,
+        `volumes` = 2 (`invoicesVolumes`) e `pagador_nome` = 'METTA BRASIL LOGISTICA LTDA'.
+        """
+        node_57391800 = {
+            "id": 57391800,
+            "sequenceCode": 467207,
+            "corporationSequenceNumber": 17360,
+            "corporationId": 237988,
+            "status": "in_transit",
+            "modal": "rodo",
+            "type": "Freight::Normal",
+            "emissionType": "draft",
+            "invoiceDocumentType": "Invoice::Nfe",
+            "total": 110.0,
+            "invoicesValue": 44.16,
+            "taxedWeight": 20.0,
+            "realWeight": 20.0,
+            "invoicesWeight": 20.0,
+            "invoicesVolumes": 2,
+            "invoicesTotalVolumes": 0,
+            "freightInvoicesCount": 1,
+            "corporation": {
+                "name": "RD EXPRESSO TRANSPORTES - EIRELI",
+                "nickname": "RD EXPRESSO",
+                "document": "14977687000124",
+            },
+            "payer": {
+                "name": "METTA BRASIL LOGISTICA LTDA",
+                "nickname": "METTA BRASIL LOGISTICA LTDA",
+                "document": "30408555000219",
+            },
+            "sender": {
+                "name": "LABORATORIO TEUTO BRASILEIRO S/A",
+                "nickname": "LABORATORIO TEUTO BRASILEIRO S/A",
+                "document": "17159229000176",
+            },
+            "recipient": {
+                "name": "FARMALOG DISTRIBUIDORA DE MEDICAMENTOS LTDA",
+                "nickname": "FARMALOG DISTRIBUIDORA DE MEDICAMENTOS LTDA",
+                "document": "24924986000588",
+            },
+            "destinationAddress": {
+                "line1": "RODOVIA PRESIDENTE DUTRA",
+                "line2": "BLOCO 2 KM 188",
+                "number": "25551",
+                "neighborhood": "SARAPO",
+                "postalCode": "26343295",
+                "city": {"name": "Queimados", "state": {"code": "RJ"}},
+            },
+            "cte": None,
+            "freightInvoices": [
+                {
+                    "invoice": {
+                        "id": "124624534",
+                        "number": "86004",
+                        "key": "52261017159229000176550030000860041553043690",
+                        "volume": 2,
+                        "weight": 20.0,
+                        "value": 44.16,
+                    }
+                }
+            ],
+        }
+        norm = normalizar_frete(node_57391800)
+        self.assertTrue(norm["eh_minuta"])
+        self.assertEqual(norm["minuta_numero"], "17360")
+        self.assertEqual(norm["cte_numero"], "17360")
+        self.assertIsNone(norm["cte_chave"])
+        self.assertEqual(norm["volumes"], 2)
+        self.assertEqual(norm["valor_frete"], 110.0)
+        self.assertEqual(norm["peso_taxado"], 20.0)
+        self.assertEqual(norm["pagador_nome"], "METTA BRASIL LOGISTICA LTDA")
+        self.assertEqual(norm["pagador_documento"], "30408555000219")
+        self.assertEqual(norm["remetente_nome"], "LABORATORIO TEUTO BRASILEIRO S/A")
+        self.assertEqual(norm["corporation_id"], "237988")
+        self.assertEqual(norm["corporation_nome"], "RD EXPRESSO")
+
     def test_freight_id_valido_rejeita_ids_suspeitos(self):
         self.assertFalse(freight_id_valido(None))
         self.assertFalse(freight_id_valido(""))

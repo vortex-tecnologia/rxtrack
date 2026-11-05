@@ -120,15 +120,14 @@ def upsert_frete(dados, filial, forcar=False):
                 frete = cand
                 break
 
-    def _preencher(obj, campo, valor):
-        """Preenche só se vazio (ou forcar)."""
+    def _definir_autoritativo(obj, campo, valor):
+        """Atualiza o campo no Frete sempre que o GraphQL trouxer valor válido (fonte oficial da ESL)."""
         if valor in (None, ''):
             return False
-        atual = getattr(obj, campo)
-        if atual in (None, '') or forcar:
-            if atual != valor:
-                setattr(obj, campo, valor)
-                return True
+        atual = getattr(obj, campo, None)
+        if atual != valor:
+            setattr(obj, campo, valor)
+            return True
         return False
 
     if frete is None:
@@ -143,16 +142,19 @@ def upsert_frete(dados, filial, forcar=False):
         frete = Frete(freight_id_tms=escolhido)
 
     frete.esl_freight_id = fid
-    _preencher(frete, 'numero_cte', cte_n)
-    _preencher(frete, 'chave_cte', cte_k)
-    _preencher(frete, 'modal', dados.get('modal'))
-    _preencher(frete, 'valor_frete', _decimal(dados.get('valor_frete')))
-    _preencher(frete, 'peso_taxado', _decimal(dados.get('peso_taxado')))
+    _definir_autoritativo(frete, 'numero_cte', cte_n)
+    if cte_k:
+        _definir_autoritativo(frete, 'chave_cte', cte_k)
+    elif dados.get('eh_minuta'):
+        frete.chave_cte = None
+    _definir_autoritativo(frete, 'modal', dados.get('modal'))
+    _definir_autoritativo(frete, 'valor_frete', _decimal(dados.get('valor_frete')))
+    _definir_autoritativo(frete, 'peso_taxado', _decimal(dados.get('peso_taxado')))
     vol = dados.get('volumes')
-    _preencher(frete, 'volumes', int(vol) if str(vol or '').isdigit() else None)
-    _preencher(frete, 'remetente', dados.get('remetente_nome'))
-    _preencher(frete, 'pagador_nome', dados.get('pagador_nome'))
-    _preencher(frete, 'pagador_documento', dados.get('pagador_documento'))
+    _definir_autoritativo(frete, 'volumes', int(vol) if str(vol or '').isdigit() else None)
+    _definir_autoritativo(frete, 'remetente', dados.get('remetente_nome'))
+    _definir_autoritativo(frete, 'pagador_nome', dados.get('pagador_nome'))
+    _definir_autoritativo(frete, 'pagador_documento', dados.get('pagador_documento'))
 
     # Emissor: dado autoritativo da ESL -> sempre atualiza.
     frete.id_filial_emissora_tms = dados.get('corporation_id')
@@ -160,6 +162,16 @@ def upsert_frete(dados, filial, forcar=False):
     frete.filial_emissora = filial
     frete.graphql_sincronizado_em = timezone.now()
     frete.save()
+
+    # Vincula/garante o Pagador do Frete no cadastro financeiro (ClienteBasePagadora)
+    pagador_nome = (dados.get('pagador_nome') or '').strip().upper()
+    if pagador_nome:
+        try:
+            from financeiro.models import ClienteBasePagadora
+            ClienteBasePagadora.objects.get_or_create(nome=pagador_nome)
+        except Exception:
+            pass
+
     return frete
 
 
@@ -195,17 +207,17 @@ def aplicar_em_nota(nf, dados, frete, filial, forcar=False):
         else:
             conflitos.append(f"freight_id_tms local={atual} x ESL={fid}")
 
-    # Frete (FK)
-    if nf.frete_id is None or forcar:
-        _set('frete', frete)
-    elif nf.frete_id != frete.id:
-        conflitos.append(f"frete local={nf.frete_id} x ESL={frete.id}")
+    # Frete (FK): como `nota_pertence_ao_frete` já validou que esta nota consta dentro do frete
+    # oficial da ESL, sempre vincula o Frete real (substituindo eventual Frete provisório do webhook).
+    _set('frete', frete)
 
-    # CT-e
-    if not nf.numero_cte and dados.get('cte_numero'):
+    # CT-e ou Nº da Minuta (`corporationSequenceNumber` quando emissionType == "draft")
+    if dados.get('cte_numero'):
         _set('numero_cte', dados['cte_numero'])
-    if not nf.chave_cte and dados.get('cte_chave'):
+    if dados.get('cte_chave'):
         _set('chave_cte', dados['cte_chave'])
+    elif dados.get('eh_minuta') and nf.chave_cte:
+        _set('chave_cte', None)
 
     # Dados de entrega: só em nota PENDENTE
     precisa_geo = False
@@ -486,10 +498,14 @@ def enriquecer_coletas_manifesto(config, manifesto, forcar=False, filiais_cache=
 def notas_pendentes_de_enriquecimento(manifesto):
     """Notas (não-coleta) do manifesto que ainda têm lacuna que o GraphQL resolve."""
     faltando = []
-    for nf in manifesto.notas_fiscais.exclude(tipo_operacao='COLETA'):
+    for nf in manifesto.notas_fiscais.exclude(tipo_operacao='COLETA').select_related('frete'):
+        frete_obj = getattr(nf, 'frete', None)
         lacuna = (
             not nf.id_filial_emissora_tms
             or not freight_id_valido(nf.freight_id_tms, nf.numero_nota, nf.chave_acesso)
+            or not nf.numero_cte
+            or frete_obj is None
+            or not getattr(frete_obj, 'graphql_sincronizado_em', None)
             or (nf.status == 'PENDENTE' and (
                 not limpar_cep(nf.cep)
                 or texto_e_placeholder(nf.endereco_entrega)

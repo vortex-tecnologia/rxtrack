@@ -31,13 +31,18 @@ query freight($params: FreightInput!, $first: Int) {
       node {
         id
         sequenceCode
+        corporationSequenceNumber
         corporationId
         status
         modal
         type
+        emissionType
         invoiceDocumentType
         total
+        invoicesValue
         taxedWeight
+        realWeight
+        invoicesWeight
         invoicesVolumes
         invoicesTotalVolumes
         freightInvoicesCount
@@ -50,7 +55,7 @@ query freight($params: FreightInput!, $first: Int) {
         }
         destinationAddress { line1 line2 number neighborhood postalCode city { name state { code } } }
         cte { number series key }
-        freightInvoices { invoice { id number key volume } }
+        freightInvoices { invoice { id number key volume weight value } }
       }
     }
   }
@@ -174,36 +179,65 @@ def normalizar_frete(node: dict) -> dict:
         inv = (fi or {}).get("invoice") or {}
         if not inv:
             continue
-        notas.append({"id": _s(inv.get("id")), "numero": _s(inv.get("number")), "chave": chave_44(inv.get("key"))})
+        vol_inv = None
         try:
-            soma_volumes += int(inv.get("volume") or 0)
+            if inv.get("volume") is not None:
+                vol_inv = int(inv.get("volume") or 0)
+                soma_volumes += vol_inv
         except (TypeError, ValueError):
-            pass
+            vol_inv = None
+        notas.append({
+            "id": _s(inv.get("id")),
+            "numero": _s(inv.get("number")),
+            "chave": chave_44(inv.get("key")),
+            "volumes": vol_inv,
+            "peso": inv.get("weight"),
+            "valor": inv.get("value"),
+        })
 
     volumes = node.get("invoicesVolumes") or node.get("invoicesTotalVolumes") or soma_volumes or None
+    peso = node.get("taxedWeight")
+    if peso in (None, 0, 0.0):
+        peso = node.get("realWeight") or node.get("invoicesWeight") or peso
+
+    # CT-e vs Minuta:
+    # - Quando é CT-e, `cte.number` e `cte.key` vêm preenchidos.
+    # - Quando é Minuta (`emissionType == "draft"` e `cte == null`), não há chave de CT-e,
+    #   mas o número da Minuta na filial vem em `corporationSequenceNumber` (ex: 17360 em `/17360`).
+    cte_num_real = _s(cte.get("number"))
+    cte_chave = chave_44(cte.get("key"))
+    minuta_numero = _s(node.get("corporationSequenceNumber")) or _s(node.get("sequenceCode"))
+    emission_type = _s(node.get("emissionType"))
+    eh_minuta = bool(not cte_num_real and not cte_chave and (emission_type == "draft" or minuta_numero))
 
     return {
         "freight_id": _s(node.get("id")),
         "sequence_code": _s(node.get("sequenceCode")),
+        "corporation_sequence_number": _s(node.get("corporationSequenceNumber")),
         "corporation_id": _s(node.get("corporationId")),
         "corporation_nome": _s(corp.get("nickname")) or _s(corp.get("name")),
         "corporation_cnpj": re.sub(r"\D", "", corp.get("document") or "") or None,
         "status": _s(node.get("status")),
         "modal": _s(node.get("modal")),
         "tipo": _s(node.get("type")),
+        "emission_type": emission_type,
+        "eh_minuta": eh_minuta,
+        "minuta_numero": minuta_numero if eh_minuta else None,
         "tipo_documento": _s(node.get("invoiceDocumentType")),
         "valor_frete": node.get("total"),
-        "peso_taxado": node.get("taxedWeight"),
+        "valor_notas": node.get("invoicesValue"),
+        "peso_taxado": peso,
         "volumes": volumes,
         "pagador_nome": _nome_pessoa(node.get("payer")),
         "pagador_documento": re.sub(r"\D", "", (node.get("payer") or {}).get("document") or "") or None,
         "remetente_nome": _nome_pessoa(node.get("sender")),
+        "remetente_documento": re.sub(r"\D", "", (node.get("sender") or {}).get("document") or "") or None,
         "destinatario_nome": _s(recipient.get("name")) or _s(recipient.get("nickname")),
         "destinatario_documento": re.sub(r"\D", "", recipient.get("document") or "") or None,
         "endereco": endereco,
-        "cte_numero": _s(cte.get("number")),
+        "cte_numero": cte_num_real or minuta_numero,
         "cte_serie": _s(cte.get("series")),
-        "cte_chave": chave_44(cte.get("key")),
+        "cte_chave": cte_chave,
         "notas": notas,
     }
 

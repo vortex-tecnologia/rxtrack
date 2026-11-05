@@ -67,7 +67,11 @@
                         {% if nota.tipo_operacao == 'COLETA' and nota.numero_coleta %}
                             <small class="d-block text-muted" style="font-size: 0.7rem; font-weight: normal;">Coleta #{{ nota.numero_coleta }}</small>
                         {% elif nota.numero_cte %}
-                            <small class="d-block text-muted" style="font-size: 0.7rem; font-weight: normal;">CT-e #{{ nota.numero_cte }}</small>
+                            {% if nota.chave_cte %}
+                                <small class="d-block text-muted" style="font-size: 0.7rem; font-weight: normal;">CT-e #{{ nota.numero_cte }}</small>
+                            {% else %}
+                                <small class="d-block text-muted" style="font-size: 0.7rem; font-weight: normal;">Minuta #{{ nota.numero_cte }}</small>
+                            {% endif %}
                         {% endif %}
                     </td>
                     <td>

@@ -1369,8 +1369,8 @@ function executarDeletarOcorrencia(notaId) {
                         <tr class="${rowClass}" style="cursor: pointer;" onclick="abrirModalFreteNotas(${frete.id}, '${frete.freight_id_tms}')">
                             <td class="fw-bold text-primary">#${frete.freight_id_tms || '-'}</td>
                             <td>
-                                <span class="fw-bold">${frete.numero_cte || 'Sem Nº CT-e'}</span><br>
-                                <small class="text-muted" style="font-size: 0.7rem;">${frete.chave_cte || '-'}</small>
+                                <span class="fw-bold">${frete.numero_cte ? (frete.chave_cte ? 'CT-e #' + frete.numero_cte : 'Minuta #' + frete.numero_cte) : 'Sem Nº CT-e'}</span><br>
+                                <small class="text-muted" style="font-size: 0.7rem;">${frete.chave_cte || (frete.numero_cte ? 'Minuta (sem chave CT-e)' : '-')}</small>
                             </td>
                             <td>${badgeModal}</td>
                             <td>

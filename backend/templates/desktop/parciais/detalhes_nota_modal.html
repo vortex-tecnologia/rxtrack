@@ -13,8 +13,10 @@
                     <h6 class="fw-bold mb-0 text-white"><i class="bi bi-airplane me-2"></i>Despacho / Embarque (Sem Chave)</h6>
                 {% elif nota_principal.tipo_operacao == 'TRANSFERENCIA' %}
                     <h6 class="fw-bold mb-0 text-white"><i class="bi bi-arrow-left-right me-2"></i>Transferência Operacional (Sem Chave)</h6>
+                {% elif nota_principal.chave_cte or nota_principal.frete.chave_cte %}
+                    <h6 class="fw-bold mb-0 text-white"><i class="bi bi-file-earmark-text me-2"></i>CT-e (Sem Chave de NF-e)</h6>
                 {% else %}
-                    <h6 class="fw-bold mb-0 text-white"><i class="bi bi-file-earmark-text me-2"></i>Minuta / CT-e (Sem Chave de Acesso)</h6>
+                    <h6 class="fw-bold mb-0 text-white"><i class="bi bi-journal-text me-2"></i>Minuta (Sem Chave de Acesso)</h6>
                 {% endif %}
             {% endif %}
         </div>
@@ -60,10 +62,16 @@
         <!-- Documentos e Informações Operacionais -->
         <div class="col-md-5 ps-md-3">
             <div class="row g-2 small">
-                {% if nota_principal.numero_cte %}
+                {% with num_doc_frete=nota_principal.numero_cte|default:nota_principal.frete.numero_cte chave_doc_frete=nota_principal.chave_cte|default:nota_principal.frete.chave_cte %}
+                {% if num_doc_frete %}
                 <div class="col-6">
-                    <span class="text-muted d-block" style="font-size: 0.65rem;">Conhecimento (CT-e)</span>
-                    <strong class="text-dark"><i class="bi bi-file-earmark-text text-primary me-1"></i>#{{ nota_principal.numero_cte }}</strong>
+                    {% if chave_doc_frete %}
+                        <span class="text-muted d-block" style="font-size: 0.65rem;">Conhecimento (CT-e)</span>
+                        <strong class="text-dark"><i class="bi bi-file-earmark-text text-primary me-1"></i>#{{ num_doc_frete }}</strong>
+                    {% else %}
+                        <span class="text-muted d-block" style="font-size: 0.65rem;">Minuta</span>
+                        <strong class="text-dark"><i class="bi bi-journal-text text-warning me-1"></i>#{{ num_doc_frete }} <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-1" style="font-size: 0.6rem;">Minuta</span></strong>
+                    {% endif %}
                 </div>
                 {% endif %}
 
@@ -102,14 +110,31 @@
                     {% endif %}
                 </div>
 
-                {% if nota_principal.chave_cte and nota_principal.chave_cte != nota_principal.chave_acesso %}
+                {% if nota_principal.frete and nota_principal.frete.volumes %}
+                <div class="col-6">
+                    <span class="text-muted d-block" style="font-size: 0.65rem;">Volumes</span>
+                    <strong class="text-dark"><i class="bi bi-boxes text-secondary me-1"></i>{{ nota_principal.frete.volumes }}</strong>
+                </div>
+                {% endif %}
+
+                {% if nota_principal.frete and nota_principal.frete.pagador_nome %}
+                <div class="col-12 mt-1">
+                    <span class="text-muted d-block" style="font-size: 0.62rem;">Pagador do Frete</span>
+                    <strong class="text-dark small text-truncate d-block" title="{{ nota_principal.frete.pagador_nome }}">
+                        <i class="bi bi-person-Vcard me-1 text-secondary"></i>{{ nota_principal.frete.pagador_nome }}
+                    </strong>
+                </div>
+                {% endif %}
+
+                {% if chave_doc_frete and chave_doc_frete != nota_principal.chave_acesso %}
                 <div class="col-12 mt-1">
                     <span class="text-muted d-block" style="font-size: 0.62rem;">Chave do CT-e</span>
-                    <span class="text-muted font-monospace small text-truncate d-block" style="font-size: 0.68rem;" title="{{ nota_principal.chave_cte }}">
-                        {{ nota_principal.chave_cte }}
+                    <span class="text-muted font-monospace small text-truncate d-block" style="font-size: 0.68rem;" title="{{ chave_doc_frete }}">
+                        {{ chave_doc_frete }}
                     </span>
                 </div>
                 {% endif %}
+                {% endwith %}
             </div>
         </div>
     </div>

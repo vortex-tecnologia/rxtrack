@@ -1851,8 +1851,13 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 elif not freight_id_valido(freight_id, numero_nota=nf.numero_nota, chave_acesso=nf.chave_acesso):
                     freight_id = None
 
-            # Se encontrou um freight_id válido e a nota ainda não tem filial emissora ou chave CT-e, enriquece via GraphQL
-            if freight_id and (not getattr(nf, 'filial_emissora_id', None) or not getattr(nf, 'chave_cte', None)):
+            # Se encontrou um freight_id válido e a nota ainda não tem filial emissora ou número CT-e/Minuta, enriquece via GraphQL
+            tem_doc_frete = bool(
+                getattr(nf, 'chave_cte', None)
+                or getattr(nf, 'numero_cte', None)
+                or (getattr(nf, 'frete', None) and (getattr(nf.frete, 'chave_cte', None) or getattr(nf.frete, 'numero_cte', None)))
+            )
+            if freight_id and (not getattr(nf, 'filial_emissora_id', None) or not tem_doc_frete):
                 try:
                     from integracoes.enriquecimento_frete import aplicar_em_nota, resolver_filial_emissora, upsert_frete
                     norm_gql = self._graphql_do_frete(freight_id)
@@ -2525,7 +2530,15 @@ class ESLCloudAdapter(BaseTMSAdapter):
         )
         
         # Resolve número da minuta / nota (draft_number)
-        draft_num = getattr(nf, 'numero_nota', None) or getattr(baixa, 'numero_nota', None)
+        tem_chave_cte = bool(
+            getattr(nf, 'chave_cte', None)
+            or (getattr(nf, 'frete', None) and getattr(nf.frete, 'chave_cte', None))
+        )
+        num_minuta_frete = (
+            (getattr(nf, 'numero_cte', None) or (getattr(nf.frete, 'numero_cte', None) if getattr(nf, 'frete', None) else None))
+            if not tem_chave_cte else None
+        )
+        draft_num = num_minuta_frete or getattr(nf, 'numero_nota', None) or getattr(baixa, 'numero_nota', None)
 
         # 1. Tenta resolver a chave do CT-e (cte_key de 44 dígitos)
         cte_key = self._resolver_chave_cte_para_frete(nf, fid=fid)
