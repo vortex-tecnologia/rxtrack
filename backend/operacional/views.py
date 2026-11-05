@@ -587,7 +587,10 @@ from manifesto.models import NotaFiscal
 def detalhes_nota_fiscal_view(request, nota_id):
     # 1. Busca a nota de referência para descobrir a chave de acesso
     nota_clicada = get_object_or_404(
-        NotaFiscal.objects.select_related('manifesto', 'manifesto__filial', 'manifesto__motorista'),
+        NotaFiscal.objects.select_related(
+            'manifesto', 'manifesto__filial', 'manifesto__motorista',
+            'filial_emissora', 'frete', 'frete__filial_emissora'
+        ),
         id=nota_id
     )
     
