@@ -124,6 +124,8 @@ def upsert_frete(dados, filial, forcar=False):
         """Atualiza o campo no Frete sempre que o GraphQL trouxer valor válido (fonte oficial da ESL)."""
         if valor in (None, ''):
             return False
+        if not hasattr(obj, campo):
+            return False
         atual = getattr(obj, campo, None)
         if atual != valor:
             setattr(obj, campo, valor)
@@ -188,7 +190,7 @@ def aplicar_em_nota(nf, dados, frete, filial, forcar=False):
     conflitos = []
 
     def _set(campo, valor):
-        if getattr(nf, campo) != valor:
+        if hasattr(nf, campo) and getattr(nf, campo, None) != valor:
             setattr(nf, campo, valor)
             if campo not in campos:
                 campos.append(campo)
