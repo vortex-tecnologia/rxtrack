@@ -138,6 +138,14 @@ class FechamentoAgregado(models.Model):
 
     periodo_inicio = models.DateField(verbose_name="Início do Período")
     periodo_fim = models.DateField(verbose_name="Fim do Período")
+    filial = models.ForeignKey(
+        'usuarios.Filial',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fechamentos_agregados',
+        verbose_name="Filial Calculada"
+    )
     status = models.CharField(
         max_length=10, choices=STATUS_CHOICES, default='ABERTO',
         verbose_name="Status"
@@ -158,10 +166,11 @@ class FechamentoAgregado(models.Model):
     class Meta:
         verbose_name = "Fechamento de Agregado"
         verbose_name_plural = "Fechamentos de Agregados"
-        ordering = ['-periodo_inicio']
+        ordering = ['-periodo_inicio', '-id']
 
     def __str__(self):
-        return f"Fechamento {self.periodo_inicio.strftime('%d/%m/%Y')} a {self.periodo_fim.strftime('%d/%m/%Y')} ({self.get_status_display()})"
+        filial_str = f" - {self.filial.nome}" if self.filial else " - Todas as Filiais"
+        return f"Fechamento {self.periodo_inicio.strftime('%d/%m/%Y')} a {self.periodo_fim.strftime('%d/%m/%Y')}{filial_str} ({self.get_status_display()})"
 
 
 class LinhaFechamento(models.Model):

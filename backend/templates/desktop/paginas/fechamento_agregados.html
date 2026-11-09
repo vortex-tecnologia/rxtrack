@@ -133,7 +133,7 @@
                         <select name="fechamento_id" class="form-select form-select-sm rounded-pill" onchange="this.form.submit()">
                             {% for f in todos_fechamentos %}
                             <option value="{{ f.id }}" {% if fechamento and fechamento.id == f.id %}selected{% endif %}>
-                                {{ f.periodo_inicio|date:"d/m/Y" }} a {{ f.periodo_fim|date:"d/m/Y" }} — Status: {{ f.get_status_display }}
+                                {{ f.periodo_inicio|date:"d/m/Y" }} a {{ f.periodo_fim|date:"d/m/Y" }} — {% if f.filial %}{{ f.filial.nome }} ({{ f.filial.uf|default:"-" }}){% else %}Todas as Filiais{% endif %}
                             </option>
                             {% empty %}
                             <option value="">Nenhum fechamento gerado ainda</option>
@@ -143,14 +143,20 @@
                 </div>
                 <div class="col-md-7 text-md-end">
                     {% if fechamento %}
-                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill me-2">
+                    <span class="badge bg-dark-subtle text-dark border border-dark-subtle px-3 py-2 rounded-pill me-1">
+                        <i class="bi bi-building me-1"></i> {% if fechamento.filial %}{{ fechamento.filial.nome }} ({{ fechamento.filial.uf|default:"-" }}){% else %}Todas as Filiais{% endif %}
+                    </span>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill me-1">
                         <i class="bi bi-calendar3 me-1"></i> {{ fechamento.periodo_inicio|date:"d/m/Y" }} a {{ fechamento.periodo_fim|date:"d/m/Y" }}
                     </span>
                     <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2 rounded-pill me-2">
                         <i class="bi bi-people me-1"></i> {{ resumos|length }} Agregados
                     </span>
                     <button class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="recalcularFechamentoAtual()">
-                        <i class="bi bi-arrow-clockwise me-1"></i> Recalcular com Dados Atuais do App
+                        <i class="bi bi-arrow-clockwise me-1"></i> Recalcular
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger rounded-pill px-3 ms-1" onclick="excluirFechamentoAtual()" title="Excluir este relatório de fechamento">
+                        <i class="bi bi-trash3 me-1"></i> Excluir Relatório
                     </button>
                     {% endif %}
                 </div>
@@ -669,8 +675,17 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-4">
-                <p class="text-muted small">Selecione o intervalo de datas. O sistema irá varrer todos os manifestos de agregados do período e calcular entregas e coletas automaticamente.</p>
+                <p class="text-muted small">Selecione a filial e o intervalo de datas. O sistema irá buscar os manifestos de agregados correspondentes e calcular o rateio automaticamente.</p>
                 <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label small fw-bold">Filial a ser Calculada</label>
+                        <select class="form-select rounded-pill fw-bold" id="novo-filial-id">
+                            <option value="">Todas as Filiais (Geral)</option>
+                            {% for f in filiais %}
+                            <option value="{{ f.id }}">Somente {{ f.nome }} ({{ f.uf|default:"-" }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                     <div class="col-6">
                         <label class="form-label small fw-bold">Data Início</label>
                         <input type="date" class="form-control rounded-pill" id="novo-periodo-inicio" value="{{ hoje|date:'Y-m-01' }}">
@@ -938,6 +953,8 @@ function trocarMotoristaVisualizado(motId) {
 function dispararGeracaoFechamento() {
     const inicio = document.getElementById('novo-periodo-inicio').value;
     const fim = document.getElementById('novo-periodo-fim').value;
+    const filialSelect = document.getElementById('novo-filial-id');
+    const filialId = filialSelect ? filialSelect.value : '';
     const btn = document.getElementById('btnGerarFechamento');
 
     if (!inicio || !fim) {
@@ -954,7 +971,11 @@ function dispararGeracaoFechamento() {
             'Content-Type': 'application/json',
             'X-CSRFToken': '{{ csrf_token }}'
         },
-        body: JSON.stringify({ periodo_inicio: inicio, periodo_fim: fim })
+        body: JSON.stringify({
+            periodo_inicio: inicio,
+            periodo_fim: fim,
+            filial_id: filialId || null
+        })
     })
     .then(r => r.json())
     .then(res => {
@@ -998,7 +1019,8 @@ function recalcularFechamentoAtual() {
             },
             body: JSON.stringify({
                 periodo_inicio: '{{ fechamento.periodo_inicio|date:"Y-m-d" }}',
-                periodo_fim: '{{ fechamento.periodo_fim|date:"Y-m-d" }}'
+                periodo_fim: '{{ fechamento.periodo_fim|date:"Y-m-d" }}',
+                filial_id: '{{ fechamento.filial_id|default:"" }}' || null
             })
         })
         .then(r => r.json())
@@ -1007,6 +1029,52 @@ function recalcularFechamentoAtual() {
                 mostrarModalMensagem('Sucesso', 'Fechamento recalculado com sucesso!', 'sucesso', () => window.location.reload());
             } else {
                 mostrarModalMensagem('Erro ao Recalcular', res.erro, 'erro');
+            }
+        })
+        .catch(err => {
+            mostrarModalMensagem('Erro de Conexão', String(err), 'erro');
+        });
+    };
+
+    bsModal.show();
+    {% endif %}
+}
+
+// Excluir relatório de fechamento atual via Modal de Confirmação
+function excluirFechamentoAtual() {
+    {% if fechamento %}
+    const modalEl = document.getElementById('modalConfirmacao');
+    const msgEl = document.getElementById('modalConfirmacaoMensagem');
+    const btnSim = document.getElementById('modalConfirmacaoBtnConfirmar');
+
+    if (msgEl) {
+        msgEl.innerText = "Tem certeza que deseja EXCLUIR este relatório de fechamento ({{ fechamento.periodo_inicio|date:'d/m/Y' }} a {{ fechamento.periodo_fim|date:'d/m/Y' }} — {% if fechamento.filial %}{{ fechamento.filial.nome }}{% else %}Todas as Filiais{% endif %})? Esta ação não pode ser desfeita.";
+    }
+
+    const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    btnSim.onclick = function() {
+        bsModal.hide();
+        mostrarModalMensagem('Processando', 'Excluindo relatório de fechamento...', 'info');
+
+        fetch("{% url 'financeiro:api_excluir_fechamento' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                fechamento_id: {{ fechamento.id }}
+            })
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.sucesso) {
+                mostrarModalMensagem('Relatório Excluído', res.mensagem || 'Relatório removido com sucesso.', 'sucesso', () => {
+                    window.location.href = "{% url 'financeiro:fechamento_agregados' %}";
+                });
+            } else {
+                mostrarModalMensagem('Erro ao Excluir', res.erro, 'erro');
             }
         })
         .catch(err => {

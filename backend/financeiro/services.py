@@ -345,12 +345,12 @@ def recalcular_resumo_motorista(fechamento, motorista, valor_pedagio=None, valor
 
 
 @transaction.atomic
-def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
+def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None, filial=None):
     """
-    Gera (ou recalcula) um fechamento para o período informado.
+    Gera (ou recalcula) um fechamento para o período informado (e opcionalmente filtrado por Filial).
     
     Regra Oficial (Rateio por Filial Emissora):
-    1. Busca todos os manifestos no período onde motorista.categoria == 'AGREGADO'
+    1. Busca todos os manifestos no período onde motorista.categoria == 'AGREGADO' (da filial selecionada, se informada)
     2. Para cada nota/coleta do manifesto, identifica a Filial Emissora real (RJ, SP, DF, GO)
     3. Contabiliza apenas notas e coletas cuja baixa possua ocorrência marcada como paga
     4. Rateia a diária em % pela quantidade de entregas + coletas pagas de cada filial emissora
@@ -363,17 +363,25 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
     )
     from manifesto.models import Manifesto, NotaFiscal, BaixaNF
     
-    logger.info(f"📊 Gerando fechamento (por Filial Emissora): {periodo_inicio} a {periodo_fim}")
+    nome_f = filial.nome if filial else "Todas as Filiais"
+    logger.info(f"📊 Gerando fechamento ({nome_f}): {periodo_inicio} a {periodo_fim}")
     
-    # Busca ou cria o fechamento para este período
-    fechamento, created = FechamentoAgregado.objects.get_or_create(
+    # Busca ou cria o fechamento para este período + filial
+    fechamento = FechamentoAgregado.objects.filter(
         periodo_inicio=periodo_inicio,
         periodo_fim=periodo_fim,
-        defaults={
-            'status': 'ABERTO',
-            'criado_por': usuario,
-        }
-    )
+        filial=filial
+    ).first()
+    created = False
+    if not fechamento:
+        fechamento = FechamentoAgregado.objects.create(
+            periodo_inicio=periodo_inicio,
+            periodo_fim=periodo_fim,
+            filial=filial,
+            status='ABERTO',
+            criado_por=usuario,
+        )
+        created = True
     
     # Se já existe, limpa linhas anteriores para recalcular (mas preserva ajustes manuais)
     ajustes_manuais = {}
@@ -406,7 +414,24 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
         data_criacao__date__lte=periodo_fim,
     ).select_related(
         'motorista', 'motorista__filial', 'filial_operacao', 'filial', 'veiculo'
-    ).order_by('motorista__nome_completo', 'data_criacao')
+    )
+
+    if filial:
+        uf_alvo = _uf_da_filial(filial)
+        filtro_filial = (
+            Q(filial_operacao=filial) |
+            (Q(filial_operacao__isnull=True) & Q(filial=filial)) |
+            (Q(filial_operacao__isnull=True) & Q(filial__isnull=True) & Q(motorista__filial=filial))
+        )
+        if uf_alvo and uf_alvo != 'OUTROS':
+            filtro_filial |= (
+                Q(filial_operacao__uf__iexact=uf_alvo) |
+                (Q(filial_operacao__isnull=True) & Q(filial__uf__iexact=uf_alvo)) |
+                (Q(filial_operacao__isnull=True) & Q(filial__isnull=True) & Q(motorista__filial__uf__iexact=uf_alvo))
+            )
+        manifestos = manifestos.filter(filtro_filial)
+
+    manifestos = manifestos.order_by('motorista__nome_completo', 'data_criacao')
     
     logger.info(f"   Encontrados {manifestos.count()} manifestos de agregados no período.")
     

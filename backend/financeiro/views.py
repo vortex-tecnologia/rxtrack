@@ -79,12 +79,12 @@ def fechamento_agregados_view(request):
     fechamento_id = request.GET.get('fechamento_id')
     fechamento = None
     if fechamento_id:
-        fechamento = FechamentoAgregado.objects.filter(id=fechamento_id).first()
+        fechamento = FechamentoAgregado.objects.select_related('filial').filter(id=fechamento_id).first()
     if not fechamento:
-        fechamento = FechamentoAgregado.objects.first()
+        fechamento = FechamentoAgregado.objects.select_related('filial').first()
 
     # Histórico de fechamentos para o seletor
-    todos_fechamentos = FechamentoAgregado.objects.all()[:20]
+    todos_fechamentos = FechamentoAgregado.objects.select_related('filial').all()[:30]
 
     # Motoristas agregados cadastrados
     motoristas_agregados = Motorista.objects.filter(categoria='AGREGADO').order_by('nome_completo')
@@ -162,7 +162,7 @@ def fechamento_agregados_view(request):
 @login_required
 @require_POST
 def api_gerar_fechamento(request):
-    """Gera ou recalcula o fechamento para o período."""
+    """Gera ou recalcula o fechamento para o período (e filial opcional)."""
     if not verificar_permissao_financeiro(request.user):
         return JsonResponse({'sucesso': False, 'erro': 'Sem permissão.'}, status=403)
 
@@ -170,6 +170,7 @@ def api_gerar_fechamento(request):
         data = json.loads(request.body)
         inicio_str = data.get('periodo_inicio')
         fim_str = data.get('periodo_fim')
+        filial_id = data.get('filial_id')
         
         if not inicio_str or not fim_str:
             return JsonResponse({'sucesso': False, 'erro': 'Informe data de início e fim.'}, status=400)
@@ -180,12 +181,42 @@ def api_gerar_fechamento(request):
         if dt_inicio > dt_fim:
             return JsonResponse({'sucesso': False, 'erro': 'Data de início não pode ser maior que fim.'}, status=400)
 
-        fechamento = gerar_fechamento(dt_inicio, dt_fim, usuario=request.user)
+        filial_obj = None
+        if filial_id:
+            filial_obj = Filial.objects.filter(id=filial_id).first()
+
+        fechamento = gerar_fechamento(dt_inicio, dt_fim, usuario=request.user, filial=filial_obj)
+        label_filial = f" ({filial_obj.nome})" if filial_obj else " (Todas as Filiais)"
 
         return JsonResponse({
             'sucesso': True,
             'fechamento_id': fechamento.id,
-            'mensagem': f'Fechamento gerado com sucesso para o período {dt_inicio.strftime("%d/%m/%Y")} a {dt_fim.strftime("%d/%m/%Y")}!'
+            'mensagem': f'Fechamento{label_filial} gerado com sucesso para o período {dt_inicio.strftime("%d/%m/%Y")} a {dt_fim.strftime("%d/%m/%Y")}!'
+        })
+    except Exception as e:
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def api_excluir_fechamento(request):
+    """Exclui um relatório de fechamento já gerado e todas as suas linhas/resumos."""
+    if not verificar_permissao_financeiro(request.user):
+        return JsonResponse({'sucesso': False, 'erro': 'Sem permissão.'}, status=403)
+
+    try:
+        data = json.loads(request.body)
+        fechamento_id = data.get('fechamento_id')
+        if not fechamento_id:
+            return JsonResponse({'sucesso': False, 'erro': 'ID do fechamento não informado.'}, status=400)
+
+        fechamento = get_object_or_404(FechamentoAgregado, id=fechamento_id)
+        descricao = str(fechamento)
+        fechamento.delete()
+
+        return JsonResponse({
+            'sucesso': True,
+            'mensagem': f'Relatório "{descricao}" excluído com sucesso!'
         })
     except Exception as e:
         return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
@@ -405,11 +436,12 @@ def api_exportar_excel(request):
         return HttpResponse('Sem permissão.', status=403)
 
     fechamento_id = request.GET.get('fechamento_id')
-    fechamento = get_object_or_404(FechamentoAgregado, id=fechamento_id)
+    fechamento = get_object_or_404(FechamentoAgregado.objects.select_related('filial'), id=fechamento_id)
 
     excel_bytes = exportar_fechamento_excel(fechamento)
 
-    nome_arquivo = f"AGREGADOS_RESUMO_{fechamento.periodo_inicio.strftime('%d-%m')}_A_{fechamento.periodo_fim.strftime('%d-%m-%Y')}.xlsx"
+    sufixo_filial = f"_{fechamento.filial.uf or fechamento.filial.nome}".replace(' ', '_') if fechamento.filial else "_GERAL"
+    nome_arquivo = f"AGREGADOS{sufixo_filial}_{fechamento.periodo_inicio.strftime('%d-%m')}_A_{fechamento.periodo_fim.strftime('%d-%m-%Y')}.xlsx"
 
     response = HttpResponse(
         excel_bytes,

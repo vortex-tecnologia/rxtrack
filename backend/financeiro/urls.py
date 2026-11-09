@@ -9,6 +9,7 @@ app_name = 'financeiro'
 urlpatterns = [
     path('', views.fechamento_agregados_view, name='fechamento_agregados'),
     path('api/gerar/', views.api_gerar_fechamento, name='api_gerar_fechamento'),
+    path('api/excluir/', views.api_excluir_fechamento, name='api_excluir_fechamento'),
     path('api/linha/salvar/', views.api_salvar_linha, name='api_salvar_linha'),
     path('api/resumo/salvar/', views.api_salvar_resumo, name='api_salvar_resumo'),
     path('api/dados-bancarios/salvar/', views.api_salvar_dados_bancarios, name='api_salvar_dados_bancarios'),
