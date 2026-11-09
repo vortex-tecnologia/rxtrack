@@ -17,7 +17,7 @@ from financeiro.models import (
     LinhaFechamento, ResumoMotorista, DadosBancariosAgregado,
     ClienteBasePagadora
 )
-from financeiro.services import gerar_fechamento, sincronizar_clientes_pagadores
+from financeiro.services import gerar_fechamento, sincronizar_clientes_pagadores, recalcular_resumo_motorista, _tarifa_efetiva_uf
 from financeiro.export_excel import exportar_fechamento_excel
 from usuarios.models import Motorista, Filial
 from manifesto.models import Ocorrencia
@@ -117,6 +117,16 @@ def fechamento_agregados_view(request):
         ufs_filiais.add(padrao_uf)
     lista_bases = sorted(list(todas_bases.union(ufs_filiais)))
 
+    # Totais consolidados por unidade de negócios para o rodapé da Fatura Consolidada
+    totais_bases_fatura = {b: Decimal('0.00') for b in lista_bases}
+    total_geral_fatura = Decimal('0.00')
+    for r in resumos:
+        bk_r = r.breakdown_bases or {}
+        for b in lista_bases:
+            v_b = Decimal(str((bk_r.get(b) or {}).get('valor_total', 0) or 0))
+            totais_bases_fatura[b] += v_b
+        total_geral_fatura += (r.total_final or Decimal('0.00'))
+
     # Tarifas cadastradas mapeadas por filial
     tarifas = TarifaAgregado.objects.select_related('filial').all()
     tarifas_map = {t.filial_id: t for t in tarifas}
@@ -128,10 +138,6 @@ def fechamento_agregados_view(request):
     ocs_entrega_ids = list(config_fin.ocorrencias_pagamento_entrega.values_list('id', flat=True))
     ocs_coleta_ids = list(config_fin.ocorrencias_pagamento_coleta.values_list('id', flat=True))
 
-    # Clientes pagadores e bases
-    clientes_pagadores = ClienteBasePagadora.objects.select_related('filial_responsavel').order_by('nome')
-    clientes_sem_filial_count = ClienteBasePagadora.objects.filter(filial_responsavel__isnull=True).count()
-
     context = {
         'fechamento': fechamento,
         'todos_fechamentos': todos_fechamentos,
@@ -139,6 +145,8 @@ def fechamento_agregados_view(request):
         'linhas': linhas,
         'resumos': resumos,
         'lista_bases': lista_bases,
+        'totais_bases_fatura': totais_bases_fatura,
+        'total_geral_fatura': total_geral_fatura,
         'dados_bancarios_map': dados_bancarios_map,
         'tarifas': tarifas,
         'tarifas_map': tarifas_map,
@@ -146,8 +154,6 @@ def fechamento_agregados_view(request):
         'ocorrencias_todas': ocorrencias_todas,
         'ocs_entrega_ids': ocs_entrega_ids,
         'ocs_coleta_ids': ocs_coleta_ids,
-        'clientes_pagadores': clientes_pagadores,
-        'clientes_sem_filial_count': clientes_sem_filial_count,
         'hoje': timezone.now().date(),
     }
     return render(request, 'desktop/paginas/fechamento_agregados.html', context)
@@ -203,62 +209,58 @@ def api_salvar_linha(request):
             linha.localidade_extra = (data.get('localidade_extra') or '').strip().upper()
         if 'observacao' in data:
             linha.observacao = data.get('observacao')
+
         if 'breakdown_bases' in data and isinstance(data['breakdown_bases'], dict):
-            linha.breakdown_bases = data['breakdown_bases']
+            bk_input = data['breakdown_bases']
+            novo_entregas = sum(int((v or {}).get('entregas', 0) or 0) for v in bk_input.values())
+            novo_coletas = sum(int((v or {}).get('coletas', 0) or 0) for v in bk_input.values())
+            total_emb = novo_entregas + novo_coletas
+
+            val_ent_total = Decimal('0.00')
+            val_col_total = Decimal('0.00')
+            bk_detalhado = {}
+            for uf_k, v in bk_input.items():
+                ent_u = int((v or {}).get('entregas', 0) or 0)
+                col_u = int((v or {}).get('coletas', 0) or 0)
+                if ent_u == 0 and col_u == 0:
+                    continue
+                t_uf = _tarifa_efetiva_uf(uf_k, linha.filial_operacao, linha.data)
+                vpe_uf = t_uf.valor_por_entrega if t_uf else Decimal('5.00')
+                vpc_uf = t_uf.valor_por_coleta if t_uf else Decimal('10.00')
+
+                v_ent_u = Decimal(str(ent_u)) * vpe_uf
+                v_col_u = Decimal(str(col_u)) * vpc_uf
+                val_ent_total += v_ent_u
+                val_col_total += v_col_u
+
+                serv_u = ent_u + col_u
+                perc_u = (Decimal(str(serv_u)) / Decimal(str(total_emb)) * Decimal('100')).quantize(Decimal('0.01')) if total_emb > 0 else Decimal('0.00')
+                diaria_u = (linha.valor_diaria * Decimal(str(serv_u)) / Decimal(str(total_emb))).quantize(Decimal('0.01')) if total_emb > 0 else Decimal('0.00')
+
+                bk_detalhado[uf_k] = {
+                    'entregas': ent_u,
+                    'coletas': col_u,
+                    'servicos': serv_u,
+                    'percentual': float(perc_u),
+                    'valor_diaria': float(diaria_u),
+                    'valor_entregas': float(v_ent_u),
+                    'valor_coletas': float(v_col_u),
+                    'valor_total': float(diaria_u + v_ent_u + v_col_u),
+                }
+
+            linha.qtd_entregas = novo_entregas
+            linha.qtd_ctes_realizados = novo_entregas
+            linha.qtd_coletas_validas = novo_coletas
+            linha.total_embarques = total_emb
+            linha.valor_entregas = val_ent_total
+            linha.valor_coletas = val_col_total
+            linha.breakdown_bases = bk_detalhado
 
         linha.calcular_total()
         linha.save()
 
-        # Recalcula o resumo do motorista
-        resumo = ResumoMotorista.objects.filter(
-            fechamento=linha.fechamento,
-            motorista=linha.motorista
-        ).first()
-
-        if resumo:
-            linhas_mot = LinhaFechamento.objects.filter(
-                fechamento=linha.fechamento,
-                motorista=linha.motorista
-            )
-            resumo.total_diarias = sum(l.valor_diaria for l in linhas_mot)
-            resumo.total_servicos = sum(l.total_embarques for l in linhas_mot)
-            total_parcial = sum(l.total_dia for l in linhas_mot)
-            resumo.total_parcial = total_parcial + resumo.valor_pedagio
-            
-            if resumo.total_servicos > 0:
-                resumo.diaria_por_servico = (resumo.total_diarias + resumo.valor_pedagio) / Decimal(str(resumo.total_servicos))
-            else:
-                resumo.diaria_por_servico = Decimal('0')
-
-            resumo.total_final = resumo.total_parcial + resumo.valor_desconto
-
-            # Recalcula o rateio por base no resumo
-            from collections import defaultdict
-            breakdown_total = defaultdict(lambda: {
-                'entregas': 0, 'coletas': 0,
-                'valor_entregas': 0.0, 'valor_coletas': 0.0, 'valor_total': 0.0
-            })
-            for l in linhas_mot:
-                for uf, dados_b in (l.breakdown_bases or {}).items():
-                    breakdown_total[uf]['entregas'] += int(dados_b.get('entregas', 0))
-                    breakdown_total[uf]['coletas'] += int(dados_b.get('coletas', 0))
-
-            for uf, dados_b in breakdown_total.items():
-                filial_uf = Filial.objects.filter(uf__iexact=uf).first()
-                tarifa_uf = TarifaAgregado.objects.filter(filial=filial_uf).order_by('-vigencia_inicio').first() if filial_uf else None
-                vpe = float(tarifa_uf.valor_por_entrega) if tarifa_uf else 5.0
-                vpc = float(tarifa_uf.valor_por_coleta) if tarifa_uf else 10.0
-                val_ent = dados_b['entregas'] * vpe
-                val_col = dados_b['coletas'] * vpc
-                servicos_uf = dados_b['entregas'] + dados_b['coletas']
-                val_diaria_uf = float(resumo.diaria_por_servico) * servicos_uf
-                extras_uf = float(sum(l.valor_extra for l in linhas_mot if (l.localidade_extra or '').upper().strip() == uf))
-                dados_b['valor_entregas'] = val_ent
-                dados_b['valor_coletas'] = val_col
-                dados_b['valor_total'] = val_ent + val_col + val_diaria_uf + extras_uf
-
-            resumo.breakdown_bases = dict(breakdown_total)
-            resumo.save()
+        # Recalcula o resumo consolidado do motorista (com % de diária por filial emissora)
+        resumo = recalcular_resumo_motorista(linha.fechamento, linha.motorista)
 
         return JsonResponse({
             'sucesso': True,
@@ -281,28 +283,17 @@ def api_salvar_resumo(request):
         resumo_id = data.get('resumo_id')
         resumo = get_object_or_404(ResumoMotorista, id=resumo_id)
 
-        if 'valor_pedagio' in data:
-            resumo.valor_pedagio = parse_decimal(data.get('valor_pedagio'), '0.00')
-        if 'valor_desconto' in data:
-            resumo.valor_desconto = parse_decimal(data.get('valor_desconto'), '0.00')
-        if 'observacao' in data:
-            resumo.observacao = data.get('observacao')
+        v_ped = parse_decimal(data.get('valor_pedagio'), '0.00') if 'valor_pedagio' in data else resumo.valor_pedagio
+        v_desc = parse_decimal(data.get('valor_desconto'), '0.00') if 'valor_desconto' in data else resumo.valor_desconto
+        obs = data.get('observacao') if 'observacao' in data else resumo.observacao
 
-        # Recalcula
-        linhas_mot = LinhaFechamento.objects.filter(
+        resumo = recalcular_resumo_motorista(
             fechamento=resumo.fechamento,
-            motorista=resumo.motorista
+            motorista=resumo.motorista,
+            valor_pedagio=v_ped,
+            valor_desconto=v_desc,
+            observacao=obs,
         )
-        total_dias = sum(l.total_dia for l in linhas_mot)
-        resumo.total_parcial = total_dias + resumo.valor_pedagio
-
-        if resumo.total_servicos > 0:
-            resumo.diaria_por_servico = (resumo.total_diarias + resumo.valor_pedagio) / Decimal(str(resumo.total_servicos))
-        else:
-            resumo.diaria_por_servico = Decimal('0')
-
-        resumo.total_final = resumo.total_parcial + resumo.valor_desconto
-        resumo.save()
 
         return JsonResponse({
             'sucesso': True,

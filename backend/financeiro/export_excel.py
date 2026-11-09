@@ -203,6 +203,44 @@ def exportar_fechamento_excel(fechamento):
         c_tf.font = Font(bold=True, size=11, color="9C0006")
         c_tf.fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
 
+        # Quadro Resumo de Rateio por Filial Emissora na aba do motorista
+        if resumo and resumo.breakdown_bases:
+            r_rat = r_tot + 4
+            ws.cell(row=r_rat, column=1, value="RATEIO POR FILIAL EMISSORA (DIÁRIA EM % + ENTREGAS E COLETAS PAGAS)").font = title_font
+            headers_rat = [
+                "FILIAL EMISSORA", "ENTREGAS PAGAS", "COLETAS PAGAS", "TOTAL SERVIÇOS",
+                "% RATEIO DIÁRIA", "DIÁRIA RATEADA (R$)", "VALOR ENTREGAS (R$)", "VALOR COLETAS (R$)", "TOTAL A PAGAR PELA FILIAL (R$)"
+            ]
+            for idx_h, h_rat in enumerate(headers_rat, start=1):
+                c_hr = ws.cell(row=r_rat + 1, column=idx_h, value=h_rat)
+                c_hr.fill = header_fill
+                c_hr.font = header_font
+                c_hr.alignment = Alignment(horizontal="center", vertical="center")
+
+            row_r = r_rat + 2
+            for base_uf in lista_bases:
+                d_uf = (resumo.breakdown_bases or {}).get(base_uf)
+                if not d_uf:
+                    continue
+                ws.cell(row=row_r, column=1, value=base_uf).alignment = Alignment(horizontal="center")
+                ws.cell(row=row_r, column=2, value=d_uf.get('entregas', 0)).alignment = Alignment(horizontal="center")
+                ws.cell(row=row_r, column=3, value=d_uf.get('coletas', 0)).alignment = Alignment(horizontal="center")
+                ws.cell(row=row_r, column=4, value=d_uf.get('servicos', d_uf.get('entregas', 0) + d_uf.get('coletas', 0))).alignment = Alignment(horizontal="center")
+
+                c_pct = ws.cell(row=row_r, column=5, value=f"{d_uf.get('percentual', 0):.2f}%")
+                c_pct.alignment = Alignment(horizontal="center")
+                c_pct.font = Font(bold=True)
+
+                for col_m, key_m in [(6, 'valor_diaria'), (7, 'valor_entregas'), (8, 'valor_coletas'), (9, 'valor_total')]:
+                    cm = ws.cell(row=row_r, column=col_m, value=float(d_uf.get(key_m, 0.0)))
+                    cm.number_format = money_format
+                    if col_m == 9:
+                        cm.font = Font(bold=True)
+
+                for c_b in range(1, len(headers_rat) + 1):
+                    ws.cell(row=row_r, column=c_b).border = thin_border
+                row_r += 1
+
         # Ajusta largura das colunas
         for col in ws.columns:
             max_len = 0

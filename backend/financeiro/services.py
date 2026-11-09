@@ -173,32 +173,197 @@ def sincronizar_clientes_pagadores():
     return len(objetos)
 
 
+def _tarifa_efetiva_uf(uf, filial_padrao, data_ref):
+    """
+    Obtém a tarifa vigente para uma UF específica, com fallback para a filial padrão do manifesto.
+    """
+    from usuarios.models import Filial
+    if uf and uf != 'OUTROS':
+        filial_uf = Filial.objects.filter(uf__iexact=uf, operacao_ativa=True).first() or Filial.objects.filter(uf__iexact=uf).first()
+        if filial_uf:
+            t = _obter_tarifa_filial(filial_uf, data_ref)
+            if t:
+                return t
+    if filial_padrao:
+        return _obter_tarifa_filial(filial_padrao, data_ref)
+    return None
+
+
+def recalcular_resumo_motorista(fechamento, motorista, valor_pedagio=None, valor_desconto=None, observacao=None):
+    """
+    Calcula (ou recalcula) o ResumoMotorista consolidando todas as LinhaFechamento do motorista no período.
+    Regra oficial de rateio por Filial Emissora:
+    - Cada filial emissora (RJ, SP, DF, GO) paga pelas suas próprias entregas e coletas com ocorrência paga.
+    - O valor total das diárias (+ pedágio e descontos) é rateado proporcionalmente em %
+      pela quantidade de serviços pagos (entregas + coletas válidas) de cada filial emissora.
+    """
+    from financeiro.models import LinhaFechamento, ResumoMotorista
+
+    linhas = list(
+        LinhaFechamento.objects.filter(fechamento=fechamento, motorista=motorista)
+        .select_related('filial_operacao', 'manifesto')
+    )
+
+    resumo_existente = ResumoMotorista.objects.filter(fechamento=fechamento, motorista=motorista).first()
+    if valor_pedagio is None:
+        valor_pedagio = resumo_existente.valor_pedagio if resumo_existente else Decimal('0.00')
+    if valor_desconto is None:
+        valor_desconto = resumo_existente.valor_desconto if resumo_existente else Decimal('0.00')
+    if observacao is None and resumo_existente:
+        observacao = resumo_existente.observacao
+
+    # Garante que desconto seja tratado sempre subtraindo (mesmo se digitado positivo ou negativo)
+    desconto_abs = abs(Decimal(str(valor_desconto or '0')))
+    valor_desconto_neg = -desconto_abs if desconto_abs > 0 else Decimal('0.00')
+
+    total_diarias = sum((l.valor_diaria for l in linhas), Decimal('0.00'))
+    total_servicos = sum((l.total_embarques for l in linhas), 0)
+    total_dias = sum((l.total_dia for l in linhas), Decimal('0.00'))
+
+    total_parcial_com_pedagio = total_dias + Decimal(str(valor_pedagio or '0'))
+    if total_servicos > 0:
+        diaria_por_servico = (total_diarias + Decimal(str(valor_pedagio or '0'))) / Decimal(str(total_servicos))
+    else:
+        diaria_por_servico = Decimal('0.00')
+
+    total_final = total_parcial_com_pedagio + valor_desconto_neg
+
+    # Consolida entregas e coletas pagas por UF emissora
+    breakdown_total = defaultdict(lambda: {
+        'entregas': 0,
+        'coletas': 0,
+        'servicos': 0,
+        'percentual': 0.0,
+        'valor_diaria': 0.0,
+        'valor_entregas': 0.0,
+        'valor_coletas': 0.0,
+        'valor_extra': 0.0,
+        'valor_total': 0.0,
+    })
+
+    filial_padrao_mot = (linhas[0].filial_operacao if linhas else None) or getattr(motorista, 'filial', None)
+    uf_padrao_mot = _uf_da_filial(filial_padrao_mot)
+    if uf_padrao_mot == 'OUTROS':
+        uf_padrao_mot = 'RJ'
+
+    for linha in linhas:
+        for uf, dados in (linha.breakdown_bases or {}).items():
+            uf_key = (uf or '').upper().strip() or uf_padrao_mot
+            ent = int(dados.get('entregas', 0) or 0)
+            col = int(dados.get('coletas', 0) or 0)
+            if ent > 0 or col > 0:
+                breakdown_total[uf_key]['entregas'] += ent
+                breakdown_total[uf_key]['coletas'] += col
+
+    # Se não houve nenhum serviço pago no período mas há diária/valores, aloca 100% na UF base do motorista
+    if not breakdown_total and (total_diarias > 0 or total_final != 0):
+        breakdown_total[uf_padrao_mot]['entregas'] = 0
+        breakdown_total[uf_padrao_mot]['coletas'] = 0
+
+    # Soma de extras sem UF específica (para ratear proporcionalmente) e com UF específica
+    extras_por_uf = defaultdict(lambda: Decimal('0.00'))
+    extras_sem_uf = Decimal('0.00')
+    for l in linhas:
+        if l.valor_extra and l.valor_extra != 0:
+            loc = (l.localidade_extra or '').upper().strip()
+            if loc:
+                extras_por_uf[loc] += l.valor_extra
+                if loc not in breakdown_total:
+                    breakdown_total[loc]  # garante que a UF do extra exista no dicionário
+            else:
+                extras_sem_uf += l.valor_extra
+
+    # Calcula valores por UF emissora:
+    # % da Filial = (entregas_uf + coletas_uf) / total_servicos
+    # Diária rateada da Filial = (total_diarias + valor_pedagio) * (% da Filial)
+    soma_acumulada = Decimal('0.00')
+    uf_maior_peso = None
+    maior_servicos = -1
+
+    for uf, dados in breakdown_total.items():
+        servicos_uf = dados['entregas'] + dados['coletas']
+        dados['servicos'] = servicos_uf
+        if servicos_uf > maior_servicos:
+            maior_servicos = servicos_uf
+            uf_maior_peso = uf
+
+        if total_servicos > 0:
+            proporcao = Decimal(str(servicos_uf)) / Decimal(str(total_servicos))
+        else:
+            proporcao = Decimal('1.0') if uf == uf_padrao_mot else Decimal('0.0')
+
+        percentual_uf = (proporcao * Decimal('100')).quantize(Decimal('0.01'))
+
+        tarifa_uf = _tarifa_efetiva_uf(uf, filial_padrao_mot, fechamento.periodo_fim)
+        vpe = tarifa_uf.valor_por_entrega if tarifa_uf else Decimal('5.00')
+        vpc = tarifa_uf.valor_por_coleta if tarifa_uf else Decimal('10.00')
+
+        val_entregas = (Decimal(str(dados['entregas'])) * vpe).quantize(Decimal('0.01'))
+        val_coletas = (Decimal(str(dados['coletas'])) * vpc).quantize(Decimal('0.01'))
+        val_diaria_uf = ((total_diarias + Decimal(str(valor_pedagio or '0'))) * proporcao).quantize(Decimal('0.01'))
+        val_desconto_uf = (valor_desconto_neg * proporcao).quantize(Decimal('0.01'))
+        val_extra_uf = (extras_por_uf.get(uf, Decimal('0.00')) + (extras_sem_uf * proporcao)).quantize(Decimal('0.01'))
+
+        val_total_uf = (val_diaria_uf + val_entregas + val_coletas + val_extra_uf + val_desconto_uf).quantize(Decimal('0.01'))
+        soma_acumulada += val_total_uf
+
+        dados['percentual'] = float(percentual_uf)
+        dados['valor_diaria'] = float(val_diaria_uf)
+        dados['valor_entregas'] = float(val_entregas)
+        dados['valor_coletas'] = float(val_coletas)
+        dados['valor_extra'] = float(val_extra_uf)
+        dados['valor_total'] = float(val_total_uf)
+
+    # Ajuste fino de centavos residuais de dízima (ex: R$ 0,01) na filial de maior participação
+    diferenca_centavos = (total_final - soma_acumulada).quantize(Decimal('0.01'))
+    if diferenca_centavos != Decimal('0.00') and uf_maior_peso and uf_maior_peso in breakdown_total:
+        breakdown_total[uf_maior_peso]['valor_diaria'] = round(
+            breakdown_total[uf_maior_peso]['valor_diaria'] + float(diferenca_centavos), 2
+        )
+        breakdown_total[uf_maior_peso]['valor_total'] = round(
+            breakdown_total[uf_maior_peso]['valor_total'] + float(diferenca_centavos), 2
+        )
+
+    breakdown_serializado = {uf: dict(d) for uf, d in breakdown_total.items()}
+
+    resumo_obj, _ = ResumoMotorista.objects.update_or_create(
+        fechamento=fechamento,
+        motorista=motorista,
+        defaults={
+            'total_diarias': total_diarias,
+            'total_servicos': total_servicos,
+            'diaria_por_servico': diaria_por_servico,
+            'total_parcial': total_parcial_com_pedagio,
+            'valor_pedagio': Decimal(str(valor_pedagio or '0')),
+            'valor_desconto': valor_desconto_neg,
+            'total_final': total_final,
+            'breakdown_bases': breakdown_serializado,
+            'observacao': observacao,
+        }
+    )
+    return resumo_obj
+
+
 @transaction.atomic
 def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
     """
     Gera (ou recalcula) um fechamento para o período informado.
     
+    Regra Oficial (Rateio por Filial Emissora):
     1. Busca todos os manifestos no período onde motorista.categoria == 'AGREGADO'
-    2. Para cada manifesto: conta BaixaNF com ocorrência que está na lista de pagamento
-    3. Identifica o cliente pagador e a filial responsável pelo frete
-    4. Aplica tarifas da filial
+    2. Para cada nota/coleta do manifesto, identifica a Filial Emissora real (RJ, SP, DF, GO)
+    3. Contabiliza apenas notas e coletas cuja baixa possua ocorrência marcada como paga
+    4. Rateia a diária em % pela quantidade de entregas + coletas pagas de cada filial emissora
     5. Gera as LinhaFechamento e ResumoMotorista
     
     Returns: FechamentoAgregado
     """
     from financeiro.models import (
-        FechamentoAgregado, LinhaFechamento, ResumoMotorista, ClienteBasePagadora
+        FechamentoAgregado, LinhaFechamento, ResumoMotorista
     )
     from manifesto.models import Manifesto, NotaFiscal, BaixaNF
-    from usuarios.models import Motorista
     
-    logger.info(f"📊 Gerando fechamento: {periodo_inicio} a {periodo_fim}")
-    
-    # Mapa de clientes para filiais responsáveis em memória
-    clientes_map = {
-        c.nome.upper().strip(): c
-        for c in ClienteBasePagadora.objects.select_related('filial_responsavel').all()
-    }
+    logger.info(f"📊 Gerando fechamento (por Filial Emissora): {periodo_inicio} a {periodo_fim}")
     
     # Busca ou cria o fechamento para este período
     fechamento, created = FechamentoAgregado.objects.get_or_create(
@@ -214,7 +379,6 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
     ajustes_manuais = {}
     resumos_manuais = {}
     if not created:
-        # Salva ajustes manuais existentes (valor_extra, observacao, localidade)
         for linha in fechamento.linhas.all():
             key = f"{linha.motorista_id}_{linha.manifesto_id}"
             if linha.valor_extra != 0 or linha.observacao:
@@ -223,7 +387,6 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
                     'localidade_extra': linha.localidade_extra,
                     'observacao': linha.observacao,
                 }
-        # Salva ajustes de resumo (pedágio, descontos)
         for resumo in fechamento.resumos.all():
             resumos_manuais[resumo.motorista_id] = {
                 'valor_pedagio': resumo.valor_pedagio,
@@ -242,7 +405,7 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
         data_criacao__date__gte=periodo_inicio,
         data_criacao__date__lte=periodo_fim,
     ).select_related(
-        'motorista', 'filial_operacao', 'filial', 'veiculo'
+        'motorista', 'motorista__filial', 'filial_operacao', 'filial', 'veiculo'
     ).order_by('motorista__nome_completo', 'data_criacao')
     
     logger.info(f"   Encontrados {manifestos.count()} manifestos de agregados no período.")
@@ -252,20 +415,20 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
     
     for mft in manifestos:
         motorista = mft.motorista
-        filial_op = mft.filial_operacao or mft.filial
+        filial_op = mft.filial_operacao or mft.filial or getattr(motorista, 'filial', None)
         uf_base = _uf_da_filial(filial_op)
+        if uf_base == 'OUTROS':
+            uf_base = 'RJ'
         data_mft = mft.data_criacao.date()
         
-        # Busca tarifa vigente para esta filial
+        # Busca tarifa vigente para a filial de operação do manifesto
         tarifa = _obter_tarifa_filial(filial_op, data_mft) if filial_op else None
         valor_diaria = tarifa.valor_diaria if tarifa else Decimal('0')
-        valor_por_entrega = tarifa.valor_por_entrega if tarifa else Decimal('5.00')
-        valor_por_coleta = tarifa.valor_por_coleta if tarifa else Decimal('10.00')
         
-        # Conta entregas e coletas PAGAS no manifesto
+        # Busca notas e coletas do manifesto com suas filiais emissoras
         notas = NotaFiscal.objects.filter(manifesto=mft).select_related(
             'frete', 'filial_emissora', 'frete__filial_emissora'
-        )
+        ).prefetch_related('baixas')
         
         qtd_entregas = 0
         qtd_coletas = 0
@@ -275,71 +438,68 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
         breakdown = defaultdict(lambda: {'entregas': 0, 'coletas': 0})
         
         for nf in notas:
-            # Determina o cliente pagador e a UF da filial responsável pelo frete/nota:
-            # 1º Prioridade: Filial emissora real do frete na ESL (GraphQL corporationId / filial_emissora)
-            # 2º Fallback: ClienteBasePagadora (para notas antigas ou coletas sem frete vinculado)
-            # 3º Fallback: UF base do manifesto
-            cliente_nome = None
             tipo_nf = (nf.tipo_operacao or '').upper()
-            if tipo_nf == 'COLETA':
-                cliente_nome = nf.destinatario or (nf.frete.pagador_nome if nf.frete else None) or (nf.frete.remetente if nf.frete else None)
-            else:
-                cliente_nome = (nf.frete.pagador_nome if nf.frete else None) or (nf.frete.remetente if nf.frete else None) or nf.destinatario
-
-            nf_uf = uf_base
-            cli_obj = None
-            if cliente_nome:
-                c_clean = cliente_nome.strip().upper()
-                cli_obj = clientes_map.get(c_clean)
-                if not cli_obj:
-                    # Auto-registra o cliente no financeiro para o gestor poder atribuir
-                    cli_obj, _ = ClienteBasePagadora.objects.get_or_create(nome=c_clean)
-                    clientes_map[c_clean] = cli_obj
-
-            uf_emissora = _uf_emissora_da_nota(nf)
-            if uf_emissora:
-                nf_uf = uf_emissora
-            elif cli_obj and cli_obj.filial_responsavel:
-                nf_uf = _uf_da_filial(cli_obj.filial_responsavel)
+            # Determina a UF da Filial Emissora da nota ou coleta (com fallback seguro para a UF base do manifesto)
+            nf_uf = _uf_emissora_da_nota(nf) or uf_base
             
-            # CT-es: conta todos os fretes vinculados
-            if nf.frete and nf.frete.numero_cte:
+            if tipo_nf == 'COLETA':
+                qtd_coletas += 1
+            else:
                 qtd_ctes += 1
             
-            # Busca baixas desta nota
-            baixas = BaixaNF.objects.filter(nota_fiscal=nf).select_related('ocorrencia')
-            
+            # Verifica nas baixas da nota se houve ocorrência configurada como paga
+            baixas = list(nf.baixas.all())
+            paga = False
             for baixa in baixas:
-                ocorrencia_id = baixa.ocorrencia_id if baixa.ocorrencia else None
-                tipo_nf = (nf.tipo_operacao or '').upper()
-                
+                ocorrencia_id = baixa.ocorrencia_id
                 if tipo_nf == 'COLETA':
-                    qtd_coletas += 1
-                    # Verifica se é coleta válida (ocorrência na lista de pagamento)
-                    if ids_oc_coleta and ocorrencia_id in ids_oc_coleta:
-                        qtd_coletas_validas += 1
-                        breakdown[nf_uf]['coletas'] += 1
-                    elif not ids_oc_coleta:
-                        # Se nenhuma ocorrência configurada, todas as baixas contam
-                        qtd_coletas_validas += 1
-                        breakdown[nf_uf]['coletas'] += 1
+                    if (ids_oc_coleta and ocorrencia_id in ids_oc_coleta) or (not ids_oc_coleta and ocorrencia_id):
+                        paga = True
+                        break
                 else:
-                    # Entrega / Transferência / Despacho / etc
-                    if ids_oc_entrega and ocorrencia_id in ids_oc_entrega:
-                        qtd_entregas += 1
-                        qtd_ctes_realizados += 1
-                        breakdown[nf_uf]['entregas'] += 1
-                    elif not ids_oc_entrega:
-                        # Se nenhuma ocorrência configurada, todas as baixas contam
-                        qtd_entregas += 1
-                        qtd_ctes_realizados += 1
-                        breakdown[nf_uf]['entregas'] += 1
+                    if (ids_oc_entrega and ocorrencia_id in ids_oc_entrega) or (not ids_oc_entrega and ocorrencia_id):
+                        paga = True
+                        break
+            
+            if paga:
+                if tipo_nf == 'COLETA':
+                    qtd_coletas_validas += 1
+                    breakdown[nf_uf]['coletas'] += 1
+                else:
+                    qtd_entregas += 1
+                    qtd_ctes_realizados += 1
+                    breakdown[nf_uf]['entregas'] += 1
         
         total_embarques = qtd_entregas + qtd_coletas_validas
         
-        # Calcula valores
-        valor_entregas = Decimal(str(qtd_entregas)) * valor_por_entrega
-        valor_coletas = Decimal(str(qtd_coletas_validas)) * valor_por_coleta
+        # Calcula valor das entregas e coletas somando pela tarifa de cada filial emissora
+        valor_entregas = Decimal('0.00')
+        valor_coletas = Decimal('0.00')
+        breakdown_detalhado = {}
+        for uf_k, cont in breakdown.items():
+            t_uf = _tarifa_efetiva_uf(uf_k, filial_op, data_mft)
+            vpe_uf = t_uf.valor_por_entrega if t_uf else (tarifa.valor_por_entrega if tarifa else Decimal('5.00'))
+            vpc_uf = t_uf.valor_por_coleta if t_uf else (tarifa.valor_por_coleta if tarifa else Decimal('10.00'))
+            
+            v_ent_uf = Decimal(str(cont['entregas'])) * vpe_uf
+            v_col_uf = Decimal(str(cont['coletas'])) * vpc_uf
+            valor_entregas += v_ent_uf
+            valor_coletas += v_col_uf
+            
+            serv_uf = cont['entregas'] + cont['coletas']
+            perc_uf = (Decimal(str(serv_uf)) / Decimal(str(total_embarques)) * Decimal('100')).quantize(Decimal('0.01')) if total_embarques > 0 else Decimal('0.00')
+            diaria_uf = (valor_diaria * Decimal(str(serv_uf)) / Decimal(str(total_embarques))).quantize(Decimal('0.01')) if total_embarques > 0 else Decimal('0.00')
+            
+            breakdown_detalhado[uf_k] = {
+                'entregas': cont['entregas'],
+                'coletas': cont['coletas'],
+                'servicos': serv_uf,
+                'percentual': float(perc_uf),
+                'valor_diaria': float(diaria_uf),
+                'valor_entregas': float(v_ent_uf),
+                'valor_coletas': float(v_col_uf),
+                'valor_total': float(diaria_uf + v_ent_uf + v_col_uf),
+            }
         
         # Restaura ajustes manuais se existiam
         key = f"{motorista.id}_{mft.id}"
@@ -369,95 +529,21 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
             localidade_extra=localidade_extra,
             observacao=observacao_linha,
             total_dia=total_dia,
-            breakdown_bases=dict(breakdown),
+            breakdown_bases=breakdown_detalhado,
         )
         linha.save()
         motoristas_linhas[motorista.id].append(linha)
     
-    # Gera os resumos por motorista
+    # Gera os resumos consolidados por motorista
     for motorista_id, linhas in motoristas_linhas.items():
         motorista = linhas[0].motorista
-        
-        total_diarias = sum(l.valor_diaria for l in linhas)
-        total_servicos = sum(l.total_embarques for l in linhas)
-        total_parcial = sum(l.total_dia for l in linhas)
-        
-        # Restaura ajustes manuais do resumo
         ajuste_resumo = resumos_manuais.get(motorista_id, {})
-        valor_pedagio = ajuste_resumo.get('valor_pedagio', Decimal('0'))
-        valor_desconto = ajuste_resumo.get('valor_desconto', Decimal('0'))
-        observacao_resumo = ajuste_resumo.get('observacao', None)
-        
-        total_parcial_com_pedagio = total_parcial + valor_pedagio
-        
-        # Diária por serviço (evita divisão por zero)
-        if total_servicos > 0:
-            diaria_por_servico = (total_diarias + valor_pedagio) / Decimal(str(total_servicos))
-        else:
-            diaria_por_servico = Decimal('0')
-        
-        total_final = total_parcial_com_pedagio + valor_desconto  # desconto já é negativo
-        
-        # Consolida breakdown por base
-        breakdown_total = defaultdict(lambda: {
-            'entregas': 0, 'coletas': 0,
-            'valor_entregas': Decimal('0'), 'valor_coletas': Decimal('0'),
-            'valor_total': Decimal('0')
-        })
-        
-        for linha in linhas:
-            for uf, dados in linha.breakdown_bases.items():
-                breakdown_total[uf]['entregas'] += dados.get('entregas', 0)
-                breakdown_total[uf]['coletas'] += dados.get('coletas', 0)
-        
-        # Calcula valor por base (entregas×tarifa + coletas×tarifa + diária/serviço × serviços_uf)
-        for uf, dados in breakdown_total.items():
-            # Busca tarifa da filial correspondente a essa UF
-            from usuarios.models import Filial
-            filial_uf = Filial.objects.filter(uf__iexact=uf).first()
-            tarifa_uf = _obter_tarifa_filial(filial_uf, periodo_fim) if filial_uf else None
-            
-            vpe = tarifa_uf.valor_por_entrega if tarifa_uf else Decimal('5.00')
-            vpc = tarifa_uf.valor_por_coleta if tarifa_uf else Decimal('10.00')
-            
-            val_entregas = Decimal(str(dados['entregas'])) * vpe
-            val_coletas = Decimal(str(dados['coletas'])) * vpc
-            servicos_uf = dados['entregas'] + dados['coletas']
-            val_diaria_uf = diaria_por_servico * Decimal(str(servicos_uf))
-            
-            # Soma extras atribuídos a esta UF
-            extras_uf = sum(
-                l.valor_extra for l in linhas
-                if l.localidade_extra and l.localidade_extra.upper().strip() == uf
-            )
-            
-            dados['valor_entregas'] = float(val_entregas)
-            dados['valor_coletas'] = float(val_coletas)
-            dados['valor_total'] = float(val_entregas + val_coletas + val_diaria_uf + extras_uf)
-        
-        # Converte para dict serializável
-        breakdown_serializado = {}
-        for uf, dados in breakdown_total.items():
-            breakdown_serializado[uf] = {
-                'entregas': dados['entregas'],
-                'coletas': dados['coletas'],
-                'valor_entregas': dados['valor_entregas'],
-                'valor_coletas': dados['valor_coletas'],
-                'valor_total': dados['valor_total'],
-            }
-        
-        ResumoMotorista.objects.create(
+        recalcular_resumo_motorista(
             fechamento=fechamento,
             motorista=motorista,
-            total_diarias=total_diarias,
-            total_servicos=total_servicos,
-            diaria_por_servico=diaria_por_servico,
-            total_parcial=total_parcial_com_pedagio,
-            valor_pedagio=valor_pedagio,
-            valor_desconto=valor_desconto,
-            total_final=total_final,
-            breakdown_bases=breakdown_serializado,
-            observacao=observacao_resumo,
+            valor_pedagio=ajuste_resumo.get('valor_pedagio', Decimal('0')),
+            valor_desconto=ajuste_resumo.get('valor_desconto', Decimal('0')),
+            observacao=ajuste_resumo.get('observacao', None),
         )
     
     logger.info(f"✅ Fechamento gerado: {len(motoristas_linhas)} motoristas, {sum(len(v) for v in motoristas_linhas.values())} linhas.")

@@ -14,8 +14,18 @@
                     <i class="bi bi-cash-coin fs-2"></i>
                 </div>
                 <div>
-                    <h3 class="fw-bold mb-0">Fechamento de Agregados</h3>
-                    <p class="text-muted mb-0">Apuração de diárias, entregas, coletas e faturamento por base</p>
+                    <h3 class="fw-bold mb-0">
+                        Fechamento de Agregados
+                        <button class="btn btn-link p-0 ms-2 text-primary border-0" 
+                                type="button" 
+                                data-bs-toggle="collapse" 
+                                data-bs-target="#explicaFechamento" 
+                                title="Clique para ver como o cálculo e o rateio funcionam"
+                                style="vertical-align: middle;">
+                            <i class="bi bi-question-circle-fill" style="font-size: 1.3rem;"></i>
+                        </button>
+                    </h3>
+                    <p class="text-muted mb-0">Apuração de diárias, entregas, coletas e rateio automático por Filial Emissora</p>
                 </div>
             </div>
         </div>
@@ -29,28 +39,89 @@
                 <i class="bi bi-plus-circle me-2"></i>Novo Fechamento
             </button>
         </div>
-    </div>
 
-    <!-- Alerta de Clientes Novos sem Filial Pagadora -->
-    {% if clientes_sem_filial_count > 0 %}
-    <div class="alert alert-danger border-0 shadow-sm rounded-4 d-flex flex-wrap align-items-center justify-content-between p-3 mb-4" id="banner-clientes-pendentes" role="alert" style="background-color: #fff2f2; border-left: 6px solid #dc3545 !important;">
-        <div class="d-flex align-items-center gap-3">
-            <div class="p-3 bg-danger text-white rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 45px; height: 45px;">
-                <i class="bi bi-exclamation-triangle-fill fs-5"></i>
-            </div>
-            <div>
-                <h6 class="fw-bold mb-0 text-danger">Atenção: Há clientes novos cadastrados sem filial pagadora vinculada!</h6>
-                <small class="text-danger-emphasis">
-                    Existem <strong id="banner-qtd-pendentes">{{ clientes_sem_filial_count }}</strong> clientes que ainda não possuem filial pagadora definida (ex: SP, RJ, DF, GO). 
-                    Vincule-os para que suas entregas e coletas sejam debitadas da base correta.
-                </small>
+        <!-- Explicação Completa do Cálculo e Rateio (Colapsável ao clicar no ?) -->
+        <div class="col-12 mt-3">
+            <div class="collapse" id="explicaFechamento">
+                <div class="card card-body border-0 shadow-sm mb-2 position-relative rounded-4" style="border-left: 5px solid #0d6efd !important; background-color: #f8faff;">
+                    <button type="button" class="btn-close position-absolute" style="right: 15px; top: 15px;" data-bs-toggle="collapse" data-bs-target="#explicaFechamento" aria-label="Close"></button>
+                    
+                    <h6 class="fw-bold text-primary mb-1">
+                        <i class="bi bi-calculator-fill me-2"></i>Como funciona o Cálculo e o Rateio do Pagamento de Agregados?
+                    </h6>
+                    <p class="small text-muted mb-2">
+                        Entenda passo a passo, do início ao fim, como o sistema calcula a remuneração do motorista agregado e divide os custos entre as filiais emissoras:
+                    </p>
+                    <hr class="my-2">
+
+                    <div class="row g-3 small text-dark mb-3">
+                        <div class="col-md-6">
+                            <div class="p-3 bg-white rounded-3 border h-100">
+                                <div class="fw-bold text-primary mb-1"><i class="bi bi-1-circle-fill me-1"></i> Vínculo Direto pela Filial Emissora</div>
+                                <p class="mb-2 text-muted">
+                                    Cada nota fiscal (frete/minuta) e cada coleta dentro do manifesto já traz do TMS a sua <strong>Filial Emissora oficial</strong> (ex: <strong>RJ</strong>, <strong>SP</strong>, <strong>DF</strong>, <strong>GO</strong>).
+                                </p>
+                                <p class="mb-0 text-muted">
+                                    Cada filial emissora é responsável por pagar pelas <strong>suas próprias entregas e coletas realizadas</strong> e pela sua <strong>fração proporcional (%) da diária</strong> do motorista.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="p-3 bg-white rounded-3 border h-100">
+                                <div class="fw-bold text-primary mb-1"><i class="bi bi-2-circle-fill me-1"></i> Regra das Ocorrências Pagas (Comparecimento)</div>
+                                <p class="mb-2 text-muted">
+                                    Nem toda nota ou coleta do manifesto gera pagamento. Só entram na conta as notas e coletas cuja baixa possui uma <strong>ocorrência marcada na aba "4. Ocorrências Pagas"</strong>.
+                                </p>
+                                <p class="mb-0 text-muted">
+                                    Isso garante que o motorista só receba pelos locais onde <strong>efetivamente compareceu</strong>. Se uma nota teve ocorrência não remunerada (ex: não compareceu / falta de tempo), ela <strong>não é cobrada</strong> e <strong>não entra no rateio</strong>.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="p-3 bg-white rounded-3 border h-100">
+                                <div class="fw-bold text-primary mb-1"><i class="bi bi-3-circle-fill me-1"></i> Rateio da Diária em Porcentagem (%)</div>
+                                <p class="mb-2 text-muted">
+                                    O valor da <strong>Diária</strong> (definido na aba <em>"3. Tarifas por Filial"</em>) é dividido em <strong>porcentagem (%)</strong> entre as filiais emissoras conforme a quantidade de serviços pagos (entregas + coletas válidas) de cada filial.
+                                </p>
+                                <div class="p-2 rounded bg-light border small">
+                                    <strong>Exemplo Prático (Diária = R$ 250,00):</strong><br>
+                                    O manifesto tem 15 notas (5 do RJ, 8 de SP e 2 de DF). No RJ o motorista compareceu em <strong>4 locais</strong> (a 5ª nota teve ocorrência não paga).<br>
+                                    • Total de serviços válidos no manifesto = <strong>14 serviços</strong> (4 RJ + 8 SP + 2 DF).<br>
+                                    • <strong>RJ (4 de 14 = 28,57%):</strong> paga 28,57% da diária (R$ 71,43) + valor das 4 entregas do RJ.<br>
+                                    • <strong>SP (8 de 14 = 57,14%):</strong> paga 57,14% da diária (R$ 142,86) + valor das 8 entregas de SP.<br>
+                                    • <strong>DF (2 de 14 = 14,29%):</strong> paga 14,29% da diária (R$ 35,71) + valor das 2 entregas de DF.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="p-3 bg-white rounded-3 border h-100">
+                                <div class="fw-bold text-primary mb-1"><i class="bi bi-4-circle-fill me-1"></i> Fechamento do Período e Relatórios</div>
+                                <p class="mb-2 text-muted">
+                                    Ao fechar o período, o sistema consolida todos os manifestos de cada motorista agregado em duas visões (na tela e na planilha Excel):
+                                </p>
+                                <ul class="mb-0 text-muted ps-3">
+                                    <li><strong>Aba 1 (Detalhamento por Motorista):</strong> Mostra o extrato diário de manifestos, o resumo do motorista e os cards de cada filial com a <strong>% do rateio</strong>, diária rateada e valor dos serviços.</li>
+                                    <li><strong>Aba 2 (Resultado Fatura Consolidado):</strong> Mostra o valor geral de cada motorista e exatamente <strong>quanto cada filial (RJ, SP, DF, GO) deve pagar</strong> para compor o montante total.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-2 px-3 rounded-3 border d-flex flex-wrap gap-3 align-items-center justify-content-between">
+                        <code class="text-primary fw-bold">
+                            % da Filial = (Entregas Pagas da Filial + Coletas Pagas da Filial) ÷ Total de Serviços Pagos × 100
+                        </code>
+                        <code class="text-success fw-bold">
+                            Total da Filial = (Diária × % da Filial) + (Entregas Pagas × Tarifa Entrega) + (Coletas Pagas × Tarifa Coleta)
+                        </code>
+                    </div>
+                </div>
             </div>
         </div>
-        <button class="btn btn-danger rounded-pill px-4 shadow-sm text-nowrap mt-2 mt-md-0" onclick="irParaAbaClientes(true)">
-            <i class="bi bi-link-45deg me-1"></i> Vincular Filial Agora
-        </button>
     </div>
-    {% endif %}
 
     <!-- Barra de Controle e Seleção de Período -->
     <div class="card border-0 shadow-sm rounded-4 mb-4">
@@ -107,14 +178,6 @@
         <li class="nav-item" role="presentation">
             <button class="nav-link rounded-pill fw-bold" id="tab-ocorrencias-btn" data-bs-toggle="tab" data-bs-target="#tab-ocorrencias" type="button" role="tab">
                 <i class="bi bi-sliders me-2"></i>4. Ocorrências Pagas
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link rounded-pill fw-bold position-relative" id="tab-clientes-btn" data-bs-toggle="tab" data-bs-target="#tab-clientes" type="button" role="tab">
-                <i class="bi bi-people-fill me-2"></i>5. Clientes & Bases Pagadoras
-                {% if clientes_sem_filial_count > 0 %}
-                <span class="badge rounded-pill bg-danger ms-1" id="badge-pendentes-clientes">{{ clientes_sem_filial_count }}</span>
-                {% endif %}
             </button>
         </li>
     </ul>
@@ -286,18 +349,43 @@
                 <div class="row g-4 mb-4">
                     <div class="col-md-7">
                         <div class="card border-0 shadow-sm rounded-4 p-4 h-100">
-                            <h6 class="fw-bold text-dark mb-3"><i class="bi bi-pie-chart me-2 text-primary"></i>Distribuição de Valores por Base (UF)</h6>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="fw-bold text-dark mb-0"><i class="bi bi-pie-chart me-2 text-primary"></i>Rateio por Filial Emissora (% Diária + Serviços Pagos)</h6>
+                                <small class="text-muted">Cobrança por base emissora</small>
+                            </div>
                             <div class="row g-3">
                                 {% for base, dados in r.breakdown_bases.items %}
-                                <div class="col-sm-6 col-lg-3">
-                                    <div class="p-3 bg-light rounded-4 border text-center">
-                                        <div class="badge bg-primary px-3 py-1 mb-2">{{ base }}</div>
-                                        <div class="small text-muted">{{ dados.entregas }} ent. | {{ dados.coletas }} col.</div>
-                                        <div class="fw-bold fs-6 text-dark mt-1">R$ {{ dados.valor_total|floatformat:2 }}</div>
+                                <div class="col-sm-6 col-lg-4">
+                                    <div class="p-3 bg-light rounded-4 border h-100">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="badge bg-primary px-3 py-1">{{ base }}</span>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">{{ dados.percentual|default:0|floatformat:2 }}% da diária</span>
+                                        </div>
+                                        <div class="small text-muted mb-2">
+                                            <strong>{{ dados.entregas|default:0 }}</strong> ent. | <strong>{{ dados.coletas|default:0 }}</strong> col.
+                                        </div>
+                                        <div class="small text-muted border-top pt-2">
+                                            <div class="d-flex justify-content-between">
+                                                <span>Diária rateada:</span>
+                                                <span class="fw-semibold text-dark">R$ {{ dados.valor_diaria|default:0|floatformat:2 }}</span>
+                                            </div>
+                                            <div class="d-flex justify-content-between">
+                                                <span>Entregas:</span>
+                                                <span class="fw-semibold text-dark">R$ {{ dados.valor_entregas|default:0|floatformat:2 }}</span>
+                                            </div>
+                                            <div class="d-flex justify-content-between">
+                                                <span>Coletas:</span>
+                                                <span class="fw-semibold text-dark">R$ {{ dados.valor_coletas|default:0|floatformat:2 }}</span>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center border-top mt-2 pt-2">
+                                            <span class="small fw-bold text-dark">Total {{ base }}:</span>
+                                            <span class="fw-bold fs-6 text-success">R$ {{ dados.valor_total|default:0|floatformat:2 }}</span>
+                                        </div>
                                     </div>
                                 </div>
                                 {% empty %}
-                                <div class="col-12 text-muted small">Nenhuma entrega registrada por base neste período.</div>
+                                <div class="col-12 text-muted small">Nenhuma entrega ou coleta paga registrada neste período.</div>
                                 {% endfor %}
                             </div>
                         </div>
@@ -317,7 +405,7 @@
                                     <span class="fw-bold">R$ {{ r.total_diarias|floatformat:2 }}</span>
                                 </li>
                                 <li class="list-group-item d-flex justify-content-between bg-transparent px-0">
-                                    <span class="text-muted">Total de Serviços (Entregas + Coletas):</span>
+                                    <span class="text-muted">Total de Serviços Pagos (Entregas + Coletas):</span>
                                     <span class="fw-bold">{{ r.total_servicos }}</span>
                                 </li>
                                 <li class="list-group-item d-flex justify-content-between bg-transparent px-0">
@@ -359,7 +447,7 @@
                 <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
                     <div>
                         <h6 class="fw-bold text-dark mb-0"><i class="bi bi-receipt me-2 text-primary"></i>Fatura Consolidada - Pagamento de Agregados</h6>
-                        <small class="text-muted">Relatório de fechamento com dados bancários e rateio por unidade de negócios</small>
+                        <small class="text-muted">Relatório de fechamento com dados bancários e rateio por Filial Emissora (quanto cada filial deve pagar para o montante do motorista)</small>
                     </div>
                     {% if fechamento %}
                     <a href="{% url 'financeiro:exportar_excel' %}?fechamento_id={{ fechamento.id }}" class="btn btn-success btn-sm rounded-pill px-3 shadow-sm">
@@ -397,7 +485,12 @@
                                 </td>
                                 {% for base in lista_bases %}
                                 {% with b_info=r.breakdown_bases|dict_lookup:base %}
-                                <td class="text-end">R$ {{ b_info.valor_total|floatformat:2|default:"0,00" }}</td>
+                                <td class="text-end">
+                                    R$ {{ b_info.valor_total|floatformat:2|default:"0,00" }}
+                                    {% if b_info.percentual %}
+                                    <div class="text-muted" style="font-size: 0.72rem;">({{ b_info.percentual|floatformat:1 }}% diária | {{ b_info.entregas|default:0 }}E/{{ b_info.coletas|default:0 }}C)</div>
+                                    {% endif %}
+                                </td>
                                 {% endwith %}
                                 {% endfor %}
                                 <td class="text-end fw-bold text-success fs-6">R$ {{ r.total_final|floatformat:2 }}</td>
@@ -410,6 +503,19 @@
                             </tr>
                             {% endfor %}
                         </tbody>
+                        {% if resumos %}
+                        <tfoot class="table-light border-top border-2 fw-bold">
+                            <tr>
+                                <td colspan="3" class="text-end text-dark">TOTAL A PAGAR POR FILIAL EMISSORA:</td>
+                                {% for base in lista_bases %}
+                                {% with tot_b=totais_bases_fatura|dict_lookup:base %}
+                                <td class="text-end text-primary fs-6">R$ {{ tot_b|floatformat:2|default:"0,00" }}</td>
+                                {% endwith %}
+                                {% endfor %}
+                                <td class="text-end text-success fs-5">R$ {{ total_geral_fatura|floatformat:2 }}</td>
+                            </tr>
+                        </tfoot>
+                        {% endif %}
                     </table>
                 </div>
             </div>
@@ -543,95 +649,6 @@
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ========================================================================= -->
-        <!-- TAB 5: CLIENTES & BASES PAGADORAS (Rateio Inteligente por Pagador)        -->
-        <!-- ========================================================================= -->
-        <div class="tab-pane fade" id="tab-clientes" role="tabpanel">
-            <div class="card border-0 shadow-sm rounded-4 p-4">
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-                    <div>
-                        <h6 class="fw-bold text-dark mb-1"><i class="bi bi-people-fill me-2 text-primary"></i>Clientes & Filiais Pagadoras</h6>
-                        <p class="text-muted small mb-0">
-                            Defina qual filial é responsável pelo frete de cada cliente. Se um motorista no Rio fizer uma entrega ou coleta de um cliente de SP, o custo será cobrado da filial de SP.
-                        </p>
-                    </div>
-                    <div class="d-flex align-items-center gap-2">
-                        <button class="btn btn-primary rounded-pill px-4 shadow-sm" id="btn-sync-clientes" onclick="dispararSincronizacaoClientes()">
-                            <i class="bi bi-arrow-repeat me-1"></i> Sincronizar Clientes dos Fretes
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Filtros da Tabela de Clientes -->
-                <div class="row g-3 align-items-center mb-3">
-                    <div class="col-md-6">
-                        <div class="input-group">
-                            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-                            <input type="text" class="form-control border-start-0" id="filtro-cliente-busca" placeholder="Buscar por nome do cliente ou CNPJ..." onkeyup="filtrarTabelaClientes()">
-                        </div>
-                    </div>
-                    <div class="col-md-6 text-md-end">
-                        <div class="btn-group" role="group">
-                            <input type="radio" class="btn-check" name="filtroStatusCliente" id="filtroCliTodos" autocomplete="off" checked onchange="filtrarTabelaClientes()">
-                            <label class="btn btn-outline-secondary btn-sm" for="filtroCliTodos">Todos (<span id="count-total-cli">{{ clientes_pagadores|length }}</span>)</label>
-
-                            <input type="radio" class="btn-check" name="filtroStatusCliente" id="filtroCliPendentes" autocomplete="off" onchange="filtrarTabelaClientes()">
-                            <label class="btn btn-outline-danger btn-sm" for="filtroCliPendentes">Pendentes de Filial (<span id="count-pendentes-cli">{{ clientes_sem_filial_count }}</span>)</label>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Tabela de Clientes -->
-                <div class="table-responsive" style="max-height: 550px; overflow-y: auto;">
-                    <table class="table table-hover align-middle mb-0" id="tabela-clientes-pagadores">
-                        <thead class="table-light sticky-top">
-                            <tr>
-                                <th>Nome do Cliente / Pagador</th>
-                                <th>Documento (CNPJ/CPF)</th>
-                                <th>Filial Responsável (Base Pagadora)</th>
-                                <th class="text-center">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbody-clientes-pagadores">
-                            {% for c in clientes_pagadores %}
-                            <tr class="linha-cliente {% if not c.filial_responsavel %}table-danger-subtle cliente-pendente{% endif %}" data-nome="{{ c.nome|upper }}" data-doc="{{ c.documento|default:'' }}" data-status="{% if c.filial_responsavel %}vinculado{% else %}pendente{% endif %}">
-                                <td class="fw-bold text-dark">{{ c.nome }}</td>
-                                <td class="text-muted small">{{ c.documento|default:"-" }}</td>
-                                <td style="width: 340px;">
-                                    <select class="form-select form-select-sm rounded-pill border-2 {% if not c.filial_responsavel %}border-danger{% else %}border-success-subtle{% endif %}" id="select-filial-cli-{{ c.id }}" onchange="salvarClienteFilial(this, {{ c.id }})">
-                                        <option value="">-- Selecione a Filial Pagadora --</option>
-                                        {% for f in filiais %}
-                                        <option value="{{ f.id }}" {% if c.filial_responsavel_id == f.id %}selected{% endif %}>
-                                            {{ f.nome }} ({{ f.uf|default:"-" }})
-                                        </option>
-                                        {% endfor %}
-                                    </select>
-                                </td>
-                                <td class="text-center" id="status-cli-col-{{ c.id }}">
-                                    {% if c.filial_responsavel %}
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1">
-                                        <i class="bi bi-check-circle me-1"></i> {{ c.filial_responsavel.uf|default:c.filial_responsavel.nome }}
-                                    </span>
-                                    {% else %}
-                                    <span class="badge bg-danger px-3 py-1">
-                                        <i class="bi bi-exclamation-circle me-1"></i> Pendente
-                                    </span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="4" class="text-center py-5 text-muted">
-                                    Nenhum cliente cadastrado ainda. Clique em <strong>"Sincronizar Clientes dos Fretes"</strong> para importar automaticamente todos os pagadores do sistema.
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
                 </div>
             </div>
         </div>
