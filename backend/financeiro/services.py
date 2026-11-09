@@ -428,7 +428,7 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
         # Busca notas e coletas do manifesto com suas filiais emissoras
         notas = NotaFiscal.objects.filter(manifesto=mft).select_related(
             'frete', 'filial_emissora', 'frete__filial_emissora'
-        ).prefetch_related('baixas')
+        ).prefetch_related('baixa_info')
         
         qtd_entregas = 0
         qtd_coletas = 0
@@ -448,7 +448,7 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None):
                 qtd_ctes += 1
             
             # Verifica nas baixas da nota se houve ocorrência configurada como paga
-            baixas = list(nf.baixas.all())
+            baixas = list(nf.baixa_info.all())
             paga = False
             for baixa in baixas:
                 ocorrencia_id = baixa.ocorrencia_id
