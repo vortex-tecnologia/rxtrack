@@ -348,6 +348,14 @@ class RegistrarBaixaView(APIView):
                     nome_arquivo = f"{nf.id}_{id_foto}.jpg"
                     url_final_foto = upload_via_ftp(foto_arquivo.read(), nome_arquivo)
 
+                # --- REGISTRO DA BAIXA (COM REPLICAÇÃO CONTROLADA POR CT-E) ---
+                data_manual = request.data.get('data_baixa')
+                lat = request.data.get('latitude')
+                lng = request.data.get('longitude')
+                
+                lat = lat if lat and lat != "null" and lat != "undefined" else None
+                lng = lng if lng and lng != "null" and lng != "undefined" else None
+
                 # Atualiza flags de permissão (Câmera / GPS) do motorista quando constatado uso real na baixa
                 if nf.manifesto and nf.manifesto.motorista:
                     mot_baixa = nf.manifesto.motorista
@@ -362,14 +370,6 @@ class RegistrarBaixaView(APIView):
                         mot_baixa.permissoes_atualizadas_em = timezone.now()
                         campos_perm.append('permissoes_atualizadas_em')
                         mot_baixa.save(update_fields=campos_perm)
-
-                # --- REGISTRO DA BAIXA (COM REPLICAÇÃO CONTROLADA POR CT-E) ---
-                data_manual = request.data.get('data_baixa')
-                lat = request.data.get('latitude')
-                lng = request.data.get('longitude')
-                
-                lat = lat if lat and lat != "null" and lat != "undefined" else None
-                lng = lng if lng and lng != "null" and lng != "undefined" else None
 
                 from configuracao.utils import get_config
                 config_backup = get_config()
