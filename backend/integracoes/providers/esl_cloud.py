@@ -1583,12 +1583,15 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
             msg_erro = f"Erro {status}: {detalhe_erro}"
 
-            baixa.log_erro_tms = msg_erro[:500]
-            baixa.integrado_tms = False
-            baixa.save()
-
             is_4xx_fatal = bool(status and 400 <= status < 500)
             is_ultima_tentativa = (not task) or (task.request.retries >= task.max_retries) or is_4xx_fatal
+
+            baixa.integrado_tms = False
+            if is_ultima_tentativa:
+                baixa.log_erro_tms = msg_erro[:500]
+            else:
+                baixa.log_erro_tms = f"Atualizando: Tentativa {task.request.retries + 1}/{task.max_retries + 1} aguardando reenvio ao TMS."
+            baixa.save()
 
             if is_ultima_tentativa:
                 try:
@@ -1622,10 +1625,13 @@ class ESLCloudAdapter(BaseTMSAdapter):
             if delegado_subrotina:
                 raise
             msg = f"Erro inesperado: {str(e)}"
-            baixa.log_erro_tms = msg[:500]
+            is_ultima_tentativa = (not task) or (task.request.retries >= task.max_retries)
+            if is_ultima_tentativa:
+                baixa.log_erro_tms = msg[:500]
+            else:
+                baixa.log_erro_tms = f"Atualizando: Tentativa {task.request.retries + 1}/{task.max_retries + 1} aguardando reenvio ao TMS."
             baixa.save()
             
-            is_ultima_tentativa = (not task) or (task.request.retries >= task.max_retries)
             if is_ultima_tentativa:
                 try:
                     from operacional.services import registrar_erro_torre
@@ -2141,8 +2147,11 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 msg_falha = f"Erro na integração da Minuta ({status_code}){info_url}: {response_text}{payload_str}"
             
             if baixa:
-                baixa.log_erro_tms = msg_falha[:500]
                 baixa.integrado_tms = False
+                if is_ultima_tentativa:
+                    baixa.log_erro_tms = msg_falha[:500]
+                else:
+                    baixa.log_erro_tms = f"Atualizando: Tentativa {task.request.retries + 1}/{task.max_retries + 1} aguardando reenvio da Minuta ao TMS."
                 baixa.save()
             
             # 🚨 ALERTA NA TORRE E NOTIFICAÇÃO: SOMENTE NA ÚLTIMA TENTATIVA!
@@ -2286,13 +2295,15 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 return f"Coleta {identificador} enviada com sucesso ao ESL ({'V1' if is_numeric else 'V2'})."
             else:
                 msg_erro = f"Status: {response.status_code} - {response.text}"
+                is_ultima_tentativa = (not task) or (task.request.retries >= task.max_retries)
                 baixa.processado_tms = True
                 baixa.integrado_tms = False
-                baixa.log_erro_tms = msg_erro[:500]
+                if is_ultima_tentativa:
+                    baixa.log_erro_tms = msg_erro[:500]
+                else:
+                    baixa.log_erro_tms = f"Atualizando: Tentativa {task.request.retries + 1}/{task.max_retries + 1} aguardando reenvio da Coleta ao TMS."
                 baixa.payload_enviado = payload
                 baixa.save()
-                
-                is_ultima_tentativa = (not task) or (task.request.retries >= task.max_retries)
 
                 if is_ultima_tentativa:
                     try:
@@ -2318,9 +2329,13 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 if response.status_code == 404 and is_numeric:
                      logger.warning(f"ID numérico {identificador} deu 404 na V1. Tentando V2 em breve via retry.")
                 
-                raise Exception(f"Erro no ESL (Coleta): {msg_erro}")
+                if task and task.request.retries < task.max_retries:
+                    raise task.retry(exc=Exception(f"Erro no ESL (Coleta): {msg_erro}"), countdown=60)
+                return f"Falha na Coleta {identificador}: {msg_erro}"
 
         except Exception as e:
+            if task and getattr(e, '__class__', None).__name__ == 'Retry':
+                raise
             logger.error(f"Erro enviar_coleta_esl_task ({baixa_id}): {str(e)}")
             
             is_ultima_tentativa = (not task) or (task.request.retries >= task.max_retries)
@@ -2358,24 +2373,32 @@ class ESLCloudAdapter(BaseTMSAdapter):
             if not manifesto.manifesto_id_tms:
                 return f"Erro: Manifesto {manifesto.numero_manifesto} sem ID interno do TMS."
 
-            # Garante que 100% das baixas/ocorrências deste manifesto estejam registradas na ESL antes de fechar
-            from manifesto.models import BaixaNF
-            baixas_pendentes_tms = BaixaNF.objects.filter(nota_fiscal__manifesto=manifesto, integrado_tms=False)
-            for b in baixas_pendentes_tms:
-                try:
-                    if b.qualidade_canhoto == 'PENDENTE_ANALISE':
-                        b.qualidade_canhoto = 'APROVADO'
-                        b.solicitar_nova_foto = False
-                        b.save(update_fields=['qualidade_canhoto', 'solicitar_nova_foto'])
+            # Garante que as baixas/ocorrências pendentes deste manifesto sejam enviadas na primeira execução
+            # (evita reenviar repetidamente baixas que já falharam com erro 4xx em retentativas de fechamento)
+            is_primeira_tentativa_fechamento = (not task) or (getattr(getattr(task, 'request', None), 'retries', 0) == 0)
+            if is_primeira_tentativa_fechamento:
+                from manifesto.models import BaixaNF
+                baixas_pendentes_tms = BaixaNF.objects.filter(nota_fiscal__manifesto=manifesto, integrado_tms=False)
+                for b in baixas_pendentes_tms:
+                    try:
+                        # Se já houve erro de validação 4xx (não idempotente), não força reenvio em loop no fechamento
+                        erro_anterior = str(b.log_erro_tms or '').strip()
+                        if erro_anterior.startswith("Erro 4") and not _eh_ocorrencia_ja_registrada_tms(422, erro_anterior):
+                            continue
 
-                    if b.nota_fiscal and b.nota_fiscal.tipo_operacao == 'COLETA':
-                        self.enviar_coleta(b.id)
-                    elif b.nota_fiscal and b.nota_fiscal.chave_acesso:
-                        self.enviar_baixa(b.id)
-                    else:
-                        self.enviar_baixa_minuta(b.id)
-                except Exception as b_err:
-                    print(f"⚠️ Aviso ao enviar baixa pendente #{b.id} antes do fechamento do manifesto: {b_err}")
+                        if b.qualidade_canhoto == 'PENDENTE_ANALISE':
+                            b.qualidade_canhoto = 'APROVADO'
+                            b.solicitar_nova_foto = False
+                            b.save(update_fields=['qualidade_canhoto', 'solicitar_nova_foto'])
+
+                        if b.nota_fiscal and b.nota_fiscal.tipo_operacao == 'COLETA':
+                            self.enviar_coleta(b.id)
+                        elif b.nota_fiscal and b.nota_fiscal.chave_acesso:
+                            self.enviar_baixa(b.id)
+                        else:
+                            self.enviar_baixa_minuta(b.id)
+                    except Exception as b_err:
+                        print(f"⚠️ Aviso ao enviar baixa pendente #{b.id} antes do fechamento do manifesto: {b_err}")
 
             fuso_br = pytz.timezone('America/Sao_Paulo')
             data_fim = manifesto.data_finalizacao or timezone.now()

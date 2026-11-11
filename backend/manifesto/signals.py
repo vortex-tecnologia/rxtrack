@@ -117,19 +117,25 @@ def registrar_log_baixa_nfe(sender, instance, created, **kwargs):
             filial=filial,
         ))
     else:
+        # Se o save() atualizou apenas campos que não têm relação com integração TMS (ex: foto/IA), ignora
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None and 'integrado_tms' not in update_fields and 'log_erro_tms' not in update_fields:
+            return
+
         # Atualização: Verifica se integração mudou
         if instance.integrado_tms and instance.processado_tms:
-            # Sucesso na integração TMS
-            # Evita duplicatas: só cria se não existe log de integração sucesso recente para esta NF
+            # Sucesso na integração TMS: cria apenas 1x por NF e limpa erros não lidos anteriores da nota
             def criar_log_integracao_sucesso():
-                from django.utils import timezone
-                import datetime
-                recente = LogBaixaNfe.objects.filter(
+                LogBaixaNfe.objects.filter(
+                    nota_fiscal=nf,
+                    tipo='INTEGRACAO_ERRO',
+                    lido=False
+                ).update(lido=True)
+                ja_existe_sucesso = LogBaixaNfe.objects.filter(
                     nota_fiscal=nf,
                     tipo='INTEGRACAO_SUCESSO',
-                    criado_em__gte=timezone.now() - datetime.timedelta(minutes=5)
                 ).exists()
-                if not recente:
+                if not ja_existe_sucesso:
                     LogBaixaNfe.objects.create(
                         nota_fiscal=nf,
                         manifesto_numero=manifesto.numero_manifesto if manifesto else '',
@@ -145,22 +151,33 @@ def registrar_log_baixa_nfe(sender, instance, created, **kwargs):
             # Ignora mensagens informativas/progresso ou idempotência da ESL para não disparar alerta de falso erro
             if not _eh_mensagem_ignorada_notificacao(log_msg):
                 def criar_log_integracao_erro():
-                    from django.utils import timezone
-                    import datetime
-                    recente = LogBaixaNfe.objects.filter(
+                    from django.db.models import Q
+                    mft_num = manifesto.numero_manifesto if manifesto else ''
+                    msg_trunc = log_msg[:500]
+
+                    # Envia notificação APENAS 1x por nota fiscal (ou se já houver o mesmo erro não lido no mesmo manifesto)
+                    q_existente = Q(nota_fiscal=nf, tipo='INTEGRACAO_ERRO')
+                    if nf and nf.numero_nota:
+                        q_existente |= Q(manifesto_numero=mft_num, numero_nota=nf.numero_nota, tipo='INTEGRACAO_ERRO')
+                    if mft_num:
+                        q_existente |= Q(manifesto_numero=mft_num, mensagem=msg_trunc, tipo='INTEGRACAO_ERRO', lido=False)
+
+                    existente = LogBaixaNfe.objects.filter(q_existente).order_by('-criado_em').first()
+                    if existente:
+                        # Se ainda não foi lido e pertence à mesma nota, apenas atualiza a mensagem sem duplicar
+                        if not existente.lido and existente.nota_fiscal_id == (nf.id if nf else None) and existente.mensagem != msg_trunc:
+                            existente.mensagem = msg_trunc
+                            existente.save(update_fields=['mensagem'])
+                        return
+
+                    LogBaixaNfe.objects.create(
                         nota_fiscal=nf,
+                        manifesto_numero=mft_num,
+                        numero_nota=nf.numero_nota,
                         tipo='INTEGRACAO_ERRO',
-                        criado_em__gte=timezone.now() - datetime.timedelta(minutes=2)
-                    ).exists()
-                    if not recente:
-                        LogBaixaNfe.objects.create(
-                            nota_fiscal=nf,
-                            manifesto_numero=manifesto.numero_manifesto if manifesto else '',
-                            numero_nota=nf.numero_nota,
-                            tipo='INTEGRACAO_ERRO',
-                            mensagem=log_msg[:500],
-                            filial=filial,
-                        )
+                        mensagem=msg_trunc,
+                        filial=filial,
+                    )
                 transaction.on_commit(criar_log_integracao_erro)
 
 
@@ -191,6 +208,8 @@ def _eh_mensagem_ignorada_notificacao(mensagem):
         "ja foi registrad",
         "já se encontra finalizado",
         "ja se encontra finalizado",
+        "não permite alteração",
+        "nao permite alteracao",
         "status 'closed'",
         "already closed",
         "já finalizad",
@@ -208,7 +227,7 @@ from manifesto.models import ManifestoBuscaLog
 @receiver(post_save, sender=ManifestoBuscaLog)
 def registrar_log_importacao_erro(sender, instance, **kwargs):
     """
-    Cria LogBaixaNfe quando uma importação de manifesto falha.
+    Cria LogBaixaNfe quando uma importação de manifesto falha (apenas 1x por manifesto).
     Ignora avisos de manifesto já finalizado ('closed') no TMS.
     """
     if instance.status == 'ERRO' and instance.mensagem_erro:
@@ -221,22 +240,25 @@ def registrar_log_importacao_erro(sender, instance, **kwargs):
             filial = instance.motorista.filial
 
         def criar_log_erro():
-            from django.utils import timezone
-            import datetime
-            recente = LogBaixaNfe.objects.filter(
+            msg_trunc = instance.mensagem_erro[:500] if instance.mensagem_erro else "Erro na importação"
+            existente = LogBaixaNfe.objects.filter(
                 manifesto_numero=instance.numero_manifesto,
                 tipo='IMPORTACAO_ERRO',
-                criado_em__gte=timezone.now() - datetime.timedelta(minutes=2)
-            ).exists()
-            if not recente:
-                LogBaixaNfe.objects.create(
-                    nota_fiscal=None,
-                    manifesto_numero=instance.numero_manifesto,
-                    numero_nota='',
-                    tipo='IMPORTACAO_ERRO',
-                    mensagem=instance.mensagem_erro[:500] if instance.mensagem_erro else "Erro na importação",
-                    filial=filial,
-                )
+            ).order_by('-criado_em').first()
+            if existente:
+                if not existente.lido and existente.mensagem != msg_trunc:
+                    existente.mensagem = msg_trunc
+                    existente.save(update_fields=['mensagem'])
+                return
+
+            LogBaixaNfe.objects.create(
+                nota_fiscal=None,
+                manifesto_numero=instance.numero_manifesto,
+                numero_nota='',
+                tipo='IMPORTACAO_ERRO',
+                mensagem=msg_trunc,
+                filial=filial,
+            )
         transaction.on_commit(criar_log_erro)
 
 

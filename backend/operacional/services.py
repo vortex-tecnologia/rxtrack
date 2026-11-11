@@ -305,6 +305,8 @@ def limpar_falsos_erros_idempotencia(filial=None):
             Q(log_erro_tms__icontains="ja existe") |
             Q(log_erro_tms__icontains="já cadastrad") |
             Q(log_erro_tms__icontains="ja cadastrad") |
+            Q(log_erro_tms__icontains="não permite alteração") |
+            Q(log_erro_tms__icontains="nao permite alteracao") |
             Q(log_erro_tms__icontains="menor ou igual")
         )
         baixas_idempotentes = BaixaNF.objects.filter(
@@ -324,17 +326,44 @@ def limpar_falsos_erros_idempotencia(filial=None):
     except Exception:
         pass
 
-    # 2. Marca como lidas notificações (LogBaixaNfe) de idempotência ou manifesto já fechado
+    # 2. Marca como lidas notificações (LogBaixaNfe) de idempotência/manifesto fechado
+    #    E remove duplicatas (mantém apenas 1 notificação por nota/manifesto/mensagem de erro)
     try:
-        notifs_nao_lidas = LogBaixaNfe.objects.filter(tipo__icontains='ERRO', lido=False)
+        notifs_nao_lidas = LogBaixaNfe.objects.filter(
+            tipo__icontains='ERRO',
+            lido=False
+        ).order_by('-criado_em')
         if filial:
             notifs_nao_lidas = notifs_nao_lidas.filter(Q(filial=filial) | Q(filial__isnull=True))
-        ids_marcar_lido = [
-            n.id for n in notifs_nao_lidas
-            if _eh_mensagem_ignorada_notificacao(n.mensagem)
-        ]
+
+        ids_marcar_lido = []
+        ids_deletar_duplicados = []
+        chaves_vistas_nota = set()
+        chaves_vistas_msg = set()
+
+        for n in notifs_nao_lidas:
+            if _eh_mensagem_ignorada_notificacao(n.mensagem):
+                ids_marcar_lido.append(n.id)
+                continue
+
+            mft_key = (n.manifesto_numero or '').strip()
+            nf_key = (n.numero_nota or '').strip()
+            msg_key = (n.mensagem or '').strip()[:120]
+
+            chave_nota = (n.tipo, mft_key, nf_key)
+            chave_msg_manifesto = (n.tipo, mft_key, msg_key) if mft_key and msg_key else None
+
+            if chave_nota in chaves_vistas_nota or (chave_msg_manifesto and chave_msg_manifesto in chaves_vistas_msg):
+                ids_deletar_duplicados.append(n.id)
+            else:
+                chaves_vistas_nota.add(chave_nota)
+                if chave_msg_manifesto:
+                    chaves_vistas_msg.add(chave_msg_manifesto)
+
         if ids_marcar_lido:
             LogBaixaNfe.objects.filter(id__in=ids_marcar_lido).update(lido=True)
+        if ids_deletar_duplicados:
+            LogBaixaNfe.objects.filter(id__in=ids_deletar_duplicados).delete()
     except Exception:
         pass
 
