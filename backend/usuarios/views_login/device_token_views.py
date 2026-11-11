@@ -82,7 +82,14 @@ def auto_login_device(request):
             if motorista:
                 motorista.fcm_token = fcm_token.strip()
                 motorista.fcm_token_atualizado_em = timezone.now()
-                motorista.save(update_fields=['fcm_token', 'fcm_token_atualizado_em'])
+                motorista.permissao_notificacao = True
+                motorista.permissoes_atualizadas_em = timezone.now()
+                motorista.save(update_fields=[
+                    'fcm_token',
+                    'fcm_token_atualizado_em',
+                    'permissao_notificacao',
+                    'permissoes_atualizadas_em',
+                ])
                 logger.info(f"[Auto-Login] FCM Token atualizado para {motorista.nome_completo} ({motorista.cpf}) via auto-login.")
             else:
                 logger.warning(f"[Auto-Login] Não foi possível resolver motorista para user: {device.user.username}")

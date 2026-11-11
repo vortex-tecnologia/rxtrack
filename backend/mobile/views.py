@@ -106,6 +106,17 @@ def save_webpush_token(request):
             }
         )
 
+        # Marca permissão de notificação ativa no perfil do motorista (PWA)
+        try:
+            from django.utils import timezone
+            motorista = getattr(request.user, 'motorista_perfil', None)
+            if motorista:
+                motorista.permissao_notificacao = True
+                motorista.permissoes_atualizadas_em = timezone.now()
+                motorista.save(update_fields=['permissao_notificacao', 'permissoes_atualizadas_em'])
+        except Exception:
+            pass
+
         return Response({"message": "Salvo com sucesso"})
 
     except Exception as e:

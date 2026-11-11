@@ -348,6 +348,21 @@ class RegistrarBaixaView(APIView):
                     nome_arquivo = f"{nf.id}_{id_foto}.jpg"
                     url_final_foto = upload_via_ftp(foto_arquivo.read(), nome_arquivo)
 
+                # Atualiza flags de permissão (Câmera / GPS) do motorista quando constatado uso real na baixa
+                if nf.manifesto and nf.manifesto.motorista:
+                    mot_baixa = nf.manifesto.motorista
+                    campos_perm = []
+                    if foto_arquivo and not mot_baixa.permissao_camera:
+                        mot_baixa.permissao_camera = True
+                        campos_perm.append('permissao_camera')
+                    if lat and lng and not mot_baixa.permissao_gps:
+                        mot_baixa.permissao_gps = True
+                        campos_perm.append('permissao_gps')
+                    if campos_perm:
+                        mot_baixa.permissoes_atualizadas_em = timezone.now()
+                        campos_perm.append('permissoes_atualizadas_em')
+                        mot_baixa.save(update_fields=campos_perm)
+
                 # --- REGISTRO DA BAIXA (COM REPLICAÇÃO CONTROLADA POR CT-E) ---
                 data_manual = request.data.get('data_baixa')
                 lat = request.data.get('latitude')

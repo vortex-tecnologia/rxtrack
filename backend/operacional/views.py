@@ -1098,8 +1098,8 @@ def deletar_manifesto_operacional_view(request, manifesto_id):
         # nas ForeignKey's referentes
         manifesto.delete()
         
-        # 📲 Notifica o motorista (APK) que o manifesto foi cancelado/removido
-        if motorista_alvo and motorista_alvo.fcm_token:
+        # 📲 Notifica o motorista (APK ou PWA) que o manifesto foi cancelado/removido
+        if motorista_alvo and motorista_alvo.tem_notificacao_ativa:
             try:
                 from common.tasks_notificacoes import notificar_manifesto_removido
                 notificar_manifesto_removido(motorista_alvo, nome_mft)
@@ -1143,8 +1143,8 @@ def deletar_nota_fiscal_view(request, nota_id):
         
         nota.delete()
         
-        # 📲 Notifica o motorista (APK) que a nota/coleta foi removida do seu manifesto
-        if motorista_alvo and motorista_alvo.fcm_token:
+        # 📲 Notifica o motorista (APK ou PWA) que a nota/coleta foi removida do seu manifesto
+        if motorista_alvo and motorista_alvo.tem_notificacao_ativa:
             try:
                 from common.tasks_notificacoes import notificar_item_removido_manifesto
                 notificar_item_removido_manifesto(motorista_alvo, manifesto_num, numero, tipo_item=tipo_op)

@@ -339,19 +339,10 @@ def disparar_notificacao_canhoto_reprovado(baixa):
             'chave_acesso': str(baixa.nota_fiscal.chave_acesso if baixa.nota_fiscal else '')
         }
 
-        # 1. FCM Push para quem usa APK
-        if motorista and motorista.fcm_token:
+        # Disparo unificado (FCM Push para APK + WebPush para PWA instalado)
+        if motorista:
             from common.fcm_service import enviar_notificacao_push
             enviar_notificacao_push(motorista, titulo, mensagem, tipo='ALERTA', dados_payload=payload)
-
-        # 2. WebPush para quem usa PWA instalado
-        if motorista and getattr(motorista, 'user', None):
-            from mobile.services.webpush_service import enviar_notificacao_usuario
-            enviar_notificacao_usuario(motorista.user, {
-                'title': titulo,
-                'body': mensagem,
-                'data': payload
-            })
     except Exception as e:
         print(f"[IA-GUARDIÃO] Aviso: Não foi possível disparar push de canhoto reprovado: {e}")
 

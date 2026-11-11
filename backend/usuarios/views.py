@@ -85,7 +85,14 @@ class AtualizarFcmTokenView(APIView):
 
         motorista.fcm_token = fcm_token.strip()
         motorista.fcm_token_atualizado_em = timezone.now()
-        motorista.save(update_fields=['fcm_token', 'fcm_token_atualizado_em'])
+        motorista.permissao_notificacao = True
+        motorista.permissoes_atualizadas_em = timezone.now()
+        motorista.save(update_fields=[
+            'fcm_token',
+            'fcm_token_atualizado_em',
+            'permissao_notificacao',
+            'permissoes_atualizadas_em',
+        ])
 
         return Response({
             'sucesso': True,

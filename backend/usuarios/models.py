@@ -128,6 +128,49 @@ class Motorista(models.Model):
     fcm_token = models.TextField(null=True, blank=True, verbose_name="Token Firebase FCM")
     fcm_token_atualizado_em = models.DateTimeField(null=True, blank=True, verbose_name="Última Atualização FCM")
 
+    # NOVO: Status das permissões do aparelho (APK e PWA)
+    permissao_gps = models.BooleanField(default=False, verbose_name="Permissão de GPS Ativa")
+    permissao_notificacao = models.BooleanField(default=False, verbose_name="Permissão de Notificação Ativa")
+    permissao_camera = models.BooleanField(default=False, verbose_name="Permissão de Câmera Ativa")
+    permissoes_atualizadas_em = models.DateTimeField(null=True, blank=True, verbose_name="Última Verificação de Permissões")
+
+    @property
+    def tem_notificacao_ativa(self):
+        """Retorna True se o motorista tem push ativo via APK (FCM) ou PWA (WebPush/Permissão)."""
+        return bool(self.fcm_token or self.permissao_notificacao)
+
+    @property
+    def icones_permissoes_html(self):
+        """
+        Retorna os 3 ícones de permissão (GPS, Notificação, Câmera):
+        - Aceso (verde): permissão concedida/ativa no aparelho
+        - Apagado (cinza opaco): sem permissão ou desativada
+        """
+        gps_on = bool(self.permissao_gps)
+        notif_on = self.tem_notificacao_ativa
+        cam_on = bool(self.permissao_camera)
+
+        gps_cls = "text-success" if gps_on else "text-secondary"
+        gps_style = "opacity: 1;" if gps_on else "opacity: 0.28;"
+        gps_title = "GPS / Localização: Permissão Ativa" if gps_on else "GPS / Localização: Sem Permissão ou Desativado"
+
+        notif_cls = "text-success" if notif_on else "text-secondary"
+        notif_style = "opacity: 1;" if notif_on else "opacity: 0.28;"
+        notif_title = "Notificações Push: Permissão Ativa" if notif_on else "Notificações Push: Sem Permissão ou Desativada"
+
+        cam_cls = "text-success" if cam_on else "text-secondary"
+        cam_style = "opacity: 1;" if cam_on else "opacity: 0.28;"
+        cam_title = "Câmera: Permissão Ativa" if cam_on else "Câmera: Sem Permissão ou Desativada"
+
+        return (
+            '<span class="d-inline-flex align-items-center gap-1 ms-1 px-2 py-1 rounded border bg-light" '
+            'style="font-size: 0.8rem; line-height: 1; vertical-align: middle;">'
+            f'<i class="bi bi-geo-alt-fill {gps_cls}" style="{gps_style}" title="{gps_title}"></i>'
+            f'<i class="bi bi-bell-fill {notif_cls}" style="{notif_style}" title="{notif_title}"></i>'
+            f'<i class="bi bi-camera-fill {cam_cls}" style="{cam_style}" title="{cam_title}"></i>'
+            '</span>'
+        )
+
     @property
     def tipo_dispositivo(self):
         """
@@ -143,26 +186,33 @@ class Motorista(models.Model):
     @property
     def icone_dispositivo_html(self):
         """
-        Retorna o ícone HTML formatado de acordo com a plataforma (Android, iOS ou PWA).
+        Retorna o ícone HTML formatado de acordo com a plataforma (Android, iOS ou PWA)
+        seguido dos ícones de permissões (GPS, Notificação, Câmera).
         """
         if self.fcm_token:
-            return '<i class="bi bi-android2 text-success ms-1" style="font-size: 1.1rem;" title="App Android (APK) Instalado - Push FCM Ativo"></i>'
-        mod = (self.modelo_aparelho or '').lower()
-        if any(x in mod for x in ['iphone', 'ipad', 'ios', 'apple']):
-            return '<i class="bi bi-apple text-dark ms-1" style="font-size: 1.1rem;" title="iPhone (iOS)"></i>'
-        return '<img src="/static/desktop/img/pwa-icon.svg" class="ms-1" style="width: 1.1rem; height: 1.1rem; vertical-align: middle;" title="Navegador Web (PWA)">'
+            icone = '<i class="bi bi-android2 text-success ms-1" style="font-size: 1.1rem;" title="App Android (APK) Instalado - Push FCM Ativo"></i>'
+        else:
+            mod = (self.modelo_aparelho or '').lower()
+            if any(x in mod for x in ['iphone', 'ipad', 'ios', 'apple']):
+                icone = '<i class="bi bi-apple text-dark ms-1" style="font-size: 1.1rem;" title="iPhone (iOS)"></i>'
+            else:
+                icone = '<img src="/static/desktop/img/pwa-icon.svg" class="ms-1" style="width: 1.1rem; height: 1.1rem; vertical-align: middle;" title="Navegador Web (PWA)">'
+        return f"{icone}{self.icones_permissoes_html}"
 
     @property
     def badge_dispositivo_html(self):
         """
-        Retorna uma badge colorida elegante com ícone para tabelas.
+        Retorna uma badge colorida elegante com ícone para tabelas + ícones de permissões (GPS, Notificação, Câmera).
         """
         if self.fcm_token:
-            return '<span class="badge bg-success-subtle text-success border border-success ms-1" title="App Android (APK) Instalado - Push FCM Ativo"><i class="bi bi-android2 me-1"></i>APK</span>'
-        mod = (self.modelo_aparelho or '').lower()
-        if any(x in mod for x in ['iphone', 'ipad', 'ios', 'apple']):
-            return '<span class="badge bg-dark-subtle text-dark border border-secondary ms-1" title="iPhone (iOS)"><i class="bi bi-apple me-1"></i>iOS</span>'
-        return '<span class="badge bg-secondary-subtle text-secondary border border-secondary ms-1" title="Navegador Web (PWA)"><img src="/static/desktop/img/pwa-icon.svg" style="width: 0.85rem; height: 0.85rem; vertical-align: middle;" class="me-1">PWA</span>'
+            badge = '<span class="badge bg-success-subtle text-success border border-success ms-1" title="App Android (APK) Instalado - Push FCM Ativo"><i class="bi bi-android2 me-1"></i>APK</span>'
+        else:
+            mod = (self.modelo_aparelho or '').lower()
+            if any(x in mod for x in ['iphone', 'ipad', 'ios', 'apple']):
+                badge = '<span class="badge bg-dark-subtle text-dark border border-secondary ms-1" title="iPhone (iOS)"><i class="bi bi-apple me-1"></i>iOS</span>'
+            else:
+                badge = '<span class="badge bg-secondary-subtle text-secondary border border-secondary ms-1" title="Navegador Web (PWA)"><img src="/static/desktop/img/pwa-icon.svg" style="width: 0.85rem; height: 0.85rem; vertical-align: middle;" class="me-1">PWA</span>'
+        return f"{badge}{self.icones_permissoes_html}"
 
     def __str__(self):
         return self.nome_completo

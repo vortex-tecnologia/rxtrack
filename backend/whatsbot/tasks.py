@@ -284,8 +284,8 @@ def _notificar_motorista(filial, motorista, numero_mft, rodada, data_hoje):
         )
         tipo = 'ATIVACAO'
 
-    # 📲 DISPARO DE NOTIFICAÇÃO PUSH (FCM) PARA O APLICATIVO APK DO MOTORISTA
-    if motorista and motorista.fcm_token:
+    # 📲 DISPARO DE NOTIFICAÇÃO PUSH (FCM APK / WEBPUSH PWA) PARA O MOTORISTA
+    if motorista and motorista.tem_notificacao_ativa:
         try:
             from common.fcm_service import enviar_notificacao_push
             titulos_rodada = {
@@ -563,25 +563,28 @@ def enviar_mensagem_massa_motoristas_task(self, filial_id, mensagem):
     total_push_enviados = 0
 
     for filial in filiais:
-        # 1. Envio de Notificação Push FCM (Exclusivo APK) para motoristas da filial
+        # 1. Envio de Notificação Push (APK via FCM + PWA via WebPush) para motoristas da filial
         try:
+            from django.db.models import Q
             from common.fcm_service import enviar_notificacao_massa
-            motoristas_apk = Motorista.objects.filter(
-                filial=filial,
-                fcm_token__isnull=False
-            ).exclude(fcm_token='')
+            motoristas_push = Motorista.objects.filter(
+                filial=filial
+            ).filter(
+                (Q(fcm_token__isnull=False) & ~Q(fcm_token='')) |
+                Q(user__webpush_subscriptions__isnull=False)
+            ).distinct()
 
-            if motoristas_apk.exists():
+            if motoristas_push.exists():
                 res_push = enviar_notificacao_massa(
-                    motoristas_qs_ou_lista=motoristas_apk,
+                    motoristas_qs_ou_lista=motoristas_push,
                     titulo="📢 Aviso Importante RXTrack",
                     mensagem=mensagem,
                     tipo="MANUAL"
                 )
                 total_push_enviados += res_push.get('sucessos', 0)
-                logger.info(f"📲 Push FCM enviado para {res_push.get('sucessos', 0)} motorista(s) APK da filial {filial.nome}")
+                logger.info(f"📲 Push enviado para {res_push.get('sucessos', 0)} motorista(s) APK/PWA da filial {filial.nome}")
         except Exception as fcm_err:
-            logger.error(f"Erro ao disparar FCM Push em massa para a filial {filial.nome}: {fcm_err}")
+            logger.error(f"Erro ao disparar Push em massa para a filial {filial.nome}: {fcm_err}")
 
         # 2. Envio via WhatsApp (caso o adapter esteja configurado para a filial)
         adapter = get_whatsapp_adapter(filial)

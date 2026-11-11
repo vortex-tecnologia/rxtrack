@@ -1706,22 +1706,86 @@
                 fecharModal();
             }, ms);
         }
+        function _obterHeadersWebPush() {
+            const headers = { 'Content-Type': 'application/json' };
+            const tokenJWT = localStorage.getItem('accessToken');
+            if (tokenJWT && tokenJWT !== 'null' && tokenJWT !== 'undefined') {
+                headers['Authorization'] = `Bearer ${tokenJWT}`;
+            }
+            const csrfMatch = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+            if (csrfMatch) {
+                headers['X-CSRFToken'] = decodeURIComponent(csrfMatch[1]);
+            }
+            return headers;
+        }
+
+        async function sincronizarWebPushSilencioso() {
+            try {
+                if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+                const registration = await navigator.serviceWorker.ready;
+                const vapidPublicKey = "BDBRd8eEkZHd6ZY_j3W4kaDZVuLr0MmrMqXJSox83EHT_re79BA01ViC3RzOy0P7J6UYcqOmhIyLqHJzdVUo8DQ";
+                const applicationServerKey = urlB64ToUint8Array(vapidPublicKey);
+
+                let subscription = await registration.pushManager.getSubscription();
+                if (!subscription) {
+                    subscription = await registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: applicationServerKey
+                    });
+                }
+
+                if (subscription) {
+                    const res = await fetch('/app/api/v1/save-webpush/', {
+                        method: 'POST',
+                        headers: _obterHeadersWebPush(),
+                        credentials: 'same-origin',
+                        body: JSON.stringify({
+                            subscription: subscription.toJSON(),
+                            group: "motoristas"
+                        })
+                    });
+                    if (res.ok) {
+                        localStorage.setItem("webpush_aceitou", "true");
+                        if (typeof window.sincronizarPermissoesAparelho === 'function') {
+                            window.sincronizarPermissoesAparelho();
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("[WebPush PWA] Falha ao sincronizar assinatura silenciosa:", err);
+            }
+        }
+
         function verificarStatusNotificacao() {
-            return; // TODO: Alerta desativado temporariamente. Futuramente será via WhatsApp.
-            if (localStorage.getItem("webpush_aceitou") === "true" || Notification.permission === "granted") {
+            // Se estiver rodando dentro do APK nativo (Capacitor), o push já é feito via Firebase FCM nativo
+            if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+                return;
+            }
+            if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+                return;
+            }
+
+            if (Notification.permission === "granted") {
+                sincronizarWebPushSilencioso();
+                return;
+            }
+
+            if (Notification.permission === "denied") {
                 return;
             }
 
             const dataAdiada = localStorage.getItem("webpush_data_adiada");
             const agora = new Date().getTime();
-            const vinteQuatroHoras = 24 * 60 * 60 * 1000;
+            const dozeHoras = 12 * 60 * 60 * 1000;
 
-            if (!dataAdiada || (agora - parseInt(dataAdiada)) > vinteQuatroHoras) {
+            if (!dataAdiada || (agora - parseInt(dataAdiada)) > dozeHoras) {
                 setTimeout(() => {
                     const modalElement = document.getElementById('modalSolicitarNotificacao');
-                    const modalInstance = new bootstrap.Modal(modalElement);
-                    modalInstance.show();
-                }, 5000);
+                    if (modalElement) {
+                        const modalInstance = new bootstrap.Modal(modalElement);
+                        modalInstance.show();
+                    }
+                }, 4000);
             }
         }
 
@@ -1753,6 +1817,9 @@
                 const permission = await Notification.requestPermission();
 
                 if (permission !== 'granted') {
+                    if (typeof window.sincronizarPermissoesAparelho === 'function') {
+                        window.sincronizarPermissoesAparelho();
+                    }
                     atualizarModalStatus(
                         "Permissão negada",
                         "Você bloqueou as notificações no navegador.",
@@ -1780,14 +1847,10 @@
 
                 console.log("Payload enviado:", payload);
 
-                const tokenJWT = localStorage.getItem('accessToken');
-
                 const response = await fetch('/app/api/v1/save-webpush/', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${tokenJWT}`
-                    },
+                    headers: _obterHeadersWebPush(),
+                    credentials: 'same-origin',
                     body: JSON.stringify(payload)
                 });
 
@@ -1796,6 +1859,10 @@
                 if (response.ok) {
                     localStorage.setItem("webpush_aceitou", "true");
                     localStorage.removeItem("webpush_data_adiada");
+
+                    if (typeof window.sincronizarPermissoesAparelho === 'function') {
+                        window.sincronizarPermissoesAparelho();
+                    }
 
                     atualizarModalStatus(
                         "Tudo pronto!",

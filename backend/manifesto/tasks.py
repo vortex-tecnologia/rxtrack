@@ -883,8 +883,8 @@ def processar_webhook_manifesto_task(self, event_id):
                 ids_processadas.append(nota_obj.id)
                 count_notas += 1
 
-                # 📲 Notifica motorista se nova nota/coleta foi adicionada a um manifesto existente
-                if created_nota and motorista_obj and motorista_obj.fcm_token and status_novo == 'EM_TRANSPORTE':
+                # 📲 Notifica motorista (APK ou PWA) se nova nota/coleta foi adicionada a um manifesto existente
+                if created_nota and motorista_obj and motorista_obj.tem_notificacao_ativa and status_novo == 'EM_TRANSPORTE':
                     try:
                         from common.tasks_notificacoes import notificar_item_adicionado_manifesto
                         notificar_item_adicionado_manifesto(motorista_obj, num_mani, numero_item, tipo_item=tipo_item)
@@ -903,7 +903,7 @@ def processar_webhook_manifesto_task(self, event_id):
                     if qtd_removidas > 0:
                         logger.info(f"🗑️ Removendo {qtd_removidas} notas órfãs do manifesto {num_mani} que foram excluídas no TMS via Webhook.")
                         # 📲 Notifica motorista sobre cada nota removida
-                        if motorista_obj and motorista_obj.fcm_token:
+                        if motorista_obj and motorista_obj.tem_notificacao_ativa:
                             from common.tasks_notificacoes import notificar_item_removido_manifesto
                             for n_rem in notas_removidas:
                                 try:
@@ -978,12 +978,12 @@ def processar_webhook_manifesto_task(self, event_id):
             except Exception as auto_err:
                 logger.debug(f"ℹ️ Erro ao tentar auto-resolver logs de erro para MFT {num_mani}: {auto_err}")
 
-            # 📲 DISPARO INSTANTÂNEO DE NOTIFICAÇÃO PUSH (FCM) PARA O MOTORISTA (APK)
+            # 📲 DISPARO INSTANTÂNEO DE NOTIFICAÇÃO PUSH (APK/PWA) PARA O MOTORISTA
             try:
-                if motorista_obj and motorista_obj.fcm_token and (not era_finalizado or notas_pendentes_count > 0):
+                if motorista_obj and motorista_obj.tem_notificacao_ativa and (not era_finalizado or notas_pendentes_count > 0):
                     from common.tasks_notificacoes import notificar_atribuicao_manifesto
                     notificar_atribuicao_manifesto(motorista_obj, num_mani, count_notas)
-                    logger.info(f"📲 Push FCM de manifesto enviado com sucesso para {motorista_obj.nome_completo} (MFT: #{num_mani})")
+                    logger.info(f"📲 Push de manifesto enviado com sucesso para {motorista_obj.nome_completo} (MFT: #{num_mani})")
             except Exception as push_err:
                 logger.error(f"⚠️ Erro ao disparar Notificação Push Webhook para MFT {num_mani}: {push_err}")
 
@@ -1297,12 +1297,12 @@ def processar_soap_task(self, evento_id):
         evento.processed_at = timezone.now()
         evento.save()
 
-        # 📲 DISPARO DE NOTIFICAÇÃO PUSH (FCM) SE REABERTO OU NOVO
+        # 📲 DISPARO DE NOTIFICAÇÃO PUSH (APK/PWA) SE REABERTO OU NOVO
         try:
-            if motorista_obj and motorista_obj.fcm_token and (not era_finalizado_soap or notas_pendentes_count > 0):
+            if motorista_obj and motorista_obj.tem_notificacao_ativa and (not era_finalizado_soap or notas_pendentes_count > 0):
                 from common.tasks_notificacoes import notificar_atribuicao_manifesto
                 notificar_atribuicao_manifesto(motorista_obj, numero_rota, count_notas)
-                logger.info(f"📲 Push FCM de manifesto SOAP enviado para {motorista_obj.nome_completo} (MFT: #{numero_rota})")
+                logger.info(f"📲 Push de manifesto SOAP enviado para {motorista_obj.nome_completo} (MFT: #{numero_rota})")
         except Exception as push_err:
             logger.error(f"⚠️ Erro ao disparar Notificação Push SOAP para MFT {numero_rota}: {push_err}")
 

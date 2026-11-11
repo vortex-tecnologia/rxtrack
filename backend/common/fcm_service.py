@@ -76,9 +76,35 @@ def inicializar_firebase():
         return False, msg
 
 
+def _tentar_envio_webpush_pwa(motorista, titulo, mensagem, dados_payload=None):
+    """
+    Tenta enviar notificação via WebPush (VAPID / Service Worker) para motoristas no PWA.
+    Retorna (enviados_count, erro_str).
+    """
+    if not motorista or not getattr(motorista, 'user_id', None):
+        return 0, "Motorista sem usuário vinculado para WebPush"
+
+    try:
+        from mobile.services.webpush_service import enviar_notificacao_usuario
+        url_destino = "/app/"
+        if isinstance(dados_payload, dict) and dados_payload.get("url"):
+            url_destino = str(dados_payload["url"])
+        enviados, erro_wp = enviar_notificacao_usuario(
+            user=motorista.user,
+            titulo=titulo,
+            mensagem=mensagem,
+            url=url_destino,
+        )
+        return enviados, erro_wp
+    except Exception as e:
+        logger.error(f"Erro ao tentar WebPush PWA para {motorista.nome_completo}: {e}")
+        return 0, str(e)
+
+
 def enviar_notificacao_push(motorista, titulo, mensagem, tipo='SISTEMA', dados_payload=None):
     """
-    Envia uma notificação push via Firebase FCM para um motorista específico (APK).
+    Envia uma notificação push via Firebase FCM (APK) e/ou WebPush VAPID (PWA)
+    para um motorista específico.
     
     :param motorista: Instância de Motorista
     :param titulo: Título da notificação
@@ -90,21 +116,51 @@ def enviar_notificacao_push(motorista, titulo, mensagem, tipo='SISTEMA', dados_p
     if not motorista:
         return False, "Motorista não informado"
 
-    # Regra Fundamental: apenas quem é do APK possui fcm_token cadastrado
-    if not motorista.fcm_token:
-        msg_erro = f"Motorista {motorista.nome_completo} não possui FCM Token registrado (Usuário PWA ou app antigo)."
-        logger.info(msg_erro)
-        return False, msg_erro
-
     # Converte dados extras para string caso haja payload
     payload_clean = {}
     if dados_payload and isinstance(dados_payload, dict):
         for k, v in dados_payload.items():
             payload_clean[str(k)] = str(v) if v is not None else ""
 
-    # Tenta inicializar o Firebase
+    # Se não possui fcm_token (motorista PWA), tenta envio direto via WebPush
+    if not motorista.fcm_token:
+        enviados_wp, erro_wp = _tentar_envio_webpush_pwa(motorista, titulo, mensagem, payload_clean)
+        if enviados_wp > 0:
+            msg_id = f"webpush-pwa ({enviados_wp} disp.)"
+            logger.info(f"🌐 WebPush PWA enviado para {motorista.nome_completo}! ({enviados_wp} disp.)")
+            NotificacaoPushLog.objects.create(
+                motorista=motorista,
+                titulo=titulo,
+                mensagem=mensagem,
+                tipo=tipo,
+                dados_payload=payload_clean,
+                sucesso=True,
+                response_message_id=msg_id
+            )
+            return True, msg_id
+
+        msg_erro = erro_wp or f"Motorista {motorista.nome_completo} não possui FCM Token nem WebPush PWA ativo."
+        logger.info(msg_erro)
+        return False, msg_erro
+
+    # Tenta inicializar o Firebase para quem tem fcm_token
     sucesso_init, msg_init = inicializar_firebase()
     if not sucesso_init:
+        # Fallback para WebPush caso o motorista também tenha inscrição PWA
+        enviados_wp, _ = _tentar_envio_webpush_pwa(motorista, titulo, mensagem, payload_clean)
+        if enviados_wp > 0:
+            msg_id = f"webpush-pwa-fallback ({enviados_wp} disp.)"
+            NotificacaoPushLog.objects.create(
+                motorista=motorista,
+                titulo=titulo,
+                mensagem=mensagem,
+                tipo=tipo,
+                dados_payload=payload_clean,
+                sucesso=True,
+                response_message_id=msg_id
+            )
+            return True, msg_id
+
         # Registra log de falha por falta de configuração do Firebase
         NotificacaoPushLog.objects.create(
             motorista=motorista,
@@ -142,6 +198,9 @@ def enviar_notificacao_push(motorista, titulo, mensagem, tipo='SISTEMA', dados_p
         response_id = messaging.send(message)
         logger.info(f"📲 Push enviado para {motorista.nome_completo}! ID: {response_id}")
 
+        # Se o motorista também tiver inscrição WebPush (ex: abriu no PWA), dispara silenciosamente
+        _tentar_envio_webpush_pwa(motorista, titulo, mensagem, payload_clean)
+
         # Grava log de sucesso no banco de dados
         NotificacaoPushLog.objects.create(
             motorista=motorista,
@@ -160,7 +219,29 @@ def enviar_notificacao_push(motorista, titulo, mensagem, tipo='SISTEMA', dados_p
 
         # Limpa o token antigo expirado para aguardar novo login do motorista no APK
         motorista.fcm_token = None
-        motorista.save(update_fields=['fcm_token'])
+        update_fields = ['fcm_token']
+
+        # Tenta fallback via WebPush caso ele esteja usando PWA agora
+        enviados_wp, _ = _tentar_envio_webpush_pwa(motorista, titulo, mensagem, payload_clean)
+        if enviados_wp == 0 and motorista.permissao_notificacao:
+            motorista.permissao_notificacao = False
+            motorista.permissoes_atualizadas_em = timezone.now()
+            update_fields.extend(['permissao_notificacao', 'permissoes_atualizadas_em'])
+
+        motorista.save(update_fields=update_fields)
+
+        if enviados_wp > 0:
+            msg_id = f"webpush-pwa-apos-fcm-expirado ({enviados_wp} disp.)"
+            NotificacaoPushLog.objects.create(
+                motorista=motorista,
+                titulo=titulo,
+                mensagem=mensagem,
+                tipo=tipo,
+                dados_payload=payload_clean,
+                sucesso=True,
+                response_message_id=msg_id
+            )
+            return True, msg_id
 
         NotificacaoPushLog.objects.create(
             motorista=motorista,
@@ -183,6 +264,21 @@ def enviar_notificacao_push(motorista, titulo, mensagem, tipo='SISTEMA', dados_p
             motorista.fcm_token = None
             motorista.save(update_fields=['fcm_token'])
 
+        # Tenta fallback via WebPush PWA
+        enviados_wp, _ = _tentar_envio_webpush_pwa(motorista, titulo, mensagem, payload_clean)
+        if enviados_wp > 0:
+            msg_id = f"webpush-pwa-fallback ({enviados_wp} disp.)"
+            NotificacaoPushLog.objects.create(
+                motorista=motorista,
+                titulo=titulo,
+                mensagem=mensagem,
+                tipo=tipo,
+                dados_payload=payload_clean,
+                sucesso=True,
+                response_message_id=msg_id
+            )
+            return True, msg_id
+
         # Grava log de erro no banco de dados
         NotificacaoPushLog.objects.create(
             motorista=motorista,
@@ -200,15 +296,25 @@ def enviar_notificacao_push(motorista, titulo, mensagem, tipo='SISTEMA', dados_p
 
 def enviar_notificacao_massa(motoristas_qs_ou_lista, titulo, mensagem, tipo='SISTEMA', dados_payload=None):
     """
-    Envia notificação push para múltiplos motoristas com fcm_token cadastrado.
+    Envia notificação push para múltiplos motoristas com fcm_token (APK) ou WebPush (PWA) cadastrado.
     
     :return: Dicionário com estatísticas do envio
     """
-    # Filtra apenas motoristas com token FCM válido
+    from django.db.models import Q
+
+    # Filtra motoristas com token FCM válido OU inscrição WebPush ativa
     if hasattr(motoristas_qs_ou_lista, 'filter'):
-        candidatos = motoristas_qs_ou_lista.filter(fcm_token__isnull=False).exclude(fcm_token='')
+        candidatos = list(
+            motoristas_qs_ou_lista.filter(
+                (Q(fcm_token__isnull=False) & ~Q(fcm_token='')) |
+                Q(user__webpush_subscriptions__isnull=False)
+            ).distinct()
+        )
     else:
-        candidatos = [m for m in motoristas_qs_ou_lista if m and getattr(m, 'fcm_token', None)]
+        candidatos = [
+            m for m in motoristas_qs_ou_lista
+            if m and getattr(m, 'tem_notificacao_ativa', bool(getattr(m, 'fcm_token', None)))
+        ]
 
     stats = {
         'total_candidatos': len(candidatos),

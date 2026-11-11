@@ -109,8 +109,8 @@ def buscar_e_importar_nfe(request):
                 cep=data.get('cep'),
                 status='PENDENTE'
             )
-            # 📲 Notifica motorista (Push FCM) sobre adicao manual da nota
-            if manifesto.motorista and manifesto.motorista.fcm_token:
+            # 📲 Notifica motorista (Push APK/PWA) sobre adicao manual da nota
+            if manifesto.motorista and manifesto.motorista.tem_notificacao_ativa:
                 try:
                     from common.tasks_notificacoes import notificar_item_adicionado_manifesto
                     notificar_item_adicionado_manifesto(manifesto.motorista, manifesto.numero_manifesto, nova_nota.numero_nota, tipo_item=nova_nota.tipo_operacao or 'NOTA')

@@ -2404,24 +2404,119 @@ async function carregarDadosCabecalho() {
                 if (inputOcorrencia) inputOcorrencia.setAttribute('capture', 'environment');
             }
 
-            // 4. Envia dados do hardware do celular para o admin saber se é celular fraco
-            setTimeout(async () => {
+            // 4. Envia dados do hardware e permissões (GPS, Notificação, Câmera) do celular para o painel operacional
+            window.sincronizarPermissoesAparelho = async function(overrides = {}) {
                 try {
                     let ram = navigator.deviceMemory ? `${navigator.deviceMemory}GB` : 'Desconhecido';
                     let model = 'Desconhecido';
-                    
+
                     if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
-                        const hints = await navigator.userAgentData.getHighEntropyValues(['model']);
-                        if (hints.model) model = hints.model;
+                        try {
+                            const hints = await navigator.userAgentData.getHighEntropyValues(['model']);
+                            if (hints.model) model = hints.model;
+                        } catch (_) {}
                     }
-                    
-                    if (ram !== 'Desconhecido' || model !== 'Desconhecido') {
-                        authFetch(`${API_BASE}motorista/perfil/`, {
-                            method: 'POST',
-                            body: JSON.stringify({ modelo_aparelho: model, memoria_ram: ram })
-                        });
+
+                    // 4.1 Permissão de GPS / Localização
+                    let permGps = null;
+                    if (typeof overrides.permissao_gps === 'boolean') {
+                        permGps = overrides.permissao_gps;
+                    } else if (navigator.permissions && navigator.permissions.query) {
+                        try {
+                            const statusGps = await navigator.permissions.query({ name: 'geolocation' });
+                            if (statusGps.state === 'granted') permGps = true;
+                            else if (statusGps.state === 'denied') permGps = false;
+                            else if (localStorage.getItem('rx_perm_gps_ok') === 'true') permGps = true;
+                            else permGps = false;
+                            if (!statusGps._rxListenerBound) {
+                                statusGps._rxListenerBound = true;
+                                statusGps.onchange = () => window.sincronizarPermissoesAparelho();
+                            }
+                        } catch (_) {}
                     }
-                } catch(e) {}
+                    if (permGps === null) {
+                        permGps = localStorage.getItem('rx_perm_gps_ok') === 'true';
+                    }
+
+                    // 4.2 Permissão de Notificação (Push PWA ou APK)
+                    let permNotif = false;
+                    if (typeof overrides.permissao_notificacao === 'boolean') {
+                        permNotif = overrides.permissao_notificacao;
+                    } else if ('Notification' in window) {
+                        permNotif = (Notification.permission === 'granted');
+                    } else if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+                        permNotif = true;
+                    }
+
+                    // 4.3 Permissão de Câmera
+                    let permCam = null;
+                    if (typeof overrides.permissao_camera === 'boolean') {
+                        permCam = overrides.permissao_camera;
+                    } else if (navigator.permissions && navigator.permissions.query) {
+                        try {
+                            const statusCam = await navigator.permissions.query({ name: 'camera' });
+                            if (statusCam.state === 'granted') permCam = true;
+                            else if (statusCam.state === 'denied') permCam = false;
+                            else if (localStorage.getItem('rx_perm_cam_ok') === 'true') permCam = true;
+                            else permCam = false;
+                            if (!statusCam._rxListenerBound) {
+                                statusCam._rxListenerBound = true;
+                                statusCam.onchange = () => window.sincronizarPermissoesAparelho();
+                            }
+                        } catch (_) {}
+                    }
+                    if (permCam === null) {
+                        permCam = localStorage.getItem('rx_perm_cam_ok') === 'true';
+                    }
+
+                    const bodyPayload = {
+                        permissao_gps: Boolean(permGps),
+                        permissao_notificacao: Boolean(permNotif),
+                        permissao_camera: Boolean(permCam)
+                    };
+                    if (model !== 'Desconhecido') bodyPayload.modelo_aparelho = model;
+                    if (ram !== 'Desconhecido') bodyPayload.memoria_ram = ram;
+
+                    await authFetch(`${API_BASE}motorista/perfil/`, {
+                        method: 'POST',
+                        body: JSON.stringify(bodyPayload)
+                    });
+                } catch (e) {
+                    console.warn("[Permissões] Não foi possível sincronizar permissões:", e);
+                }
+            };
+
+            // Registra gatilhos automáticos quando câmera ou GPS são usados com sucesso no aparelho
+            [inputCameraNativa, inputOcorrencia].forEach(inp => {
+                if (inp && !inp._rxCamHooked) {
+                    inp._rxCamHooked = true;
+                    inp.addEventListener('change', () => {
+                        if (inp.files && inp.files.length > 0) {
+                            localStorage.setItem('rx_perm_cam_ok', 'true');
+                            window.sincronizarPermissoesAparelho({ permissao_camera: true });
+                        }
+                    });
+                }
+            });
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    () => {
+                        localStorage.setItem('rx_perm_gps_ok', 'true');
+                        window.sincronizarPermissoesAparelho({ permissao_gps: true });
+                    },
+                    (err) => {
+                        if (err && err.code === 1) {
+                            localStorage.removeItem('rx_perm_gps_ok');
+                            window.sincronizarPermissoesAparelho({ permissao_gps: false });
+                        }
+                    },
+                    { maximumAge: 60000, timeout: 8000 }
+                );
+            }
+
+            setTimeout(() => {
+                window.sincronizarPermissoesAparelho();
             }, 3000); // Executa 3 segundos depois pra não atrasar o carregamento da tela
 
         } else {

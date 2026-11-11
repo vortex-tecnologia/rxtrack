@@ -1186,11 +1186,11 @@ class ESLCloudAdapter(BaseTMSAdapter):
                         logger.info(f"🔄 [AUTO-REABERTURA BUSCA TMS] Manifesto #{numero_visual} REABERTO (<24h e sem outro ativo)! {notas_pendentes_count} nota(s) pendente(s).")
 
                         try:
-                            if motorista and motorista.fcm_token:
+                            if motorista and motorista.tem_notificacao_ativa:
                                 from common.tasks_notificacoes import notificar_atribuicao_manifesto
                                 notificar_atribuicao_manifesto(motorista, numero_visual, total_processadas + total_coletas)
                         except Exception as push_err:
-                            logger.error(f"⚠️ Erro ao disparar Push FCM de reabertura busca TMS #{numero_visual}: {push_err}")
+                            logger.error(f"⚠️ Erro ao disparar Push de reabertura busca TMS #{numero_visual}: {push_err}")
                     else:
                         manifesto_obj.status = 'FINALIZADO'
                         manifesto_obj.finalizado = True

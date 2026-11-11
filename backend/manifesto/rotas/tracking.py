@@ -77,6 +77,10 @@ class TrackingHeartbeatView(APIView):
             if lat is not None and lng is not None:
                 manifesto.ultima_lat = float(lat)
                 manifesto.ultima_lng = float(lng)
+                if manifesto.motorista and not manifesto.motorista.permissao_gps:
+                    manifesto.motorista.permissao_gps = True
+                    manifesto.motorista.permissoes_atualizadas_em = timezone.now()
+                    manifesto.motorista.save(update_fields=['permissao_gps', 'permissoes_atualizadas_em'])
                 
             manifesto.save(update_fields=['ultima_bateria', 'ultimo_acesso', 'ultima_rede', 'ultima_lat', 'ultima_lng'])
         except Manifesto.DoesNotExist:

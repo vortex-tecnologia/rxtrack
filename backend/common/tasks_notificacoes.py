@@ -14,17 +14,21 @@ logger = logging.getLogger(__name__)
 
 def enviar_lembrete_gps_diario():
     """
-    Envia lembrete de ativação do GPS / App para todos os motoristas do APK.
+    Envia lembrete de ativação do GPS / App para todos os motoristas do APK e PWA.
     Pode ser agendado para rodar às 08:00 e 13:00.
     """
+    from django.db.models import Q
     titulo = "📍 Mantenha o GPS Ativo"
     mensagem = "Olá! Para garantir a atualização das entregas do dia, abra o app RXTrack e verifique se o GPS está ativado."
     
-    motoristas_apk = Motorista.objects.filter(fcm_token__isnull=False).exclude(fcm_token='')
-    logger.info(f"Disparando lembrete de GPS diário para {motoristas_apk.count()} motorista(s) APK...")
+    motoristas_push = Motorista.objects.filter(
+        (Q(fcm_token__isnull=False) & ~Q(fcm_token='')) |
+        Q(user__webpush_subscriptions__isnull=False)
+    ).distinct()
+    logger.info(f"Disparando lembrete de GPS diário para {motoristas_push.count()} motorista(s) APK/PWA...")
     
     return enviar_notificacao_massa(
-        motoristas_qs_ou_lista=motoristas_apk,
+        motoristas_qs_ou_lista=motoristas_push,
         titulo=titulo,
         mensagem=mensagem,
         tipo='LEMBRETE'
@@ -33,10 +37,10 @@ def enviar_lembrete_gps_diario():
 
 def notificar_atribuicao_manifesto(motorista, numero_manifesto, total_notas=None):
     """
-    Notifica o motorista (APK) quando um novo manifesto for atribuído a ele no TMS.
+    Notifica o motorista (APK ou PWA) quando um novo manifesto for atribuído a ele no TMS.
     """
-    if not motorista or not motorista.fcm_token:
-        return False, "Motorista sem FCM token"
+    if not motorista or not motorista.tem_notificacao_ativa:
+        return False, "Motorista sem canal de notificação (FCM/WebPush)"
 
     titulo = f"🚛 Novo Manifesto {numero_manifesto}"
     mensagem = f"Um novo manifesto (#{numero_manifesto}) foi atribuído a você."
@@ -68,14 +72,18 @@ def notificar_alerta_motorista(motorista, titulo, mensagem, dados_extras=None):
 def varrer_e_notificar_manifestos_ativos():
     """
     Varre todos os manifestos ativos ('EM_TRANSPORTE' ou 'AGUARDANDO') no sistema
-    e envia uma notificação push para os motoristas vinculados que utilizam o APK.
+    e envia uma notificação push para os motoristas vinculados (APK e PWA).
     """
+    from django.db.models import Q
     from manifesto.models import Manifesto
 
     manifestos_ativos = Manifesto.objects.filter(
         status__in=['EM_TRANSPORTE', 'AGUARDANDO'],
-        motorista__fcm_token__isnull=False
-    ).exclude(motorista__fcm_token='').select_related('motorista')
+        motorista__isnull=False,
+    ).filter(
+        (Q(motorista__fcm_token__isnull=False) & ~Q(motorista__fcm_token='')) |
+        Q(motorista__user__webpush_subscriptions__isnull=False)
+    ).select_related('motorista').distinct()
 
     count = 0
     motoristas_notificados = set()
@@ -99,7 +107,7 @@ def varrer_e_notificar_manifestos_ativos():
             count += 1
             motoristas_notificados.add(motorista.id)
 
-    logger.info(f"🔎 Varredura de manifestos ativos: {count} motorista(s) notificado(s) via Push FCM.")
+    logger.info(f"🔎 Varredura de manifestos ativos: {count} motorista(s) notificado(s) via Push (APK/PWA).")
     return count
 
 
@@ -109,8 +117,8 @@ def notificar_mensagem_sac(ticket, atendente_nome=None):
     Verifica quantas mensagens NÃO LIDAS do SAC existem no ticket para formatar o texto.
     """
     motorista = getattr(ticket, 'motorista', None)
-    if not motorista or not motorista.fcm_token:
-        return False, "Motorista sem FCM token"
+    if not motorista or not motorista.tem_notificacao_ativa:
+        return False, "Motorista sem canal de notificação (FCM/WebPush)"
 
     # Conta mensagens não lidas enviadas pelo SAC
     nao_lidas = ticket.mensagens.filter(enviado_por_motorista=False, lida=False).count()
@@ -140,8 +148,8 @@ def notificar_item_adicionado_manifesto(motorista, manifesto_num, item_num, tipo
     """
     Notifica o motorista quando um novo item (nota ou coleta) for adicionado ao seu manifesto.
     """
-    if not motorista or not motorista.fcm_token:
-        return False, "Motorista sem FCM token"
+    if not motorista or not motorista.tem_notificacao_ativa:
+        return False, "Motorista sem canal de notificação (FCM/WebPush)"
 
     tipo_str = "Coleta" if tipo_item == 'COLETA' else "Nota Fiscal"
     titulo = f"➕ Item Adicionado (MFT #{manifesto_num})"
@@ -164,8 +172,8 @@ def notificar_item_removido_manifesto(motorista, manifesto_num, item_num, tipo_i
     """
     Notifica o motorista quando um item (nota ou coleta) for removido do seu manifesto.
     """
-    if not motorista or not motorista.fcm_token:
-        return False, "Motorista sem FCM token"
+    if not motorista or not motorista.tem_notificacao_ativa:
+        return False, "Motorista sem canal de notificação (FCM/WebPush)"
 
     tipo_str = "Coleta" if tipo_item == 'COLETA' else "Nota Fiscal"
     titulo = f"➖ Item Removido (MFT #{manifesto_num})"
@@ -188,8 +196,8 @@ def notificar_manifesto_removido(motorista, manifesto_num):
     """
     Notifica o motorista quando o seu manifesto inteiro for cancelado ou deletado.
     """
-    if not motorista or not motorista.fcm_token:
-        return False, "Motorista sem FCM token"
+    if not motorista or not motorista.tem_notificacao_ativa:
+        return False, "Motorista sem canal de notificação (FCM/WebPush)"
 
     titulo = f"🚨 Manifesto Removido (#{manifesto_num})"
     mensagem = f"Seu manifesto #{manifesto_num} foi cancelado/removido pela operação."
