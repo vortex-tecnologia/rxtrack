@@ -124,6 +124,88 @@ def _is_chave_nfe_valida(chave):
     return modelo in ('55', '65')
 
 
+def _eh_ocorrencia_ja_registrada_tms(status_code, texto_erro):
+    """
+    Detecta respostas do TMS (ex.: HTTP 422) que indicam que a ocorrência/baixa
+    JÁ foi cadastrada anteriormente (mesma data e hora, já existente, frete/nota já finalizado).
+    Nesses casos, o sistema trata como integrado com sucesso (idempotência),
+    finaliza a nota e NÃO dispara alerta de erro nem notificação na Torre de Controle.
+    """
+    if not texto_erro:
+        return False
+    detalhe_lower = str(texto_erro).lower()
+    termos_ja_registrado = (
+        "já existe",
+        "ja existe",
+        "já cadastrad",
+        "ja cadastrad",
+        "já foi cadastrad",
+        "ja foi cadastrad",
+        "cadastrada com essa data e hora",
+        "cadastrado com essa data e hora",
+        "essa data e hora",
+        "mesma data e hora",
+        "já foi registrad",
+        "ja foi registrad",
+        "já registrad",
+        "ja registrad",
+        "já se encontra",
+        "ja se encontra",
+        "já finalizad",
+        "ja finalizad",
+        "já foi finalizad",
+        "ja foi finalizad",
+        "já encerrad",
+        "ja encerrad",
+        "já foi encerrad",
+        "ja foi encerrad",
+        "já entreg",
+        "ja entreg",
+        "já foi entreg",
+        "ja foi entreg",
+        "já coletad",
+        "ja coletad",
+        "já foi coletad",
+        "ja foi coletad",
+        "já baixad",
+        "ja baixad",
+        "já foi baixad",
+        "ja foi baixad",
+        "não permite alteração",
+        "nao permite alteracao",
+        "não permite data e hora menor ou igual",
+        "nao permite data e hora menor ou igual",
+        "menor ou igual",
+        "already exists",
+        "already been taken",
+        "already closed",
+        "already finished",
+    )
+    if status_code in (422, 400, 409, None):
+        return any(termo in detalhe_lower for termo in termos_ja_registrado)
+    return False
+
+
+def _finalizar_nota_apos_integracao(nf, baixa=None, codigo_ocorrencia=None):
+    """
+    Garante que a NotaFiscal fique com status finalizado ('BAIXADA' ou 'OCORRENCIA')
+    quando o TMS confirma que a ocorrência foi integrada ou já existia.
+    """
+    if not nf:
+        return
+    tipo_op = str(getattr(nf, 'tipo_operacao', '') or '').strip().upper()
+    tipo_baixa = str(getattr(baixa, 'tipo', '') or '').strip().upper() if baixa else ''
+    eh_baixa_conclusiva = (
+        codigo_ocorrencia in (1, 2, '1', '2')
+        or tipo_baixa in ('ENTREGA', 'COLETA')
+        or tipo_op in ('TRANSFERENCIA', 'DESPACHO', 'RETIRADA', 'COLETA')
+    )
+    novo_status = 'BAIXADA' if eh_baixa_conclusiva else ('OCORRENCIA' if nf.status == 'PENDENTE' else nf.status)
+    if nf.status != novo_status:
+        nf.status = novo_status
+        nf.save(update_fields=['status'])
+
+
 class ESLCloudAdapter(BaseTMSAdapter):
     """Implementação para o TMS ESL Cloud."""
 
@@ -587,6 +669,11 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     if not mft_existente.data_finalizacao:
                         mft_existente.data_finalizacao = timezone.now()
                     mft_existente.save(update_fields=['status', 'status_tms', 'finalizado', 'data_finalizacao'])
+                    try:
+                        from operacional.services import resolver_erros_automaticamente
+                        resolver_erros_automaticamente(numero_visual, None, mft_existente.filial)
+                    except Exception:
+                        pass
                     log.status = 'ERRO'
                     log.mensagem_erro = f"O Manifesto #{numero_visual} já se encontra FINALIZADO no TMS (status 'closed')."
                     log.save(update_fields=['status', 'mensagem_erro'])
@@ -1257,6 +1344,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
         except Exception:
             pass
 
+        delegado_subrotina = False
         try:
             baixa = BaixaNF.objects.select_related(
                 'nota_fiscal',
@@ -1285,6 +1373,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             tipo_op = str(nf.tipo_operacao or '').strip().upper()
             
             if not tem_chave_valida:
+                delegado_subrotina = True
                 # Coletas usam endpoint próprio (/api/v1/picks/) e não precisam de freight_id
                 if nf.numero_coleta or nf.tipo_operacao == 'COLETA':
                     logger.info(f"Redirecionando baixa {baixa_id} (coleta sem chave válida) para enviar_coleta")
@@ -1406,6 +1495,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 # Tentativa 3: Se ainda for 404, redireciona para a rota de Minutas/Fretes
                 # (O documento pode estar cadastrado na ESL como Frete/Minuta e não como Invoice tradicional)
                 if response.status_code == 404:
+                    delegado_subrotina = True
                     logger.warning(f"🔄 Tentativa 3: NF #{nf.numero_nota} não encontrada no endpoint geral. Redirecionando para enviar_baixa_minuta...")
                     return self.enviar_baixa_minuta(baixa_id, task=task)
             
@@ -1416,6 +1506,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             baixa.data_integracao = timezone.now()
             baixa.log_erro_tms = "Sucesso: Integrado com ESL vinculando ao Manifesto"
             baixa.save()
+            _finalizar_nota_apos_integracao(nf, baixa=baixa, codigo_ocorrencia=codigo_ocorrencia)
             
             try:
                 from operacional.services import resolver_erros_automaticamente
@@ -1429,6 +1520,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
             return f"Baixa {baixa_id} não encontrada"
 
         except requests.exceptions.HTTPError as exc:
+            if delegado_subrotina:
+                raise
             status = exc.response.status_code if hasattr(exc, 'response') and exc.response is not None else None
             detalhe_erro = exc.response.text if hasattr(exc, 'response') and exc.response is not None else str(exc)
             
@@ -1437,21 +1530,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             detalhe_lower = detalhe_erro.lower()
 
             # 1. IDEMPOTÊNCIA: Se a ocorrência já existe na ESL (já foi cadastrada com sucesso antes)
-            eh_ja_existe = (
-                status == 422 and (
-                    "já existe" in detalhe_lower or
-                    "ja existe" in detalhe_lower or
-                    "já cadastrada" in detalhe_lower or
-                    "ja cadastrada" in detalhe_lower or
-                    "já se encontra" in detalhe_lower or
-                    "ja se encontra" in detalhe_lower or
-                    "já finalizad" in detalhe_lower or
-                    "ja finalizad" in detalhe_lower or
-                    "não permite data e hora menor ou igual" in detalhe_lower or
-                    "nao permite data e hora menor ou igual" in detalhe_lower or
-                    "menor ou igual" in detalhe_lower
-                )
-            )
+            eh_ja_existe = _eh_ocorrencia_ja_registrada_tms(status, detalhe_erro)
             if eh_ja_existe:
                 logger.info(f"✅ NF {nf.numero_nota}: Ocorrência já registrada previamente no TMS (ESL Cloud). Marcando como sucesso (Idempotência).")
                 baixa.log_erro_tms = "Sucesso: Ocorrência já registrada previamente no TMS (ESL Cloud)."
@@ -1461,6 +1540,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 if isinstance(baixa.payload_enviado, dict) and 'bypass' in baixa.payload_enviado:
                     baixa.payload_enviado.pop('bypass', None)
                 baixa.save()
+                _finalizar_nota_apos_integracao(nf, baixa=baixa, codigo_ocorrencia=codigo_ocorrencia)
                 
                 # Auto-resolução na Torre de Erros
                 try:
@@ -1539,6 +1619,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
             return f"Falha definitiva ESL: {msg_erro}"
 
         except Exception as e:
+            if delegado_subrotina:
+                raise
             msg = f"Erro inesperado: {str(e)}"
             baixa.log_erro_tms = msg[:500]
             baixa.save()
@@ -2003,6 +2085,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
             baixa.data_integracao = timezone.now()
             baixa.log_erro_tms = msg_sucesso or f"Sucesso: Baixa de Minuta integrada (Freight: {freight_id})"
             baixa.save()
+            _finalizar_nota_apos_integracao(nf, baixa=baixa, codigo_ocorrencia=codigo_ocorrencia)
 
             # 📸 SE A BAIXA FOI FEITA VIA FRETE E TEM FOTO, ENVIA O ANEXO PARA POST /api/freight_attachments
             if integrado_via_frete and baixa.comprovante_foto_url:
@@ -2024,23 +2107,8 @@ class ESLCloudAdapter(BaseTMSAdapter):
             payload_str = f" | Payload: {json.dumps(payload)}" if payload else ""
             status_code = getattr(getattr(e, 'response', None), 'status_code', None)
             response_text = getattr(getattr(e, 'response', None), 'text', '')
-            detalhe_lower = (response_text or str(e)).lower()
 
-            eh_ja_existe = (
-                status_code == 422 and (
-                    "já existe" in detalhe_lower or
-                    "ja existe" in detalhe_lower or
-                    "já cadastrada" in detalhe_lower or
-                    "ja cadastrada" in detalhe_lower or
-                    "já se encontra" in detalhe_lower or
-                    "ja se encontra" in detalhe_lower or
-                    "não permite alteração" in detalhe_lower or
-                    "nao permite alteracao" in detalhe_lower or
-                    "não permite data e hora menor ou igual" in detalhe_lower or
-                    "nao permite data e hora menor ou igual" in detalhe_lower or
-                    "menor ou igual" in detalhe_lower
-                )
-            )
+            eh_ja_existe = _eh_ocorrencia_ja_registrada_tms(status_code, response_text or str(e))
             if eh_ja_existe:
                 logger.info(f"✅ Minuta {nf.numero_nota if nf else baixa_id}: Ocorrência já registrada previamente no TMS (ESL). Marcando como sucesso (Idempotência).")
                 if baixa:
@@ -2049,6 +2117,7 @@ class ESLCloudAdapter(BaseTMSAdapter):
                     baixa.data_integracao = timezone.now()
                     baixa.log_erro_tms = "Sucesso: Baixa de Minuta já registrada previamente no TMS (ESL Cloud)."
                     baixa.save()
+                    _finalizar_nota_apos_integracao(nf, baixa=baixa, codigo_ocorrencia=codigo_ocorrencia)
 
                     # 📸 Mesmo se a ocorrência já existia, se tiver foto de comprovante, envia o anexo de frete
                     if baixa.comprovante_foto_url and (integrado_via_frete or freight_id):
@@ -2194,13 +2263,19 @@ class ESLCloudAdapter(BaseTMSAdapter):
 
             response = requests.post(url, json=payload, headers=headers, timeout=30)
             
-            if response.status_code in [200, 201]:
+            if response.status_code in [200, 201] or _eh_ocorrencia_ja_registrada_tms(response.status_code, response.text):
+                ja_existia_col = response.status_code not in [200, 201]
                 baixa.processado_tms = True
                 baixa.integrado_tms = True
                 baixa.data_integracao = timezone.now()
-                baixa.log_erro_tms = f"Sucesso: Coleta registrada ({'V1' if is_numeric else 'V2'}: {identificador})"
+                if ja_existia_col:
+                    logger.info(f"✅ Coleta {identificador}: Ocorrência já registrada previamente no TMS (ESL). Marcando como sucesso (Idempotência).")
+                    baixa.log_erro_tms = f"Sucesso: Coleta já registrada previamente no TMS ({'V1' if is_numeric else 'V2'}: {identificador})"
+                else:
+                    baixa.log_erro_tms = f"Sucesso: Coleta registrada ({'V1' if is_numeric else 'V2'}: {identificador})"
                 baixa.payload_enviado = payload
                 baixa.save()
+                _finalizar_nota_apos_integracao(nf, baixa=baixa, codigo_ocorrencia=codigo_ocorrencia)
                 
                 try:
                     from operacional.services import resolver_erros_automaticamente
@@ -2362,9 +2437,29 @@ class ESLCloudAdapter(BaseTMSAdapter):
                 return f"Manifesto {manifesto.numero_manifesto} finalizado com sucesso no TMS."
             else:
                 erros = result.get('errors', 'Erro desconhecido')
+                erros_lower = str(erros).lower()
+                ja_fechado_tms = any(
+                    termo in erros_lower
+                    for termo in (
+                        "already closed",
+                        "já fechado",
+                        "ja fechado",
+                        "já finalizado",
+                        "ja finalizado",
+                        "já encerrado",
+                        "ja encerrado",
+                        "já se encontra",
+                        "ja se encontra",
+                        "status 'closed'",
+                    )
+                )
                 
-                if "already closed" in str(erros).lower():
+                if ja_fechado_tms:
                     manifesto.status = 'FINALIZADO'
+                    manifesto.status_tms = 'closed'
+                    manifesto.finalizado = True
+                    if not manifesto.data_finalizacao:
+                        manifesto.data_finalizacao = timezone.now()
                     manifesto.save()
                     
                     try:

@@ -20,6 +20,13 @@ def api_notificacoes_erros(request):
     except Motorista.DoesNotExist:
         return JsonResponse({'count': 0, 'notificacoes': []})
 
+    # Saneia retroativamente falsos erros de idempotência ou manifestos já encerrados no TMS
+    try:
+        from operacional.services import limpar_falsos_erros_idempotencia
+        limpar_falsos_erros_idempotencia(filial=filial)
+    except Exception:
+        pass
+
     # Busca apenas logs de ERRO não lidos (da filial do usuário ou sem filial)
     from operacional.models import LogErroOperacional
     erros_qs = LogBaixaNfe.objects.filter(

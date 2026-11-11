@@ -47,6 +47,17 @@ def registrar_erro_torre(filial, categoria, severidade_padrao, titulo, descricao
     config = get_config()
     if not getattr(config, 'modulo_torre_erros', False):
         return None
+
+    # Ignora falsos erros de idempotência (ocorrência já cadastrada com mesma data/hora)
+    # ou manifesto já finalizado no TMS ('closed')
+    from manifesto.signals import _eh_mensagem_ignorada_notificacao
+    if (
+        (erro_raw and _eh_mensagem_ignorada_notificacao(erro_raw)) or
+        (descricao and _eh_mensagem_ignorada_notificacao(descricao)) or
+        (titulo and _eh_mensagem_ignorada_notificacao(titulo))
+    ):
+        resolver_erros_automaticamente(manifesto_numero, nota_fiscal_numero, filial)
+        return None
     
     # Classifica o erro pelo texto
     sev_regra, publico, exibir, regra = classificar_erro(erro_raw or descricao)
@@ -265,12 +276,99 @@ def consolidar_erros_existentes(filial=None):
     return total_deletados
 
 
+def limpar_falsos_erros_idempotencia(filial=None):
+    """
+    Saneia retroativamente registros que caíram como erro de idempotência
+    (ex.: 'já foi cadastrada com essa data e hora.') ou manifesto já fechado no TMS ('closed'):
+    1. Marca BaixaNF pendentes com erro de idempotência como integradas (integrado_tms=True)
+       e finaliza o status da respectiva NotaFiscal.
+    2. Marca LogBaixaNfe não lidos correspondentes como lidos (lido=True).
+    3. Resolve automaticamente LogErroOperacional abertos correspondentes na Torre de Controle.
+    """
+    from operacional.models import LogErroOperacional
+    from manifesto.models import LogBaixaNfe, BaixaNF
+    from manifesto.signals import _eh_mensagem_ignorada_notificacao
+    from integracoes.providers.esl_cloud import _eh_ocorrencia_ja_registrada_tms, _finalizar_nota_apos_integracao
+    from django.utils import timezone
+    from django.db.models import Q
+
+    agora = timezone.now()
+
+    # 1. Corrige BaixaNF que ficaram como integrado_tms=False por idempotência
+    try:
+        q_baixa = (
+            Q(log_erro_tms__icontains="já foi cadastrad") |
+            Q(log_erro_tms__icontains="ja foi cadastrad") |
+            Q(log_erro_tms__icontains="essa data e hora") |
+            Q(log_erro_tms__icontains="mesma data e hora") |
+            Q(log_erro_tms__icontains="já existe") |
+            Q(log_erro_tms__icontains="ja existe") |
+            Q(log_erro_tms__icontains="já cadastrad") |
+            Q(log_erro_tms__icontains="ja cadastrad") |
+            Q(log_erro_tms__icontains="menor ou igual")
+        )
+        baixas_idempotentes = BaixaNF.objects.filter(
+            integrado_tms=False
+        ).filter(q_baixa).select_related('nota_fiscal', 'ocorrencia', 'nota_fiscal__manifesto')
+
+        for baixa in baixas_idempotentes:
+            if _eh_ocorrencia_ja_registrada_tms(422, baixa.log_erro_tms):
+                baixa.processado_tms = True
+                baixa.integrado_tms = True
+                if not baixa.data_integracao:
+                    baixa.data_integracao = agora
+                baixa.log_erro_tms = "Sucesso (Idempotência): Ocorrência já registrada anteriormente na ESL Cloud."
+                baixa.save(update_fields=['processado_tms', 'integrado_tms', 'data_integracao', 'log_erro_tms'])
+                if baixa.nota_fiscal:
+                    _finalizar_nota_apos_integracao(baixa.nota_fiscal, baixa=baixa)
+    except Exception:
+        pass
+
+    # 2. Marca como lidas notificações (LogBaixaNfe) de idempotência ou manifesto já fechado
+    try:
+        notifs_nao_lidas = LogBaixaNfe.objects.filter(tipo__icontains='ERRO', lido=False)
+        if filial:
+            notifs_nao_lidas = notifs_nao_lidas.filter(Q(filial=filial) | Q(filial__isnull=True))
+        ids_marcar_lido = [
+            n.id for n in notifs_nao_lidas
+            if _eh_mensagem_ignorada_notificacao(n.mensagem)
+        ]
+        if ids_marcar_lido:
+            LogBaixaNfe.objects.filter(id__in=ids_marcar_lido).update(lido=True)
+    except Exception:
+        pass
+
+    # 3. Auto-resolve registros abertos na Torre de Controle (LogErroOperacional)
+    try:
+        erros_abertos = LogErroOperacional.objects.filter(status='ABERTO')
+        if filial:
+            erros_abertos = erros_abertos.filter(Q(filial=filial) | Q(filial__isnull=True))
+        ids_resolver = [
+            e.id for e in erros_abertos
+            if (
+                (e.erro_raw and _eh_mensagem_ignorada_notificacao(e.erro_raw)) or
+                (e.descricao and _eh_mensagem_ignorada_notificacao(e.descricao)) or
+                (e.titulo and _eh_mensagem_ignorada_notificacao(e.titulo))
+            )
+        ]
+        if ids_resolver:
+            LogErroOperacional.objects.filter(id__in=ids_resolver).update(
+                status='AUTO_RESOLVIDO',
+                resolucao_automatica=True,
+                data_resolucao=agora,
+                observacao_resolucao="Resolvido automaticamente (idempotência / já finalizado no TMS)."
+            )
+    except Exception:
+        pass
+
+
 def _executar_consolidacao_schema(filial=None):
     from operacional.models import LogErroOperacional
     from django.db import transaction
     from django.utils import timezone
 
     try:
+        limpar_falsos_erros_idempotencia(filial=filial)
         qs = LogErroOperacional.objects.filter(status='ABERTO').order_by('criado_em')
         if filial:
             qs = qs.filter(filial=filial)

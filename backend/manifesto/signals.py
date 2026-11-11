@@ -143,13 +143,7 @@ def registrar_log_baixa_nfe(sender, instance, created, **kwargs):
         elif not instance.integrado_tms and instance.log_erro_tms:
             log_msg = str(instance.log_erro_tms).strip()
             # Ignora mensagens informativas/progresso ou idempotência da ESL para não disparar alerta de falso erro
-            is_falso_erro = (
-                any(log_msg.startswith(p) for p in ["Sucesso", "Iniciando", "Aviso IA", "Info", "Atualizando"]) or
-                "menor ou igual" in log_msg.lower() or
-                "já existe" in log_msg.lower() or
-                "ja existe" in log_msg.lower()
-            )
-            if not is_falso_erro:
+            if not _eh_mensagem_ignorada_notificacao(log_msg):
                 def criar_log_integracao_erro():
                     from django.utils import timezone
                     import datetime
@@ -170,14 +164,56 @@ def registrar_log_baixa_nfe(sender, instance, created, **kwargs):
                 transaction.on_commit(criar_log_integracao_erro)
 
 
+def _eh_mensagem_ignorada_notificacao(mensagem):
+    """
+    Identifica mensagens de progresso, idempotência (ocorrência já cadastrada com mesma data/hora)
+    ou manifesto já finalizado no TMS ('closed') que não devem gerar alerta de erro ou notificação.
+    """
+    if not mensagem:
+        return True
+    msg_str = str(mensagem).strip()
+    if any(msg_str.startswith(p) for p in ("Sucesso", "Iniciando", "Aviso IA", "Info", "Atualizando")):
+        return True
+    msg_lower = msg_str.lower()
+    termos_ignorados = (
+        "menor ou igual",
+        "já existe",
+        "ja existe",
+        "já foi cadastrad",
+        "ja foi cadastrad",
+        "já cadastrad",
+        "ja cadastrad",
+        "cadastrada com essa data e hora",
+        "cadastrado com essa data e hora",
+        "essa data e hora",
+        "mesma data e hora",
+        "já foi registrad",
+        "ja foi registrad",
+        "já se encontra finalizado",
+        "ja se encontra finalizado",
+        "status 'closed'",
+        "already closed",
+        "já finalizad",
+        "ja finalizad",
+        "já encerrad",
+        "ja encerrad",
+        "already exists",
+        "already been taken",
+    )
+    return any(t in msg_lower for t in termos_ignorados)
+
+
 from manifesto.models import ManifestoBuscaLog
 
 @receiver(post_save, sender=ManifestoBuscaLog)
 def registrar_log_importacao_erro(sender, instance, **kwargs):
     """
     Cria LogBaixaNfe quando uma importação de manifesto falha.
+    Ignora avisos de manifesto já finalizado ('closed') no TMS.
     """
     if instance.status == 'ERRO' and instance.mensagem_erro:
+        if _eh_mensagem_ignorada_notificacao(instance.mensagem_erro):
+            return
         from manifesto.models import LogBaixaNfe
         
         filial = None
