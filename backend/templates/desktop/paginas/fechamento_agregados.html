@@ -71,7 +71,7 @@
                             <div class="p-3 bg-white rounded-3 border h-100">
                                 <div class="fw-bold text-primary mb-1"><i class="bi bi-2-circle-fill me-1"></i> Regra das Ocorrências Pagas (Comparecimento)</div>
                                 <p class="mb-2 text-muted">
-                                    Nem toda nota ou coleta do manifesto gera pagamento. Só entram na conta as notas e coletas cuja baixa possui uma <strong>ocorrência marcada na aba "4. Ocorrências Pagas"</strong>.
+                                    Nem toda nota ou coleta do manifesto gera pagamento. Só entram na conta as notas e coletas cuja baixa possui uma <strong>ocorrência marcada na aba "5. Ocorrências Pagas"</strong>.
                                 </p>
                                 <p class="mb-0 text-muted">
                                     Isso garante que o motorista só receba pelos locais onde <strong>efetivamente compareceu</strong>. Se uma nota teve ocorrência não remunerada (ex: não compareceu / falta de tempo), ela <strong>não é cobrada</strong> e <strong>não entra no rateio</strong>.
@@ -83,7 +83,7 @@
                             <div class="p-3 bg-white rounded-3 border h-100">
                                 <div class="fw-bold text-primary mb-1"><i class="bi bi-3-circle-fill me-1"></i> Rateio da Diária em Porcentagem (%)</div>
                                 <p class="mb-2 text-muted">
-                                    O valor da <strong>Diária</strong> (definido na aba <em>"3. Tarifas por Filial"</em>) é dividido em <strong>porcentagem (%)</strong> entre as filiais emissoras conforme a quantidade de serviços pagos (entregas + coletas válidas) de cada filial.
+                                    O valor da <strong>Diária</strong> (definido na aba <em>"4. Tarifas por Filial"</em>) é dividido em <strong>porcentagem (%)</strong> entre as filiais emissoras conforme a quantidade de serviços pagos (entregas + coletas válidas) de cada filial.
                                 </p>
                                 <div class="p-2 rounded bg-light border small">
                                     <strong>Exemplo Prático (Diária = R$ 250,00):</strong><br>
@@ -97,15 +97,32 @@
                         </div>
 
                         <div class="col-md-6">
-                            <div class="p-3 bg-white rounded-3 border h-100">
-                                <div class="fw-bold text-primary mb-1"><i class="bi bi-4-circle-fill me-1"></i> Fechamento do Período e Relatórios</div>
+                            <div class="p-3 bg-white rounded-3 border border-danger-subtle h-100" style="background-color: #fffdfd;">
+                                <div class="fw-bold text-danger mb-1"><i class="bi bi-clock-history me-1"></i> 4. Horário de Corte Diário ({{ config_fin.horario_corte_diario|time:"H:i"|default:"20:00" }} Brasília) e Fechamento Automático</div>
                                 <p class="mb-2 text-muted">
-                                    Ao fechar o período, o sistema consolida todos os manifestos de cada motorista agregado em duas visões (na tela e na planilha Excel):
+                                    Todos os dias, exatamente às <strong>{{ config_fin.horario_corte_diario|time:"H:i"|default:"20:00" }} (horário de Brasília — configurável no banco de dados)</strong>, o sistema fecha automaticamente os dados diários dos agregados:
                                 </p>
                                 <ul class="mb-0 text-muted ps-3">
-                                    <li><strong>Aba 1 (Detalhamento por Motorista):</strong> Mostra o extrato diário de manifestos, o resumo do motorista e os cards de cada filial com a <strong>% do rateio</strong>, diária rateada e valor dos serviços.</li>
-                                    <li><strong>Aba 2 (Resultado Fatura Consolidado):</strong> Mostra o valor geral de cada motorista e exatamente <strong>quanto cada filial (RJ, SP, DF, GO) deve pagar</strong> para compor o montante total.</li>
+                                    <li><strong>Finalizado ATÉ as {{ config_fin.horario_corte_diario|time:"H:i"|default:"20:00" }}:</strong> Está dentro do padrão e <strong>computa normalmente</strong> na folha (diária + entregas + coletas).</li>
+                                    <li><strong>Finalizado APÓS as {{ config_fin.horario_corte_diario|time:"H:i"|default:"20:00" }} (ex: 23:00) ou Não Finalizado:</strong> O manifesto <strong>permanece listado no relatório e na aba "2. Fechamento Diário"</strong> para auditoria, porém <strong>zera o valor da diária e das notas (R$ 0,00)</strong>, exibindo exatamente quantas horas/minutos após o horário de corte foi finalizado (ex: <em>"+3h 00min após o corte das 20:00"</em>).</li>
                                 </ul>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="p-3 bg-white rounded-3 border">
+                                <div class="fw-bold text-primary mb-1"><i class="bi bi-5-circle-fill me-1"></i> Visões e Abas da Página</div>
+                                <div class="row g-2 text-muted">
+                                    <div class="col-md-4">
+                                        • <strong>Aba 1 (Detalhamento por Motorista):</strong> Extrato individual de manifestos (destacando os pagos e os zerados por corte), resumo do motorista e cards de rateio por filial.
+                                    </div>
+                                    <div class="col-md-4">
+                                        • <strong>Aba 2 (Fechamento Diário - Corte {{ config_fin.horario_corte_diario|time:"H:i"|default:"20:00" }}):</strong> Auditoria completa de todos os manifestos informando total de notas, entregas, coletas, ocorrências, tempo de manifesto, horário de finalização, atraso após o corte e se computa ou não na soma final (além de permitir alterar o horário de corte no banco).
+                                    </div>
+                                    <div class="col-md-4">
+                                        • <strong>Aba 3 (Resultado Fatura Consolidado):</strong> Valor final a pagar para cada motorista agregado e quanto cada filial emissora (RJ, SP, DF, GO) deve pagar.
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -172,18 +189,26 @@
             </button>
         </li>
         <li class="nav-item" role="presentation">
+            <button class="nav-link rounded-pill fw-bold" id="tab-diario-btn" data-bs-toggle="tab" data-bs-target="#tab-diario-corte" type="button" role="tab">
+                <i class="bi bi-clock-history me-2"></i>2. Fechamento Diário (Corte {{ config_fin.horario_corte_diario|time:"H:i"|default:"20:00" }})
+                {% if qtd_fora_corte > 0 %}
+                <span class="badge bg-danger ms-1 rounded-pill">{{ qtd_fora_corte }} fora</span>
+                {% endif %}
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
             <button class="nav-link rounded-pill fw-bold" id="tab-fatura-btn" data-bs-toggle="tab" data-bs-target="#tab-fatura" type="button" role="tab">
-                <i class="bi bi-table me-2"></i>2. Resultado Fatura (Consolidado)
+                <i class="bi bi-table me-2"></i>3. Resultado Fatura (Consolidado)
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link rounded-pill fw-bold" id="tab-tarifas-btn" data-bs-toggle="tab" data-bs-target="#tab-tarifas" type="button" role="tab">
-                <i class="bi bi-cash-stack me-2"></i>3. Tarifas por Filial
+                <i class="bi bi-cash-stack me-2"></i>4. Tarifas por Filial
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link rounded-pill fw-bold" id="tab-ocorrencias-btn" data-bs-toggle="tab" data-bs-target="#tab-ocorrencias" type="button" role="tab">
-                <i class="bi bi-sliders me-2"></i>4. Ocorrências Pagas
+                <i class="bi bi-sliders me-2"></i>5. Ocorrências Pagas
             </button>
         </li>
     </ul>
@@ -283,6 +308,7 @@
                                 <tr>
                                     <th>Nº Manifesto</th>
                                     <th>Data</th>
+                                    <th>Horário / Corte ({{ config_fin.horario_corte_diario|time:"H:i"|default:"20:00" }})</th>
                                     <th>Diária (R$)</th>
                                     <th>Valores Extras</th>
                                     <th>Localidade Extra</th>
@@ -305,21 +331,54 @@
                             <tbody>
                                 {% for l in linhas %}
                                 {% if l.motorista_id == r.motorista_id %}
-                                <tr id="linha-row-{{ l.id }}">
+                                <tr id="linha-row-{{ l.id }}" class="{% if not l.dentro_do_corte %}table-danger{% endif %}">
                                     <td class="fw-bold text-primary">{{ l.manifesto.numero_manifesto }}</td>
                                     <td>{{ l.data|date:"d/m/Y" }}</td>
-                                    <td>R$ {{ l.valor_diaria|floatformat:2 }}</td>
+                                    <td>
+                                        {% if l.dentro_do_corte %}
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                <i class="bi bi-check-circle-fill me-1"></i>No Prazo ({{ l.data_hora_finalizacao|date:"H:i"|default:"-" }})
+                                            </span>
+                                        {% elif l.status_corte == 'APOS_CORTE' %}
+                                            <span class="badge bg-danger text-white" title="{{ l.motivo_nao_pagamento_corte }}">
+                                                <i class="bi bi-clock-history me-1"></i>+{{ l.atraso_corte_formatado }} após {{ l.horario_corte_aplicado|time:"H:i" }} (às {{ l.data_hora_finalizacao|date:"H:i" }})
+                                            </span>
+                                        {% elif l.status_corte == 'EM_ANDAMENTO' %}
+                                            <span class="badge bg-warning text-dark">
+                                                <i class="bi bi-hourglass-split me-1"></i>Em Andamento (corte {{ l.horario_corte_aplicado|time:"H:i" }})
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-danger text-white" title="{{ l.motivo_nao_pagamento_corte }}">
+                                                <i class="bi bi-x-octagon-fill me-1"></i>Não Finalizado até {{ l.horario_corte_aplicado|time:"H:i" }}
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="{% if not l.dentro_do_corte %}text-danger text-decoration-line-through{% endif %}">R$ {{ l.valor_diaria|floatformat:2 }}</td>
                                     <td class="fw-bold text-success">R$ {{ l.valor_extra|floatformat:2 }}</td>
                                     <td><span class="badge bg-secondary-subtle text-secondary">{{ l.localidade_extra|default:"-" }}</span></td>
                                     <td>{{ l.qtd_ctes }}</td>
                                     <td>{{ l.qtd_ctes_realizados }}</td>
-                                    <td>R$ {{ l.valor_entregas|floatformat:2 }}</td>
+                                    <td class="{% if not l.dentro_do_corte %}text-danger text-decoration-line-through{% endif %}">R$ {{ l.valor_entregas|floatformat:2 }}</td>
                                     <td>{{ l.qtd_coletas }}</td>
                                     <td class="fw-bold text-success">{{ l.qtd_coletas_validas }}</td>
                                     <td class="fw-bold">{{ l.total_embarques }}</td>
-                                    <td>R$ {{ l.valor_coletas|floatformat:2 }}</td>
-                                    <td class="fw-bold text-dark fs-6" id="total-dia-{{ l.id }}">R$ {{ l.total_dia|floatformat:2 }}</td>
-                                    <td class="text-muted small" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis;">{{ l.observacao|default:"-" }}</td>
+                                    <td class="{% if not l.dentro_do_corte %}text-danger text-decoration-line-through{% endif %}">R$ {{ l.valor_coletas|floatformat:2 }}</td>
+                                    <td class="fw-bold {% if l.dentro_do_corte %}text-dark{% else %}text-danger{% endif %} fs-6" id="total-dia-{{ l.id }}">
+                                        R$ {{ l.total_dia|floatformat:2 }}
+                                        {% if not l.dentro_do_corte %}
+                                        <div class="text-danger fw-normal" style="font-size: 0.7rem;">(Zerado | Seria R$ {{ l.valor_bloqueado_corte|floatformat:2 }})</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="small" style="max-width: 240px; white-space: normal;">
+                                        {% if not l.dentro_do_corte %}
+                                            <span class="text-danger fw-bold d-block">{{ l.motivo_nao_pagamento_corte }}</span>
+                                        {% endif %}
+                                        {% if l.observacao %}
+                                            <span class="text-muted">{{ l.observacao }}</span>
+                                        {% elif l.dentro_do_corte %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
                                     
                                     <!-- Bases Dinâmicas -->
                                     {% for base in lista_bases %}
@@ -446,7 +505,239 @@
         </div>
 
         <!-- ========================================================================= -->
-        <!-- TAB 2: RESULTADO FATURA (Consolidado de todos os agregados)               -->
+        <!-- TAB 2: FECHAMENTO DIÁRIO (CORTE DE HORÁRIO - PADRÃO 20H BRASÍLIA)         -->
+        <!-- ========================================================================= -->
+        <div class="tab-pane fade" id="tab-diario-corte" role="tabpanel">
+            <!-- Barra de Configuração do Horário de Corte no Banco de Dados -->
+            <div class="card border-0 shadow-sm rounded-4 mb-4" style="border-left: 5px solid #dc3545 !important;">
+                <div class="card-body p-3 px-4">
+                    <div class="row g-3 align-items-center">
+                        <div class="col-lg-6">
+                            <h6 class="fw-bold text-dark mb-1">
+                                <i class="bi bi-alarm-fill text-danger me-2"></i>Regra de Fechamento Diário Automático (Horário de Brasília)
+                            </h6>
+                            <p class="small text-muted mb-0">
+                                Todo dia no horário de corte abaixo, o sistema fecha automaticamente os manifestos do dia. Manifestos finalizados <strong>após o horário de corte</strong> aparecem na listagem com o tempo excedente calculado, mas têm <strong>diária e notas zeradas (R$ 0,00)</strong> na folha.
+                            </p>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="d-flex flex-wrap align-items-center justify-content-lg-end gap-3">
+                                <div class="d-flex align-items-center gap-2 bg-light px-3 py-2 rounded-pill border">
+                                    <label for="input-horario-corte" class="small fw-bold text-dark mb-0 text-nowrap">Horário de Corte (BRT):</label>
+                                    <input type="time" id="input-horario-corte" class="form-control form-control-sm fw-bold text-danger border-0 bg-transparent p-0" style="width: 85px; font-size: 0.95rem;" value="{{ config_fin.horario_corte_diario|time:'H:i'|default:'20:00' }}">
+                                </div>
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input" type="checkbox" id="check-corte-auto" {% if config_fin.fechamento_diario_automatico_ativo %}checked{% endif %}>
+                                    <label class="form-check-label small fw-bold text-muted" for="check-corte-auto">Fechar sozinho todo dia</label>
+                                </div>
+                                <button type="button" class="btn btn-danger btn-sm rounded-pill px-3 fw-bold shadow-sm" id="btn-salvar-corte" onclick="salvarConfigCorteDiario()">
+                                    <i class="bi bi-save me-1"></i> Salvar Horário
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cards de Resumo do Corte -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm rounded-4 p-3 h-100">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div class="small fw-bold text-muted text-uppercase">Total de Manifestos</div>
+                                <h3 class="fw-bold text-dark mb-0 mt-1">{{ total_mfts_periodo }}</h3>
+                                <small class="text-muted">No período selecionado</small>
+                            </div>
+                            <div class="p-3 rounded-4 bg-primary-subtle text-primary">
+                                <i class="bi bi-truck fs-3"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm rounded-4 p-3 h-100" style="border-bottom: 4px solid #198754 !important;">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div class="small fw-bold text-success text-uppercase">Finalizados Até {{ config_fin.horario_corte_diario|time:"H:i"|default:"20:00" }} (Pagos)</div>
+                                <h3 class="fw-bold text-success mb-0 mt-1">{{ qtd_dentro_corte }} <span class="fs-6 fw-normal text-muted">manifestos</span></h3>
+                                <small class="fw-bold text-success">Computado na folha: R$ {{ valor_computado_corte|floatformat:2 }}</small>
+                            </div>
+                            <div class="p-3 rounded-4 bg-success-subtle text-success">
+                                <i class="bi bi-check-circle-fill fs-3"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm rounded-4 p-3 h-100" style="border-bottom: 4px solid #dc3545 !important;">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div class="small fw-bold text-danger text-uppercase">Fora do Corte / Após {{ config_fin.horario_corte_diario|time:"H:i"|default:"20:00" }} (Zerados)</div>
+                                <h3 class="fw-bold text-danger mb-0 mt-1">{{ qtd_fora_corte }} <span class="fs-6 fw-normal text-muted">manifestos</span></h3>
+                                <small class="fw-bold text-danger">Não pago (zerado): R$ {{ valor_zerado_corte|floatformat:2 }}</small>
+                            </div>
+                            <div class="p-3 rounded-4 bg-danger-subtle text-danger">
+                                <i class="bi bi-x-octagon-fill fs-3"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filtros da Lista Diária -->
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-body p-3">
+                    <div class="row g-3 align-items-center">
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold text-muted mb-1">Filtrar por Dia:</label>
+                            <select id="filtro-diario-data" class="form-select form-select-sm rounded-pill fw-bold" onchange="filtrarTabelaFechamentoDiario()">
+                                <option value="">Todos os dias do período</option>
+                                {% for dt in datas_disponiveis %}
+                                <option value="{{ dt|date:'Y-m-d' }}">{{ dt|date:"d/m/Y" }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold text-muted mb-1">Situação do Corte ({{ config_fin.horario_corte_diario|time:"H:i"|default:"20:00" }}):</label>
+                            <select id="filtro-diario-status" class="form-select form-select-sm rounded-pill fw-bold" onchange="filtrarTabelaFechamentoDiario()">
+                                <option value="TODOS">Todos os Manifestos (No Prazo + Fora do Corte)</option>
+                                <option value="DENTRO">✅ Somente Finalizados Até o Corte (Computam na Folha)</option>
+                                <option value="FORA">🚫 Somente Finalizados Após o Corte / Não Finalizados (Zerados)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label small fw-bold text-muted mb-1">Buscar Motorista ou Manifesto:</label>
+                            <input type="text" id="filtro-diario-busca" class="form-control form-control-sm rounded-pill" placeholder="Digite o nome do motorista ou nº do manifesto..." oninput="filtrarTabelaFechamentoDiario()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabela de Manifestos do Fechamento Diário -->
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+                <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="fw-bold text-dark mb-0"><i class="bi bi-list-check me-2 text-primary"></i>Auditoria Diária de Manifestos e Horário de Corte</h6>
+                        <small class="text-muted">Relação de manifestos finalizados até as {{ config_fin.horario_corte_diario|time:"H:i"|default:"20:00" }} e manifestos finalizados após o corte com cálculo do tempo excedente</small>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 0.86rem;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Data</th>
+                                <th>Nº Manifesto</th>
+                                <th>Motorista Agregado</th>
+                                <th class="text-center">Total Notas</th>
+                                <th class="text-center">Entregas</th>
+                                <th class="text-center">Coletas</th>
+                                <th class="text-center">Ocorrências</th>
+                                <th class="text-center">Início → Fim (BRT)</th>
+                                <th class="text-center">Tempo de Manifesto</th>
+                                <th class="text-center">Situação do Corte ({{ config_fin.horario_corte_diario|time:"H:i"|default:"20:00" }})</th>
+                                <th class="text-center">Computa na Folha?</th>
+                                <th class="text-end">Valor Final (R$)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-fechamento-diario">
+                            {% for l in linhas_diario %}
+                            <tr class="linha-diario-corte {% if not l.dentro_do_corte %}table-danger{% endif %}"
+                                data-data="{{ l.data|date:'Y-m-d' }}"
+                                data-corte="{% if l.dentro_do_corte %}DENTRO{% else %}FORA{% endif %}"
+                                data-busca="{{ l.motorista.nome_completo|lower }} {{ l.manifesto.numero_manifesto|lower }}">
+                                <td class="fw-bold">{{ l.data|date:"d/m/Y" }}</td>
+                                <td>
+                                    <span class="fw-bold text-primary">#{{ l.manifesto.numero_manifesto }}</span>
+                                    {% if l.filial_operacao %}
+                                    <br><span class="badge bg-secondary-subtle text-secondary" style="font-size: 0.7rem;">{{ l.filial_operacao.uf|default:l.filial_operacao.nome }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="fw-bold text-dark">{{ l.motorista.nome_completo }}</td>
+                                <td class="text-center fw-bold">{{ l.total_notas_manifesto }}</td>
+                                <td class="text-center">
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2">{{ l.qtd_entregas }} / {{ l.qtd_ctes }}</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2">{{ l.qtd_coletas_validas }} / {{ l.qtd_coletas }}</span>
+                                </td>
+                                <td class="text-center">
+                                    {% if l.qtd_ocorrencias > 0 %}
+                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning px-2 fw-bold">
+                                        <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ l.qtd_ocorrencias }}
+                                    </span>
+                                    {% else %}
+                                    <span class="text-muted">0</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center small text-nowrap">
+                                    <span class="text-muted">{{ l.data_hora_inicio|date:"H:i"|default:"-" }}</span>
+                                    <i class="bi bi-arrow-right mx-1 text-muted"></i>
+                                    {% if l.data_hora_finalizacao %}
+                                        <span class="fw-bold {% if l.dentro_do_corte %}text-success{% else %}text-danger{% endif %}">
+                                            {% if l.data_hora_finalizacao|date:"Y-m-d" != l.data|date:"Y-m-d" %}
+                                                {{ l.data_hora_finalizacao|date:"d/m H:i" }}
+                                            {% else %}
+                                                {{ l.data_hora_finalizacao|date:"H:i" }}
+                                            {% endif %}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Em aberto</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center fw-semibold">{{ l.tempo_manifesto_formatado }}</td>
+                                <td class="text-center">
+                                    {% if l.dentro_do_corte %}
+                                        <span class="badge bg-success-subtle text-success border border-success px-3 py-1">
+                                            <i class="bi bi-check-circle-fill me-1"></i>Dentro do Corte (até {{ l.horario_corte_aplicado|time:"H:i" }})
+                                        </span>
+                                    {% elif l.status_corte == 'APOS_CORTE' %}
+                                        <span class="badge bg-danger text-white px-3 py-1">
+                                            <i class="bi bi-alarm-fill me-1"></i>Finalizado {{ l.atraso_corte_formatado }} após as {{ l.horario_corte_aplicado|time:"H:i" }}
+                                        </span>
+                                    {% elif l.status_corte == 'EM_ANDAMENTO' %}
+                                        <span class="badge bg-warning text-dark px-3 py-1">
+                                            <i class="bi bi-hourglass-split me-1"></i>Em Andamento (corte {{ l.horario_corte_aplicado|time:"H:i" }})
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-danger text-white px-3 py-1">
+                                            <i class="bi bi-x-circle-fill me-1"></i>Não Finalizado (+{{ l.atraso_corte_formatado }} após {{ l.horario_corte_aplicado|time:"H:i" }})
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if l.dentro_do_corte %}
+                                        <span class="badge bg-success text-white px-3 py-1">SIM (PAGO)</span>
+                                    {% else %}
+                                        <span class="badge bg-danger-subtle text-danger border border-danger px-3 py-1 fw-bold">NÃO (ZERADO)</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {% if l.dentro_do_corte %}
+                                        <span class="fw-bold text-success fs-6">R$ {{ l.total_dia|floatformat:2 }}</span>
+                                    {% else %}
+                                        <span class="fw-bold text-danger fs-6">R$ {{ l.total_dia|floatformat:2 }}</span>
+                                        <div class="text-danger small" style="font-size: 0.72rem;" title="Valor da diária e notas zerado pois o manifesto não foi finalizado até o horário de corte">
+                                            <del>Seria R$ {{ l.valor_bloqueado_corte|floatformat:2 }}</del>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="12" class="text-center py-5 text-muted">
+                                    Nenhum manifesto encontrado no período selecionado.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- TAB 3: RESULTADO FATURA (Consolidado de todos os agregados)               -->
         <!-- ========================================================================= -->
         <div class="tab-pane fade" id="tab-fatura" role="tabpanel">
             <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
@@ -1304,6 +1595,74 @@ function salvarConfigOcorrencias() {
     })
     .catch(err => {
         mostrarModalMensagem('Erro de Conexão', String(err), 'erro');
+    });
+}
+
+// Salvar Horário de Corte Diário no Banco de Dados e Recalcular
+function salvarConfigCorteDiario() {
+    const elHora = document.getElementById('input-horario-corte');
+    const elAuto = document.getElementById('check-corte-auto');
+    const btn = document.getElementById('btn-salvar-corte');
+
+    const horario = elHora ? elHora.value : '20:00';
+    const autoAtivo = elAuto ? elAuto.checked : true;
+
+    if (!horario) {
+        mostrarModalMensagem('Horário Obrigatório', 'Informe um horário de corte válido (ex: 20:00).', 'aviso');
+        return;
+    }
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Salvando...';
+    }
+
+    fetch("{% url 'financeiro:api_salvar_config_corte' %}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+        body: JSON.stringify({
+            horario_corte_diario: horario,
+            fechamento_diario_automatico_ativo: autoAtivo,
+            fechamento_id: {% if fechamento %}{{ fechamento.id }}{% else %}null{% endif %}
+        })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-save me-1"></i> Salvar Horário';
+        }
+        if (res.sucesso) {
+            mostrarModalMensagem('Horário de Corte Salvo', res.mensagem, 'sucesso', () => window.location.reload());
+        } else {
+            mostrarModalMensagem('Erro ao Salvar Horário', res.erro, 'erro');
+        }
+    })
+    .catch(err => {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-save me-1"></i> Salvar Horário';
+        }
+        mostrarModalMensagem('Erro de Conexão', String(err), 'erro');
+    });
+}
+
+// Filtrar tabela da aba Fechamento Diário (Corte)
+function filtrarTabelaFechamentoDiario() {
+    const dataFiltro = document.getElementById('filtro-diario-data')?.value || '';
+    const statusFiltro = document.getElementById('filtro-diario-status')?.value || 'TODOS';
+    const buscaFiltro = (document.getElementById('filtro-diario-busca')?.value || '').toLowerCase().trim();
+
+    document.querySelectorAll('#tbody-fechamento-diario .linha-diario-corte').forEach(tr => {
+        const dt = tr.getAttribute('data-data') || '';
+        const corte = tr.getAttribute('data-corte') || '';
+        const busca = tr.getAttribute('data-busca') || '';
+
+        const okData = !dataFiltro || dt === dataFiltro;
+        const okStatus = statusFiltro === 'TODOS' || corte === statusFiltro;
+        const okBusca = !buscaFiltro || busca.includes(buscaFiltro);
+
+        tr.style.display = (okData && okStatus && okBusca) ? '' : 'none';
     });
 }
 

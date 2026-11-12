@@ -6,6 +6,7 @@ Motor de cálculo do fechamento de agregados.
 Replica a lógica das fórmulas da planilha Excel original.
 """
 
+import datetime
 import logging
 from decimal import Decimal
 from collections import defaultdict
@@ -15,6 +16,77 @@ from django.db.models import Q, Count
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+
+
+def _avaliar_corte_manifesto(mft, notas, horario_corte):
+    """
+    Avalia se o manifesto foi finalizado dentro do horário de corte diário (Brasília).
+    Retorna dicionário com:
+      - data_mft (date em Brasília)
+      - data_hora_inicio (datetime)
+      - data_hora_finalizacao (datetime ou None)
+      - tempo_manifesto_minutos (int)
+      - dentro_do_corte (bool)
+      - status_corte ('DENTRO_DO_CORTE' | 'APOS_CORTE' | 'NAO_FINALIZADO' | 'EM_ANDAMENTO')
+      - atraso_apos_corte_minutos (int)
+    """
+    tz_atual = timezone.get_current_timezone()
+    agora = timezone.now()
+    agora_local = timezone.localtime(agora, tz_atual)
+
+    dt_inicio = mft.data_criacao or agora
+    dt_inicio_local = timezone.localtime(dt_inicio, tz_atual)
+    data_mft = dt_inicio_local.date()
+
+    if not horario_corte:
+        horario_corte = datetime.time(20, 0)
+
+    dt_corte_naive = datetime.datetime.combine(data_mft, horario_corte)
+    dt_corte = timezone.make_aware(dt_corte_naive, tz_atual)
+
+    # Determina data/hora efetiva de finalização do manifesto
+    dt_fim = mft.data_finalizacao
+    if not dt_fim and (mft.finalizado or mft.status == 'FINALIZADO'):
+        datas_baixas = [
+            b.data_baixa
+            for nf in notas
+            for b in nf.baixa_info.all()
+            if getattr(b, 'data_baixa', None)
+        ]
+        if datas_baixas:
+            dt_fim = max(datas_baixas)
+
+    if dt_fim:
+        dt_fim_local = timezone.localtime(dt_fim, tz_atual)
+        tempo_min = max(0, int((dt_fim - dt_inicio).total_seconds() // 60))
+        if dt_fim_local <= dt_corte:
+            dentro_do_corte = True
+            status_corte = 'DENTRO_DO_CORTE'
+            atraso_min = 0
+        else:
+            dentro_do_corte = False
+            status_corte = 'APOS_CORTE'
+            atraso_min = max(1, int((dt_fim_local - dt_corte).total_seconds() // 60))
+    else:
+        tempo_min = max(0, int((agora - dt_inicio).total_seconds() // 60))
+        dentro_do_corte = False
+        if agora_local > dt_corte:
+            status_corte = 'NAO_FINALIZADO'
+            atraso_min = max(1, int((agora_local - dt_corte).total_seconds() // 60))
+        else:
+            status_corte = 'EM_ANDAMENTO'
+            atraso_min = 0
+
+    return {
+        'data_mft': data_mft,
+        'data_hora_inicio': dt_inicio,
+        'data_hora_finalizacao': dt_fim,
+        'tempo_manifesto_minutos': tempo_min,
+        'horario_corte_aplicado': horario_corte,
+        'dentro_do_corte': dentro_do_corte,
+        'status_corte': status_corte,
+        'atraso_apos_corte_minutos': atraso_min,
+    }
 
 
 def _obter_tarifa_filial(filial, data_referencia):
@@ -216,8 +288,11 @@ def recalcular_resumo_motorista(fechamento, motorista, valor_pedagio=None, valor
     desconto_abs = abs(Decimal(str(valor_desconto or '0')))
     valor_desconto_neg = -desconto_abs if desconto_abs > 0 else Decimal('0.00')
 
-    total_diarias = sum((l.valor_diaria for l in linhas), Decimal('0.00'))
-    total_servicos = sum((l.total_embarques for l in linhas), 0)
+    # Apenas manifestos finalizados DENTRO DO HORÁRIO DE CORTE entram no pagamento e no rateio
+    linhas_pagas = [l for l in linhas if getattr(l, 'dentro_do_corte', True)]
+
+    total_diarias = sum((l.valor_diaria for l in linhas_pagas), Decimal('0.00'))
+    total_servicos = sum((l.total_embarques for l in linhas_pagas), 0)
     total_dias = sum((l.total_dia for l in linhas), Decimal('0.00'))
 
     total_parcial_com_pedagio = total_dias + Decimal(str(valor_pedagio or '0'))
@@ -228,7 +303,7 @@ def recalcular_resumo_motorista(fechamento, motorista, valor_pedagio=None, valor
 
     total_final = total_parcial_com_pedagio + valor_desconto_neg
 
-    # Consolida entregas e coletas pagas por UF emissora
+    # Consolida entregas e coletas pagas por UF emissora (somente de manifestos dentro do corte)
     breakdown_total = defaultdict(lambda: {
         'entregas': 0,
         'coletas': 0,
@@ -246,7 +321,7 @@ def recalcular_resumo_motorista(fechamento, motorista, valor_pedagio=None, valor
     if uf_padrao_mot == 'OUTROS':
         uf_padrao_mot = 'RJ'
 
-    for linha in linhas:
+    for linha in linhas_pagas:
         for uf, dados in (linha.breakdown_bases or {}).items():
             uf_key = (uf or '').upper().strip() or uf_padrao_mot
             ent = int(dados.get('entregas', 0) or 0)
@@ -404,7 +479,10 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None, filial=None):
         fechamento.linhas.all().delete()
         fechamento.resumos.all().delete()
     
-    # Ocorrências que contam como pagamento
+    # Ocorrências que contam como pagamento e horário de corte diário (Brasília)
+    from financeiro.models import ConfiguracaoFinanceiro
+    config_fin = ConfiguracaoFinanceiro.load()
+    horario_corte = config_fin.horario_corte_diario or datetime.time(20, 0)
     ids_oc_entrega, ids_oc_coleta = _obter_ocorrencias_pagamento()
     
     # Busca manifestos de motoristas AGREGADOS no período
@@ -444,22 +522,30 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None, filial=None):
         uf_base = _uf_da_filial(filial_op)
         if uf_base == 'OUTROS':
             uf_base = 'RJ'
-        data_mft = mft.data_criacao.date()
-        
-        # Busca tarifa vigente para a filial de operação do manifesto
-        tarifa = _obter_tarifa_filial(filial_op, data_mft) if filial_op else None
-        valor_diaria = tarifa.valor_diaria if tarifa else Decimal('0')
         
         # Busca notas e coletas do manifesto com suas filiais emissoras
-        notas = NotaFiscal.objects.filter(manifesto=mft).select_related(
-            'frete', 'filial_emissora', 'frete__filial_emissora'
-        ).prefetch_related('baixa_info')
+        notas = list(
+            NotaFiscal.objects.filter(manifesto=mft).select_related(
+                'frete', 'filial_emissora', 'frete__filial_emissora'
+            ).prefetch_related('baixa_info', 'baixa_info__ocorrencia')
+        )
+
+        # Avalia horário de corte diário (Brasília) e duração do manifesto
+        info_corte = _avaliar_corte_manifesto(mft, notas, horario_corte)
+        data_mft = info_corte['data_mft']
+        dentro_do_corte = info_corte['dentro_do_corte']
+
+        # Busca tarifa vigente para a filial de operação do manifesto
+        tarifa = _obter_tarifa_filial(filial_op, data_mft) if filial_op else None
+        valor_diaria_potencial = tarifa.valor_diaria if tarifa else Decimal('0')
         
+        total_notas_manifesto = len(notas)
         qtd_entregas = 0
         qtd_coletas = 0
         qtd_coletas_validas = 0
         qtd_ctes = 0
         qtd_ctes_realizados = 0
+        qtd_ocorrencias = 0
         breakdown = defaultdict(lambda: {'entregas': 0, 'coletas': 0})
         
         for nf in notas:
@@ -472,20 +558,25 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None, filial=None):
             else:
                 qtd_ctes += 1
             
-            # Verifica nas baixas da nota se houve ocorrência configurada como paga
+            # Verifica nas baixas da nota se houve ocorrência configurada como paga e se teve problema
             baixas = list(nf.baixa_info.all())
             paga = False
+            teve_problema = (nf.status == 'OCORRENCIA')
             for baixa in baixas:
                 ocorrencia_id = baixa.ocorrencia_id
+                oc_obj = getattr(baixa, 'ocorrencia', None)
+                if oc_obj and getattr(oc_obj, 'tipo', '') == 'PROBLEMA':
+                    teve_problema = True
                 if tipo_nf == 'COLETA':
                     if (ids_oc_coleta and ocorrencia_id in ids_oc_coleta) or (not ids_oc_coleta and ocorrencia_id):
                         paga = True
-                        break
                 else:
                     if (ids_oc_entrega and ocorrencia_id in ids_oc_entrega) or (not ids_oc_entrega and ocorrencia_id):
                         paga = True
-                        break
             
+            if teve_problema:
+                qtd_ocorrencias += 1
+
             if paga:
                 if tipo_nf == 'COLETA':
                     qtd_coletas_validas += 1
@@ -497,9 +588,9 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None, filial=None):
         
         total_embarques = qtd_entregas + qtd_coletas_validas
         
-        # Calcula valor das entregas e coletas somando pela tarifa de cada filial emissora
-        valor_entregas = Decimal('0.00')
-        valor_coletas = Decimal('0.00')
+        # Calcula valor potencial das entregas e coletas somando pela tarifa de cada filial emissora
+        valor_entregas_potencial = Decimal('0.00')
+        valor_coletas_potencial = Decimal('0.00')
         breakdown_detalhado = {}
         for uf_k, cont in breakdown.items():
             t_uf = _tarifa_efetiva_uf(uf_k, filial_op, data_mft)
@@ -508,23 +599,50 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None, filial=None):
             
             v_ent_uf = Decimal(str(cont['entregas'])) * vpe_uf
             v_col_uf = Decimal(str(cont['coletas'])) * vpc_uf
-            valor_entregas += v_ent_uf
-            valor_coletas += v_col_uf
+            valor_entregas_potencial += v_ent_uf
+            valor_coletas_potencial += v_col_uf
             
             serv_uf = cont['entregas'] + cont['coletas']
             perc_uf = (Decimal(str(serv_uf)) / Decimal(str(total_embarques)) * Decimal('100')).quantize(Decimal('0.01')) if total_embarques > 0 else Decimal('0.00')
-            diaria_uf = (valor_diaria * Decimal(str(serv_uf)) / Decimal(str(total_embarques))).quantize(Decimal('0.01')) if total_embarques > 0 else Decimal('0.00')
+            diaria_uf = (valor_diaria_potencial * Decimal(str(serv_uf)) / Decimal(str(total_embarques))).quantize(Decimal('0.01')) if total_embarques > 0 else Decimal('0.00')
             
-            breakdown_detalhado[uf_k] = {
-                'entregas': cont['entregas'],
-                'coletas': cont['coletas'],
-                'servicos': serv_uf,
-                'percentual': float(perc_uf),
-                'valor_diaria': float(diaria_uf),
-                'valor_entregas': float(v_ent_uf),
-                'valor_coletas': float(v_col_uf),
-                'valor_total': float(diaria_uf + v_ent_uf + v_col_uf),
-            }
+            if dentro_do_corte:
+                breakdown_detalhado[uf_k] = {
+                    'entregas': cont['entregas'],
+                    'coletas': cont['coletas'],
+                    'servicos': serv_uf,
+                    'percentual': float(perc_uf),
+                    'valor_diaria': float(diaria_uf),
+                    'valor_entregas': float(v_ent_uf),
+                    'valor_coletas': float(v_col_uf),
+                    'valor_total': float(diaria_uf + v_ent_uf + v_col_uf),
+                }
+            else:
+                # Fora do horário de corte: preserva a contagem física para auditoria, mas zera os valores financeiros
+                breakdown_detalhado[uf_k] = {
+                    'entregas': cont['entregas'],
+                    'coletas': cont['coletas'],
+                    'servicos': serv_uf,
+                    'percentual': 0.0,
+                    'valor_diaria': 0.0,
+                    'valor_entregas': 0.0,
+                    'valor_coletas': 0.0,
+                    'valor_total': 0.0,
+                    'bloqueado_corte': True,
+                }
+
+        valor_bloqueado = (valor_diaria_potencial + valor_entregas_potencial + valor_coletas_potencial).quantize(Decimal('0.01'))
+        if dentro_do_corte:
+            valor_diaria = valor_diaria_potencial
+            valor_entregas = valor_entregas_potencial
+            valor_coletas = valor_coletas_potencial
+            valor_bloqueado_corte = Decimal('0.00')
+        else:
+            # Zera diária e notas por ter ultrapassado o horário de corte das 20h
+            valor_diaria = Decimal('0.00')
+            valor_entregas = Decimal('0.00')
+            valor_coletas = Decimal('0.00')
+            valor_bloqueado_corte = valor_bloqueado
         
         # Restaura ajustes manuais se existiam
         key = f"{motorista.id}_{mft.id}"
@@ -533,7 +651,7 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None, filial=None):
         localidade_extra = ajuste.get('localidade_extra', None)
         observacao_linha = ajuste.get('observacao', None)
         
-        total_dia = valor_diaria + valor_entregas + valor_coletas + valor_extra
+        total_dia = (valor_diaria + valor_entregas + valor_coletas + valor_extra) if dentro_do_corte else valor_extra
         
         linha = LinhaFechamento(
             fechamento=fechamento,
@@ -541,12 +659,22 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None, filial=None):
             manifesto=mft,
             filial_operacao=filial_op,
             data=data_mft,
+            total_notas_manifesto=total_notas_manifesto,
             qtd_entregas=qtd_entregas,
             qtd_coletas=qtd_coletas,
             qtd_coletas_validas=qtd_coletas_validas,
             qtd_ctes=qtd_ctes,
             qtd_ctes_realizados=qtd_ctes_realizados,
+            qtd_ocorrencias=qtd_ocorrencias,
             total_embarques=total_embarques,
+            data_hora_inicio=info_corte['data_hora_inicio'],
+            data_hora_finalizacao=info_corte['data_hora_finalizacao'],
+            tempo_manifesto_minutos=info_corte['tempo_manifesto_minutos'],
+            horario_corte_aplicado=info_corte['horario_corte_aplicado'],
+            dentro_do_corte=dentro_do_corte,
+            status_corte=info_corte['status_corte'],
+            atraso_apos_corte_minutos=info_corte['atraso_apos_corte_minutos'],
+            valor_bloqueado_corte=valor_bloqueado_corte,
             valor_diaria=valor_diaria,
             valor_entregas=valor_entregas,
             valor_coletas=valor_coletas,
@@ -574,3 +702,60 @@ def gerar_fechamento(periodo_inicio, periodo_fim, usuario=None, filial=None):
     logger.info(f"✅ Fechamento gerado: {len(motoristas_linhas)} motoristas, {sum(len(v) for v in motoristas_linhas.values())} linhas.")
     
     return fechamento
+
+
+def sincronizar_pos_corte_fechamento(fechamento):
+    """
+    Atualiza linhas de manifestos que estavam abertos no momento da geração (ex: às 20h)
+    e foram finalizados posteriormente (ex: às 23h), calculando o tempo exato após o corte.
+    """
+    if not fechamento:
+        return
+    from financeiro.models import ConfiguracaoFinanceiro
+    from manifesto.models import NotaFiscal
+
+    config_fin = ConfiguracaoFinanceiro.load()
+    horario_corte = config_fin.horario_corte_diario or datetime.time(20, 0)
+
+    linhas_abertas = list(
+        fechamento.linhas.filter(data_hora_finalizacao__isnull=True)
+        .select_related('manifesto', 'motorista')
+    )
+    motoristas_para_recalcular = set()
+
+    for linha in linhas_abertas:
+        mft = linha.manifesto
+        if not mft:
+            continue
+        notas = list(NotaFiscal.objects.filter(manifesto=mft).prefetch_related('baixa_info'))
+        info_corte = _avaliar_corte_manifesto(mft, notas, linha.horario_corte_aplicado or horario_corte)
+        mudou = (
+            linha.data_hora_finalizacao != info_corte['data_hora_finalizacao'] or
+            linha.status_corte != info_corte['status_corte'] or
+            linha.atraso_apos_corte_minutos != info_corte['atraso_apos_corte_minutos'] or
+            linha.dentro_do_corte != info_corte['dentro_do_corte']
+        )
+        if mudou:
+            linha.data_hora_finalizacao = info_corte['data_hora_finalizacao']
+            linha.tempo_manifesto_minutos = info_corte['tempo_manifesto_minutos']
+            linha.status_corte = info_corte['status_corte']
+            linha.atraso_apos_corte_minutos = info_corte['atraso_apos_corte_minutos']
+            if info_corte['dentro_do_corte'] and not linha.dentro_do_corte:
+                # Finalizou ainda dentro do corte (caso o relatório tenha sido gerado antes das 20h)
+                gerar_fechamento(
+                    fechamento.periodo_inicio,
+                    fechamento.periodo_fim,
+                    usuario=fechamento.criado_por,
+                    filial=fechamento.filial,
+                )
+                return
+            linha.save(update_fields=[
+                'data_hora_finalizacao',
+                'tempo_manifesto_minutos',
+                'status_corte',
+                'atraso_apos_corte_minutos',
+            ])
+            motoristas_para_recalcular.add(linha.motorista)
+
+    for mot in motoristas_para_recalcular:
+        recalcular_resumo_motorista(fechamento, mot)

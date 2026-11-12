@@ -16,6 +16,7 @@ urlpatterns = [
     path('api/tarifa/salvar/', views.api_salvar_tarifa, name='api_salvar_tarifa'),
     path('api/filial/salvar-uf/', views.api_salvar_uf_filial, name='api_salvar_uf_filial'),
     path('api/ocorrencias/salvar/', views.api_salvar_config_ocorrencias, name='api_salvar_config_ocorrencias'),
+    path('api/corte/salvar/', views.api_salvar_config_corte, name='api_salvar_config_corte'),
     path('api/cliente/salvar-filial/', views.api_salvar_cliente_filial, name='api_salvar_cliente_filial'),
     path('api/cliente/sincronizar/', views.api_sincronizar_clientes, name='api_sincronizar_clientes'),
     path('exportar-excel/', views.api_exportar_excel, name='exportar_excel'),

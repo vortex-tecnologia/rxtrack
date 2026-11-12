@@ -17,7 +17,13 @@ from financeiro.models import (
     LinhaFechamento, ResumoMotorista, DadosBancariosAgregado,
     ClienteBasePagadora
 )
-from financeiro.services import gerar_fechamento, sincronizar_clientes_pagadores, recalcular_resumo_motorista, _tarifa_efetiva_uf
+from financeiro.services import (
+    gerar_fechamento,
+    sincronizar_clientes_pagadores,
+    recalcular_resumo_motorista,
+    sincronizar_pos_corte_fechamento,
+    _tarifa_efetiva_uf,
+)
 from financeiro.export_excel import exportar_fechamento_excel
 from usuarios.models import Motorista, Filial
 from manifesto.models import Ocorrencia
@@ -96,11 +102,16 @@ def fechamento_agregados_view(request):
     dados_bancarios_map = {}
 
     if fechamento:
-        linhas = fechamento.linhas.select_related(
-            'motorista', 'manifesto', 'filial_operacao', 'manifesto__veiculo'
-        ).order_by('motorista__nome_completo', 'data')
+        # Sincroniza automaticamente manifestos que tenham sido finalizados após o horário de corte
+        sincronizar_pos_corte_fechamento(fechamento)
+
+        linhas = list(
+            fechamento.linhas.select_related(
+                'motorista', 'manifesto', 'filial_operacao', 'manifesto__veiculo'
+            ).order_by('motorista__nome_completo', 'data')
+        )
         
-        resumos = fechamento.resumos.select_related('motorista').order_by('motorista__nome_completo')
+        resumos = list(fechamento.resumos.select_related('motorista').order_by('motorista__nome_completo'))
         
         for l in linhas:
             for b in (l.breakdown_bases or {}).keys():
@@ -110,6 +121,15 @@ def fechamento_agregados_view(request):
         # Mapa de dados bancários
         for db in DadosBancariosAgregado.objects.filter(motorista__in=motoristas_agregados):
             dados_bancarios_map[db.motorista_id] = db
+
+    # Estatísticas do Fechamento Diário (Corte 20h Brasília)
+    linhas_diario = sorted(linhas, key=lambda x: (x.data, x.motorista.nome_completo), reverse=True)
+    datas_disponiveis = sorted(list({l.data for l in linhas if l.data}), reverse=True)
+    total_mfts_periodo = len(linhas)
+    qtd_dentro_corte = sum(1 for l in linhas if l.dentro_do_corte)
+    qtd_fora_corte = sum(1 for l in linhas if not l.dentro_do_corte)
+    valor_computado_corte = sum((l.total_dia for l in linhas if l.dentro_do_corte), Decimal('0.00'))
+    valor_zerado_corte = sum((l.valor_bloqueado_corte for l in linhas if not l.dentro_do_corte), Decimal('0.00'))
 
     # Garante que as bases padrão e ativas sempre existam na lista
     ufs_filiais = set(Filial.objects.filter(operacao_ativa=True).exclude(uf__isnull=True).exclude(uf='').values_list('uf', flat=True))
@@ -143,6 +163,13 @@ def fechamento_agregados_view(request):
         'todos_fechamentos': todos_fechamentos,
         'motoristas_agregados': motoristas_agregados,
         'linhas': linhas,
+        'linhas_diario': linhas_diario,
+        'datas_disponiveis': datas_disponiveis,
+        'total_mfts_periodo': total_mfts_periodo,
+        'qtd_dentro_corte': qtd_dentro_corte,
+        'qtd_fora_corte': qtd_fora_corte,
+        'valor_computado_corte': valor_computado_corte,
+        'valor_zerado_corte': valor_zerado_corte,
         'resumos': resumos,
         'lista_bases': lista_bases,
         'totais_bases_fatura': totais_bases_fatura,
@@ -151,10 +178,11 @@ def fechamento_agregados_view(request):
         'tarifas': tarifas,
         'tarifas_map': tarifas_map,
         'filiais': filiais,
+        'config_fin': config_fin,
         'ocorrencias_todas': ocorrencias_todas,
         'ocs_entrega_ids': ocs_entrega_ids,
         'ocs_coleta_ids': ocs_coleta_ids,
-        'hoje': timezone.now().date(),
+        'hoje': timezone.localtime(timezone.now()).date(),
     }
     return render(request, 'desktop/paginas/fechamento_agregados.html', context)
 
@@ -423,6 +451,55 @@ def api_salvar_config_ocorrencias(request):
         return JsonResponse({
             'sucesso': True,
             'mensagem': 'Configuração de ocorrências pagas salva com sucesso!'
+        })
+    except Exception as e:
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def api_salvar_config_corte(request):
+    """Atualiza o Horário de Corte Diário (Brasília) e o status do Fechamento Automático."""
+    if not verificar_permissao_financeiro(request.user):
+        return JsonResponse({'sucesso': False, 'erro': 'Sem permissão.'}, status=403)
+
+    try:
+        data = json.loads(request.body)
+        horario_str = (data.get('horario_corte_diario') or '20:00').strip()
+        auto_ativo = bool(data.get('fechamento_diario_automatico_ativo', True))
+        fechamento_id = data.get('fechamento_id')
+
+        partes = horario_str.split(':')
+        hora = int(partes[0])
+        minuto = int(partes[1]) if len(partes) > 1 else 0
+        if not (0 <= hora <= 23 and 0 <= minuto <= 59):
+            return JsonResponse({'sucesso': False, 'erro': 'Horário inválido.'}, status=400)
+
+        from datetime import time as dt_time
+        novo_horario = dt_time(hora, minuto)
+
+        config = ConfiguracaoFinanceiro.load()
+        config.horario_corte_diario = novo_horario
+        config.fechamento_diario_automatico_ativo = auto_ativo
+        config.atualizado_por = request.user
+        config.save()
+
+        # Se houver um fechamento ativo informado, já recalcula com o novo horário de corte
+        if fechamento_id:
+            fech = FechamentoAgregado.objects.filter(id=fechamento_id).first()
+            if fech:
+                gerar_fechamento(
+                    fech.periodo_inicio,
+                    fech.periodo_fim,
+                    usuario=request.user,
+                    filial=fech.filial,
+                )
+
+        return JsonResponse({
+            'sucesso': True,
+            'horario_corte_diario': novo_horario.strftime('%H:%M'),
+            'fechamento_diario_automatico_ativo': auto_ativo,
+            'mensagem': f'Horário de corte diário atualizado para {novo_horario.strftime("%H:%M")} (Horário de Brasília)!'
         })
     except Exception as e:
         return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)

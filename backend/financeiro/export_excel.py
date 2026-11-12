@@ -142,7 +142,11 @@ def exportar_fechamento_excel(fechamento):
             c_total.number_format = money_format
             c_total.font = Font(bold=True)
             
-            ws.cell(row=row_num, column=14, value=l.observacao or "")
+            obs_texto = l.observacao or ""
+            if not getattr(l, 'dentro_do_corte', True):
+                motivo_corte = l.motivo_nao_pagamento_corte
+                obs_texto = f"{motivo_corte} | {obs_texto}" if obs_texto else motivo_corte
+            ws.cell(row=row_num, column=14, value=obs_texto)
 
             # Bases dinâmicas
             bk = l.breakdown_bases or {}
@@ -153,9 +157,12 @@ def exportar_fechamento_excel(fechamento):
                 ws.cell(row=row_num, column=base_col + 1, value=base_data.get('coletas', 0))
                 base_col += 2
 
+            alerta_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
             for c in range(1, len(headers) + 1):
                 ws.cell(row=row_num, column=c).border = thin_border
                 ws.cell(row=row_num, column=c).font = normal_font
+                if not getattr(l, 'dentro_do_corte', True):
+                    ws.cell(row=row_num, column=c).fill = alerta_fill
 
             row_num += 1
 
@@ -251,7 +258,86 @@ def exportar_fechamento_excel(fechamento):
                     max_len = len(val_str)
             ws.column_dimensions[col_letter].width = max(max_len + 3, 11)
 
-    # 2. CRIA ABA CONSOLIDADA 'RESULTADO FATURA'
+    # 2. CRIA ABA 'FECHAMENTO DIARIO (CORTE)'
+    from django.utils import timezone
+    ws_corte = wb.create_sheet(title="FECHAMENTO DIARIO (CORTE)")
+    ws_corte.views.sheetView[0].showGridLines = True
+
+    headers_corte = [
+        "DATA", "Nº MANIFESTO", "MOTORISTA AGREGADO", "FILIAL",
+        "TOTAL NOTAS", "ENTREGAS REALIZADAS", "COLETAS VÁLIDAS", "OCORRÊNCIAS (PROBLEMAS)",
+        "INÍCIO (BRASÍLIA)", "FINALIZAÇÃO (BRASÍLIA)", "TEMPO DE MANIFESTO",
+        "HORÁRIO DE CORTE", "STATUS DO CORTE / ATRASO", "COMPUTA NA FOLHA?",
+        "VALOR COMPUTADO (R$)", "VALOR ZERADO POR ATRASO (R$)"
+    ]
+    for col_idx, h_text in enumerate(headers_corte, start=1):
+        cell = ws_corte.cell(row=1, column=col_idx, value=h_text)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    todas_linhas_ordenadas = sorted(
+        [l for d in linhas_por_motorista.values() for l in d['linhas']],
+        key=lambda x: (x.data, x.motorista.nome_completo),
+        reverse=True
+    )
+    row_c = 2
+    fill_ok = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
+    fill_fora = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
+
+    for l in todas_linhas_ordenadas:
+        ini_str = timezone.localtime(l.data_hora_inicio).strftime('%d/%m %H:%M') if l.data_hora_inicio else "-"
+        fim_str = timezone.localtime(l.data_hora_finalizacao).strftime('%d/%m %H:%M') if l.data_hora_finalizacao else "Não Finalizado"
+        corte_str = l.horario_corte_aplicado.strftime('%H:%M') if l.horario_corte_aplicado else "20:00"
+        if l.dentro_do_corte:
+            status_txt = f"Dentro do Corte (até {corte_str})"
+            computa_txt = "SIM (PAGO)"
+        elif l.status_corte == 'APOS_CORTE':
+            status_txt = f"Fora do Corte (+{l.atraso_corte_formatado} após {corte_str})"
+            computa_txt = "NÃO (ZERADO)"
+        elif l.status_corte == 'EM_ANDAMENTO':
+            status_txt = f"Em Andamento (corte {corte_str})"
+            computa_txt = "AGUARDANDO"
+        else:
+            status_txt = f"Não Finalizado até {corte_str}"
+            computa_txt = "NÃO (ZERADO)"
+
+        ws_corte.cell(row=row_c, column=1, value=l.data.strftime('%d/%m/%Y') if l.data else "")
+        ws_corte.cell(row=row_c, column=2, value=l.manifesto.numero_manifesto if l.manifesto else "")
+        ws_corte.cell(row=row_c, column=3, value=l.motorista.nome_completo if l.motorista else "")
+        ws_corte.cell(row=row_c, column=4, value=l.filial_operacao.nome if l.filial_operacao else "")
+        ws_corte.cell(row=row_c, column=5, value=l.total_notas_manifesto)
+        ws_corte.cell(row=row_c, column=6, value=l.qtd_entregas)
+        ws_corte.cell(row=row_c, column=7, value=l.qtd_coletas_validas)
+        ws_corte.cell(row=row_c, column=8, value=l.qtd_ocorrencias)
+        ws_corte.cell(row=row_c, column=9, value=ini_str)
+        ws_corte.cell(row=row_c, column=10, value=fim_str)
+        ws_corte.cell(row=row_c, column=11, value=l.tempo_manifesto_formatado)
+        ws_corte.cell(row=row_c, column=12, value=corte_str)
+        ws_corte.cell(row=row_c, column=13, value=status_txt)
+        ws_corte.cell(row=row_c, column=14, value=computa_txt)
+
+        c_comp = ws_corte.cell(row=row_c, column=15, value=float(l.total_dia))
+        c_comp.number_format = money_format
+        c_bloq = ws_corte.cell(row=row_c, column=16, value=float(l.valor_bloqueado_corte))
+        c_bloq.number_format = money_format
+
+        fill_row = fill_ok if l.dentro_do_corte else fill_fora
+        for c_i in range(1, len(headers_corte) + 1):
+            ws_corte.cell(row=row_c, column=c_i).border = thin_border
+            ws_corte.cell(row=row_c, column=c_i).fill = fill_row
+        row_c += 1
+
+    for col in ws_corte.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            val_str = str(cell.value or '')
+            if len(val_str) > max_len and len(val_str) < 50:
+                max_len = len(val_str)
+        ws_corte.column_dimensions[col_letter].width = max(max_len + 3, 13)
+
+    # 3. CRIA ABA CONSOLIDADA 'RESULTADO FATURA'
     ws_fat = wb.create_sheet(title="RESULTADO FATURA")
     ws_fat.views.sheetView[0].showGridLines = True
 

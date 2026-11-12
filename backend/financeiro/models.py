@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Luiz Gustavo. Todos os direitos reservados. Licença Proprietária.
 # financeiro/models.py
 
+import datetime
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -9,7 +10,8 @@ from django.utils import timezone
 class ConfiguracaoFinanceiro(models.Model):
     """
     Singleton de configuração financeira por tenant.
-    Define quais ocorrências contam como pagamento para entregas e coletas.
+    Define quais ocorrências contam como pagamento para entregas e coletas,
+    além do horário de corte diário (Brasília) para fechamento automático.
     """
     # Ocorrências que, quando presentes na baixa, contam como "entrega paga"
     # (motorista foi ao local, independente de ter entregue ou não)
@@ -28,6 +30,22 @@ class ConfiguracaoFinanceiro(models.Model):
         related_name='config_pagamento_coleta',
         verbose_name="Ocorrências que contam como Coleta Paga",
         help_text="Selecione os códigos de ocorrência onde o motorista compareceu ao local e deve ser remunerado pela coleta."
+    )
+
+    # Horário de corte diário (Brasília) — padrão 20:00
+    horario_corte_diario = models.TimeField(
+        default=datetime.time(20, 0),
+        verbose_name="Horário de Corte Diário (Brasília)",
+        help_text="Horário limite diário (horário de Brasília) para finalização do manifesto pelo agregado. Manifestos finalizados após este horário têm diária e notas zeradas."
+    )
+    fechamento_diario_automatico_ativo = models.BooleanField(
+        default=True,
+        verbose_name="Fechamento Automático Diário Ativo",
+        help_text="Se ativo, executa automaticamente o fechamento diário todos os dias no horário de corte configurado."
+    )
+    ultimo_fechamento_diario_em = models.DateField(
+        null=True, blank=True,
+        verbose_name="Data do Último Fechamento Automático"
     )
     
     atualizado_em = models.DateTimeField(auto_now=True)
@@ -205,12 +223,33 @@ class LinhaFechamento(models.Model):
     data = models.DateField(verbose_name="Data")
 
     # === DADOS AUTOMÁTICOS (preenchidos pelo motor de cálculo) ===
+    total_notas_manifesto = models.IntegerField(default=0, verbose_name="Total de Notas no Manifesto")
     qtd_entregas = models.IntegerField(default=0, verbose_name="Entregas Realizadas")
     qtd_coletas = models.IntegerField(default=0, verbose_name="Nº de Coletas")
     qtd_coletas_validas = models.IntegerField(default=0, verbose_name="Coletas Válidas")
     qtd_ctes = models.IntegerField(default=0, verbose_name="Nº CT-es")
     qtd_ctes_realizados = models.IntegerField(default=0, verbose_name="Nº CT-es Realizados")
+    qtd_ocorrencias = models.IntegerField(default=0, verbose_name="Qtd Ocorrências (Problemas)")
     total_embarques = models.IntegerField(default=0, verbose_name="Total Embarques")
+
+    # === CONTROLE DE HORÁRIO DE CORTE DIÁRIO (PADRÃO 20H BRASÍLIA) ===
+    data_hora_inicio = models.DateTimeField(null=True, blank=True, verbose_name="Início do Manifesto")
+    data_hora_finalizacao = models.DateTimeField(null=True, blank=True, verbose_name="Finalização do Manifesto")
+    tempo_manifesto_minutos = models.IntegerField(default=0, verbose_name="Tempo de Manifesto (min)")
+    horario_corte_aplicado = models.TimeField(default=datetime.time(20, 0), verbose_name="Horário de Corte Aplicado")
+    dentro_do_corte = models.BooleanField(default=True, verbose_name="Finalizado Dentro do Corte")
+    status_corte = models.CharField(
+        max_length=25,
+        default='DENTRO_DO_CORTE',
+        verbose_name="Status do Corte",
+        help_text="DENTRO_DO_CORTE, APOS_CORTE, NAO_FINALIZADO ou EM_ANDAMENTO"
+    )
+    atraso_apos_corte_minutos = models.IntegerField(default=0, verbose_name="Minutos Após o Corte")
+    valor_bloqueado_corte = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        verbose_name="Valor Bloqueado por Corte (R$)",
+        help_text="Valor que seria pago (diária + entregas + coletas) caso tivesse finalizado dentro do horário de corte."
+    )
 
     # === VALORES CALCULADOS (tarifa × quantidade) ===
     valor_diaria = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Diária (R$)")
@@ -254,8 +293,51 @@ class LinhaFechamento(models.Model):
     def __str__(self):
         return f"{self.motorista.nome_completo} - MFT {self.manifesto.numero_manifesto} ({self.data})"
 
+    @staticmethod
+    def _formatar_minutos(minutos):
+        if not minutos or minutos <= 0:
+            return "0min"
+        horas = int(minutos) // 60
+        mins = int(minutos) % 60
+        if horas > 0 and mins > 0:
+            return f"{horas}h {mins:02d}min"
+        if horas > 0:
+            return f"{horas}h 00min"
+        return f"{mins}min"
+
+    @property
+    def tempo_manifesto_formatado(self):
+        if not self.tempo_manifesto_minutos or self.tempo_manifesto_minutos <= 0:
+            return "-"
+        return self._formatar_minutos(self.tempo_manifesto_minutos)
+
+    @property
+    def atraso_corte_formatado(self):
+        if not self.atraso_apos_corte_minutos or self.atraso_apos_corte_minutos <= 0:
+            return "-"
+        return self._formatar_minutos(self.atraso_apos_corte_minutos)
+
+    @property
+    def motivo_nao_pagamento_corte(self):
+        corte_str = self.horario_corte_aplicado.strftime('%H:%M') if self.horario_corte_aplicado else '20:00'
+        if self.dentro_do_corte:
+            return ""
+        if self.status_corte == 'APOS_CORTE' and self.data_hora_finalizacao:
+            fim_local = timezone.localtime(self.data_hora_finalizacao)
+            fim_str = fim_local.strftime('%d/%m às %H:%M') if fim_local.date() != self.data else fim_local.strftime('%H:%M')
+            return f"Não pago: finalizado {self.atraso_corte_formatado} após o corte das {corte_str} (finalizado às {fim_str})"
+        if self.status_corte == 'EM_ANDAMENTO':
+            return f"Em andamento: aguardando finalização até o corte das {corte_str}"
+        return f"Não pago: manifesto não finalizado até o horário de corte ({corte_str})"
+
     def calcular_total(self):
-        """Recalcula o total do dia com base nos valores atuais."""
+        """Recalcula o total do dia com base nos valores atuais (respeitando o corte de horário)."""
+        if not self.dentro_do_corte:
+            self.valor_diaria = 0
+            self.valor_entregas = 0
+            self.valor_coletas = 0
+            self.total_dia = self.valor_extra
+            return self.total_dia
         self.total_dia = (
             self.valor_diaria +
             self.valor_entregas +

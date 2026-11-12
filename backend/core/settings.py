@@ -157,6 +157,11 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'manifesto.tasks.limpar_manifestos_antigos_aguardando_task',
         'schedule': crontab(minute='*/30'),  # A cada 30 minutos
     },
+    # Fechamento diário automático de agregados no horário de corte configurado (padrão 20:00 Brasília)
+    'fechamento-diario-agregados-corte': {
+        'task': 'financeiro.tasks.verificar_fechamento_diario_automatico_task',
+        'schedule': crontab(),  # Verifica a cada minuto o horário configurado no banco
+    },
 }
 
 CHANNEL_LAYERS = {
